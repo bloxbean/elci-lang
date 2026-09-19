@@ -1,7 +1,23 @@
 # Elci implementation and verification log
 
-The two design ADRs govern this work. Elci is a separate Java 25 Gradle
+The language and shared-boundary design ADRs govern this work. Elci is a separate Java 25 Gradle
 application; the supplied Julc worktree owns all backend changes.
+
+## Remaining design work
+
+- [ADR-002: functional core completion](../adr/002-functional-core-completion.md)
+  proposes C1–C5: patterns/destructuring, generic aliases, eligible local
+  polymorphism, structural equality and general function recursion groups.
+- [ADR-003: generic library interoperability](../adr/003-generic-library-interop.md)
+  proposes I1–I4: provider schemes, a real generic Java export, a programmatic PIR
+  export and verified nominal/container adapters.
+
+Both are proposed designs with open implementation gates. In particular,
+ADR-002 specifies a conservative value restriction for local generalization;
+it does not promise unrestricted let-polymorphism. Julc recursion and provider
+extensions require their own generic backend designs and Java regression checks.
+Neither ADR completes the transaction-adapter or marketplace milestone. The
+[language guide](LANGUAGE.md) continues to describe implemented behavior only.
 
 ## Sequence
 

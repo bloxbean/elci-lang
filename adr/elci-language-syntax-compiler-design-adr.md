@@ -12,6 +12,12 @@ Build **Elci**, an Elm-syntax, strict, pure functional language for UTxO contrac
 
 The boundary document defines how frontends connect to JuLC. This ADR defines the language that Elci users write, how its compiler is structured, and the sequence for implementing it. Proposed API names and configuration keys in this document are design sketches, not existing JuLC APIs.
 
+Follow-on proposed decisions: [ADR-002: functional core completion](002-functional-core-completion.md)
+specifies remaining patterns, aliases, local polymorphism, equality and recursion
+gates; [ADR-003: generic library interoperability](003-generic-library-interop.md)
+specifies provider schemes, concrete materialization and representation contracts.
+These refine the roadmap; implementation status remains in the language guide.
+
 ### Goals
 
 - A small language with immutable values, algebraic data types, pattern matching, higher-order functions, generics, and general recursion.
