@@ -50,6 +50,23 @@ python3 scripts/compare-julc-baseline.py
 The script is tied to the documented Julc baseline commit and is a maintainer
 regression check, not part of the ordinary Elci build.
 
+## Functional core completion evidence
+
+The `3f1b675` functional-core implementation was validated on 19 September 2026:
+
+- 71 Elci JVM tests passed with no failures or skips.
+- elm-format 0.8.8 accepted the examples, bundled core, supported syntax corpus,
+  and Elm-valid deferred corpus.
+- GraalVM 25.3.4.1 produced a 30.51 MiB native `elci` executable. Its
+  `core-completion` check produced 827 FLAT bytes and native evaluation returned
+  `15` with CPU `11311095` and memory `41004`.
+- Two consecutive native builds of the fixture produced identical `abi.json`,
+  `validator.flat`, and `validator.plutus` hashes.
+- The Julc tree passed 11,061 tests with no failures or errors (536 existing
+  skips), including three- and four-function heterogeneous recursive groups.
+- All 30 unchanged Java compiler configurations retained identical FLAT hashes,
+  parameter metadata, and source-map entry counts.
+
 ## Review gates
 
 Before treating a new construct or adapter as supported, review its source
