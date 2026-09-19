@@ -3,21 +3,23 @@
 The language and shared-boundary design ADRs govern this work. Elci is a separate Java 25 Gradle
 application; the supplied Julc worktree owns all backend changes.
 
-## Remaining design work
+## Design status
 
 - [ADR-002: functional core completion](../adr/002-functional-core-completion.md)
-  proposes C1–C5: patterns/destructuring, generic aliases, eligible local
-  polymorphism, structural equality and general function recursion groups.
+  defines C1–C5: patterns/destructuring, generic aliases, eligible local
+  polymorphism, structural equality and general function recursion groups. These
+  stages are implemented and covered by parser, type, evaluator and syntax-corpus
+  tests.
 - [ADR-003: generic library interoperability](../adr/003-generic-library-interop.md)
   proposes I1–I4: provider schemes, a real generic Java export, a programmatic PIR
   export and verified nominal/container adapters.
 
-Both are proposed designs with open implementation gates. In particular,
-ADR-002 specifies a conservative value restriction for local generalization;
-it does not promise unrestricted let-polymorphism. Julc recursion and provider
-extensions require their own generic backend designs and Java regression checks.
-Neither ADR completes the transaction-adapter or marketplace milestone. The
-[language guide](LANGUAGE.md) continues to describe implemented behavior only.
+ADR-003 remains proposed integration work. ADR-002's conservative value
+restriction does not promise unrestricted let-polymorphism. General recursion is
+implemented in Julc as a language-neutral PIR backend extension with independent
+Java regression checks. Neither ADR completes the transaction-adapter or
+marketplace milestone. The [language guide](LANGUAGE.md) describes implemented
+behavior only.
 
 ## Sequence
 
@@ -42,8 +44,8 @@ Neither ADR completes the transaction-adapter or marketplace milestone. The
 * JVM baseline: Java 25. Shared API initially experimental and version-pinned.
 * Configuration: `elci.toml`, `[project]`, `[entrypoint]`, `[java-modules]`.
 * Native image must include bundled on-chain Java sources and ledger resources.
-* Existing Julc LetRec supports self recursion and two mutually recursive
-  bindings; larger recursive groups require an extension or explicit diagnostic.
+* Julc LetRec supports finite function-only mutual recursion through a stable
+  recursive Bekić decomposition; eager recursive values remain invalid.
 
 ## Invariants
 

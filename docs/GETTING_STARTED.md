@@ -125,6 +125,7 @@ build/native/elci --version
 build/native/elci check examples/threshold
 build/native/elci build examples/signed
 build/native/elci eval examples/functional
+build/native/elci eval examples/core-completion
 ```
 
 The executable is platform-specific. It bundles the library sources and
@@ -142,10 +143,13 @@ Use `.elm` syntax highlighting. The syntax reference is Elm 0.19.1, and the
 formatter corpus is pinned to `elm-format 0.8.8`:
 
 ```sh
-npm exec --yes --package elm-format@0.8.8 -- elm-format examples src/main/resources/elci/core --validate
+npm exec --yes --package elm-format@0.8.8 -- \
+  elm-format examples src/main/resources/elci/core \
+  src/test/resources/syntax/valid src/test/resources/syntax/unsupported --validate
 ```
 
-The stock Elm language server does not know Elci's Java exports or ledger profile;
+The [diagnostic catalogue](DIAGNOSTICS.md) lists the stable error categories. The
+stock Elm language server does not know Elci's Java exports or ledger profile;
 its type diagnostics are not authoritative for Elci. Elci errors include `ELCI`
 codes and token locations where available. Backend/configuration/module errors
 currently have less precise location information.
@@ -159,8 +163,8 @@ check Elci's `gradle.properties`. Both projects require Java 25.
 concrete signatures are exposed. Arbitrary JVM methods and overloaded methods
 are not automatically available.
 
-**Unresolved source type:** entrypoints must be concrete. Local polymorphism and
-some unused generic local values remain restricted; move a generic helper to a
+**Unresolved source type:** entrypoints must be concrete. Expansive local values
+are deliberately monomorphic; make the helper a local function or move it to a
 top-level function with a signature.
 
 **Truffle regression suite fails under GraalVM:** the existing Julc Truffle

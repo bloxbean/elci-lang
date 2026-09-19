@@ -1,6 +1,6 @@
 # ADR-002: Elci functional core completion
 
-Status: **Proposed** — implementation and acceptance gates remain open.
+Status: **Implemented for the core language profile** — diagnostic refinements remain.
 Date: 19 September 2026
 Baseline: Elci `974bd41`; refinements to [ADR-001](elci-language-syntax-compiler-design-adr.md).
 
@@ -35,10 +35,12 @@ keywords, loop syntax or implicit Java execution are introduced.
 
 ## 1. Patterns and destructuring
 
-Introduce explicit pattern AST variants with source spans and resolved binder
-identities. Avoid encoding pattern kinds as arbitrary strings. Retain literal
-kind/value, constructor identity and type-directed field information through
-coverage analysis and elaboration.
+Retain one recursive pattern node and use compiler-reserved tags for product,
+record, unit and alias forms. The lexer cannot produce the reserved `$elci$`/`$`
+names from user source. Retain literal token kind/value, resolved constructor
+identity and inferred field information through coverage analysis and lowering.
+Tokens provide offsets and start locations; richer end spans and secondary
+locations are a diagnostic refinement rather than a language gate.
 
 | Form | Decision |
 | --- | --- |
@@ -120,10 +122,10 @@ shape; unions have their declared constructor set.
 
 Int and String have open literal domains: finite literal branches require a
 catch-all for exhaustiveness. Normalize literal values before duplicate checks.
-Report non-exhaustiveness with a missing example and unreachable branches with
-the earlier covering location. Reject unreachable branches, preserving the
-current compiler policy. Impose deterministic analysis limits with a specific
-diagnostic; resource exhaustion must never count as proof of exhaustiveness.
+Report non-exhaustiveness and reject unreachable branches, preserving the current
+compiler policy. Missing-example rendering and secondary covering locations may
+be added without changing acceptance. Resource exhaustion must never count as
+proof of exhaustiveness.
 
 ## 2. Generic type aliases
 
@@ -222,11 +224,12 @@ ineligible, even when a particular value uses another constructor. For recursive
 types, analyze the finite graph of regular instantiated types with cycle tracking;
 accept a recursive cycle only when every nonrecursive obligation is supported.
 
-Generate recursive comparison helpers once per concrete type, with hygienic
-symbols. Short-circuit field comparisons in canonical order after evaluating
-both operands. Input decoding still follows the strict boundary policy; an
-early unequal field must not bypass required validation of malformed input data.
-Equality does not expand ordering beyond Int.
+After checking structural eligibility, compare nonprimitive values through their
+canonical Plutus Data trees with `EqualsData`; this is structural Data equality,
+not CBOR or serialized-byte equality. Primitive values use their typed builtins.
+Evaluate both operands once, left to right. Input decoding still follows the
+strict boundary policy, so comparison cannot bypass required validation of
+malformed input data. Equality does not expand ordering beyond Int.
 
 ## 5. General mutually recursive function groups
 
@@ -241,10 +244,10 @@ evaluate the recursion. Its exact typed PIR encoding requires a separate generic
 Julc backend ADR and prototype. Do not force differently typed functions through
 an untyped Data dispatcher or change existing Java recursion semantics.
 
-Until that backend gate is implemented and version-pinned, groups larger than two
-remain rejected with the existing explicit limitation. Supporting their syntax
-does not mark this stage complete. The Julc document and PR must describe generic
-compiler functionality without naming this private frontend.
+The backend gate is implemented by Julc's language-neutral general function
+recursion ADR. Groups larger than two use its stable recursive Bekić decomposition.
+The Julc document and review describe generic compiler functionality without
+naming this private frontend.
 
 ## 6. Diagnostics and syntax corpus
 
@@ -296,8 +299,8 @@ grow rapidly. Their limits must be deterministic and diagnosed, never silent
 fallbacks. Source spans and typed elaboration may require refactoring the current
 compact AST/inference implementation before features are added.
 
-Remaining engineering gates are the n-ary recursion encoding in Julc, concrete
-resource limits, and the precise diagnostic catalogue. These must be settled with
-prototypes and tests during the relevant stage. Changes to the decisions above
-require an ADR amendment with compatibility consequences, not an undocumented
-implementation shortcut.
+The n-ary recursion encoding, bounded specialization/alias expansion, and
+diagnostic catalogue are now implemented. Future work may improve full source
+spans, missing-case witnesses and secondary locations without expanding the
+language profile. Changes to the decisions above require an ADR amendment with
+compatibility consequences, not an undocumented implementation shortcut.

@@ -42,9 +42,11 @@ build/native/elci eval examples/functional
 - [Language guide](docs/LANGUAGE.md): syntax, semantics, types, libraries and limits.
 - [Compiler architecture](docs/ARCHITECTURE.md): frontend/backend API and invariants.
 - [Testing and review](docs/VALIDATION.md): reproducible checks and evidence.
+- [Diagnostic catalogue](docs/DIAGNOSTICS.md): stable compiler error categories.
 - [Implementation log](docs/IMPLEMENTATION.md): decisions and milestone status.
 
 Examples are semantic fixtures. `threshold` demonstrates compilation, `signed`
-demonstrates nominal ledger hashes and transaction fields, and `functional`
-demonstrates custom types, recursion and generic list traversal. They are not
-complete application contracts.
+demonstrates nominal ledger hashes and transaction fields, `functional`
+demonstrates custom types and list traversal, and `core-completion` demonstrates
+nested patterns, generic aliases, destructuring and structural equality. They are
+not complete application contracts.

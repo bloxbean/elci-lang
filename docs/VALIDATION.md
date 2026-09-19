@@ -11,15 +11,19 @@ guide, then run:
 ```sh
 ./gradlew clean test
 npm exec --yes --package elm-format@0.8.8 -- \
-  elm-format examples src/main/resources/elci/core --validate
+  elm-format examples src/main/resources/elci/core \
+  src/test/resources/syntax/valid src/test/resources/syntax/unsupported --validate
 GRAALVM_HOME=/path/to/graalvm ./gradlew nativeCompile
 build/native/elci check examples/threshold
 build/native/elci build examples/threshold
 build/native/elci eval examples/functional
+build/native/elci eval examples/core-completion
 ```
 
 The Java test suite covers parsing and diagnostics, inference, generic
-specialization, strictness, recursion, modules, records, tuples, unions, lists,
+specialization and retained requirements, strictness, general recursion groups,
+nested patterns, generic aliases, structural equality, modules, records, tuples,
+unions, lists,
 ledger fields, serialized boundaries, validator evaluation and execution costs.
 `BudgetTest` writes representative measurements to
 `build/reports/elci/budgets.csv`.

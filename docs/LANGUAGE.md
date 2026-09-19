@@ -2,37 +2,38 @@
 
 ## Implemented profile
 
-Elci uses an implemented subset of Elm syntax and its own on-chain semantics.
-The design ADR remains the roadmap; this implementation does not complete every
-core-release or marketplace milestone in that roadmap.
+Elci uses an implemented functional-core subset of Elm syntax and its own
+on-chain semantics. The core is complete for the profile below; full Elm, the
+generic Java interoperability ADR, and the wider ledger marketplace surface are
+separate milestones.
 
 | Feature | Current support |
 | --- | --- |
 | Modules, imports, aliases, exposing | Source modules and configured Java modules; import cycles rejected |
 | Functions, lambdas, partial application | Strict, curried application and immediate argument capture |
 | Top-level generics | Rank-1 inference, signature checking, concrete specialization |
-| Local declarations | Dependency ordering and local functions; local bindings currently monomorphic |
-| Recursion | Self-recursion and two-function mutual groups; larger groups rejected |
+| Local declarations | Dependency SCCs, conservative value-restricted rank-1 polymorphism, strict initialization |
+| Recursion | Self-recursion and finite function-only mutual groups; polymorphic recursion rejected |
 | Basic types | Arbitrary-precision Int, Bool, String, unit |
 | Lists | Homogeneous Data-backed lists, list patterns, generic core functions |
-| Tuples | Pairs/triples and irrefutable tuple case patterns; tag-zero encoding |
-| Records | Closed structural records, monomorphic aliases, field access and updates |
+| Tuples | Pairs/triples, nested patterns and parameter destructuring; tag-zero encoding |
+| Records | Closed structural records, generic aliases and constructors, destructuring, field access and updates |
 | Custom types | Generic and regular recursive unions; declaration-order tags |
-| Patterns | Variables, wildcard, Bool/Int, empty list/cons, tuples, constructor fields |
-| Pattern coverage | Exhaustive cases required; duplicate/unreachable branches rejected |
+| Patterns | Nested constructors/lists/tuples/records, aliases, unit and Bool/Int/String literals |
+| Pattern coverage | Nested exhaustiveness and usefulness analysis; duplicate/unreachable branches rejected |
+| Equality | Structural equality for eligible primitives, lists, tuples, records and unions |
 | Ledger access | Typed record views, transaction fields, nominal hash types |
 | Java libraries | Concrete supported exports from bundled on-chain Java sources |
 | CLI | Check/build/function evaluation; pinned target/version; ABI comparison |
 | Native image | GraalVM executable with bundled source and reflection resources |
 
-Not yet implemented: row polymorphism, generic record aliases, polymorphic
-recursion, general local let-polymorphism, arbitrary-sized mutual groups,
-refutable nested patterns, parameter destructuring, full constrained structural
-equality, generic Java export schemes/programmatic provider catalogues, deployment
-parameters, optional-datum profiles, other script purposes, complete ledger-sum
-pattern adapters, or an Elci language server. Java wildcard exposing is currently
-rejected; use explicit exported names. Float, browser effects and ports are
-outside the on-chain profile.
+Intentionally outside this profile: row polymorphism and extensible records,
+polymorphic recursion, higher-rank and unrestricted let-polymorphism, Float,
+ports, browser effects and user-defined typeclasses. Generic Java export schemes,
+programmatic provider catalogues, deployment parameters, optional-datum profiles,
+other script purposes, complete ledger-sum adapters and a language server remain
+future integration work. Java wildcard exposing is currently rejected; use
+explicit exported names.
 
 ## Functions and types
 
@@ -58,8 +59,16 @@ and captures its supplied argument immediately. It does not defer a failure unti
 the missing argument arrives.
 
 Lambdas use `\argument -> expression`. Multiple arguments are supported. A
-function can call itself or another function declared later. Eager value cycles
-are errors.
+function can call itself or any function declared later. Finite mutually
+recursive function groups may contain different arities and return types. Eager
+value cycles are errors, and recursive calls must remain monomorphic.
+
+Eligible local non-expansive bindings are rank-1 polymorphic. Function
+declarations, lambdas and immutable values can therefore be used at more than one
+type. Calls, conditionals, matches and record updates remain monomorphic so
+specialization cannot duplicate a strict computation. Compiler-known equality
+and append requirements follow a generic helper and are checked at each concrete
+use; Elci adds no constraint syntax.
 
 ## Arithmetic and control flow
 
@@ -72,10 +81,13 @@ strict even when unused: a failing or diverging unused binding cannot be removed
 Forward local references are evaluated in dependency order; source order breaks
 independent ties.
 
-`==` and `/=` currently support Int, Bool, String, raw bytes and matching nominal
-byte-backed ledger hashes. Function equality and general structural equality are
-not supported. Integer ordering uses `<`, `<=`, `>`, `>=`. Comparisons cannot be
-chained without parentheses or Boolean operators.
+`==` and `/=` support Int, Bool, String, unit, raw bytes, matching nominal
+byte-backed ledger hashes, lists, tuples, closed records and regular recursive
+unions whose reachable fields are themselves equality-capable. Both operands are
+evaluated once from left to right. Functions, opaque Data and imported values
+without verified equality are rejected at compile time. Integer ordering uses
+`<`, `<=`, `>`, `>=`. Comparisons cannot be chained without parentheses or
+Boolean operators.
 
 `|>` and `<|` apply functions; `>>` and `<<` compose them. Composition captures
 its function operands strictly. `++` appends lists or strings; `::` prepends a list
@@ -115,28 +127,31 @@ does not pretend native integer lists and Data lists are interchangeable.
 ## Records and tuples
 
 ```elm
-type alias Listing =
-    { price : Int, active : Bool }
+type alias Listing owner =
+    { price : Int, active : Bool, owner : owner }
 
 
-increase : Listing -> Listing
+increase : Listing owner -> Listing owner
 increase listing =
     { listing | price = listing.price + 1 }
 ```
 
-Aliases reuse structural record types. Source field order does not determine wire
-order: serialized records use tag zero and fields sorted lexicographically by
-name. Field expressions still evaluate in source order. Updates evaluate the base
-once, then replacements in source order.
+Aliases reuse structural record types and may have type parameters. A record alias
+also introduces a constructor whose curried arguments follow declaration order.
+Source field order does not determine wire order: serialized records use tag zero
+and fields sorted lexicographically by name. Constructor and field expressions
+still evaluate in source order. Updates evaluate the base once, then replacements
+in source order.
 
 A record field access needs enough context to determine a closed record type.
 Unconstrained row-polymorphic accessors are not inferred. Generic fields containing
 functions or unit are not yet supported in serialized containers.
 
-Pairs and triples use `( first, second )` and `( first, second, third )`. Use a
-`case` with a tuple pattern to destructure them. Their encoding is tag zero with
-fields in positional order, as recorded in the ABI; this is an Elci tuple codec,
-not a promise of representation equivalence with arbitrary Java tuple types.
+Pairs and triples use `( first, second )` and `( first, second, third )`. Tuple and
+record patterns may destructure function/lambda parameters and local bindings
+when every component is irrefutable. Their encoding is tag zero with fields in
+positional order, as recorded in the ABI; this is an Elci tuple codec, not a
+promise of representation equivalence with arbitrary Java tuple types.
 
 ## Custom types and matching
 
@@ -152,10 +167,12 @@ stable nominal identity. `Maybe a`, `Nothing`, and `Just` are built in, with
 `Nothing` tag zero and `Just` tag one. This differs from Julc Java Optional's tags;
 they are not silently interchangeable.
 
-Cases must be exhaustive. Constructor fields, list heads/tails, and tuple elements
-can bind names or `_`. For nested refutable patterns, write a nested `case`.
-Patterns evaluate the scrutinee once. Duplicate variable names in a pattern are
-errors.
+Cases must be exhaustive. Patterns can nest constructors, exact-length lists,
+cons, tuples, closed-record field selections, aliases, unit, and Bool, Int or
+String literals. Refutable forms belong in `case`; function parameters and local
+destructuring accept only irrefutable tuple/record forms. Scrutinees and local
+destructuring right-hand sides evaluate once. Duplicate binders and unreachable
+branches are errors.
 
 ## Modules and Java imports
 
