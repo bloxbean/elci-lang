@@ -1,0 +1,10 @@
+[project]
+source-directories = ["src"]
+target = "plutus-v3-pv11-uplc-1.1.0"
+julc-version = "0.1.0-elci-dev"
+
+[entrypoint]
+module = "Signed"
+function = "validate"
+purpose = "spend"
+boundary = "julc-strict-v1"

@@ -1,0 +1,34 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+group = 'org.elci'
+repositories { mavenLocal(); mavenCentral() }
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+dependencies {
+    implementation "org.julclang:julc-compiler:${julcVersion}"
+    implementation "org.julclang:julc-stdlib:${julcVersion}"
+    implementation "org.julclang:julc-vm-java:${julcVersion}"
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+application { mainClass = 'org.elci.cli.Main'; applicationName = 'elci' }
+test { useJUnitPlatform(); testLogging { events 'failed', 'skipped' } }
+tasks.register('nativeCompile', Exec) {
+    dependsOn installDist
+    def graalHome = providers.environmentVariable('GRAALVM_HOME')
+    doFirst {
+        if (!graalHome.isPresent()) {
+            throw new GradleException('GRAALVM_HOME must point to a GraalVM installation containing native-image')
+        }
+        file('build/native').mkdirs()
+        commandLine "${graalHome.get()}/bin/native-image", '-H:+ReportExceptionStackTraces',
+            '-cp', fileTree('build/install/elci/lib').files.collect { it.absolutePath }.join(File.pathSeparator),
+            application.mainClass.get(), file('build/native/elci').absolutePath
+    }
+}
+
+tasks.register('writeRuntimeClasspath') {
+    doLast { file('build/runtime-classpath.txt').text = sourceSets.main.runtimeClasspath.asPath }
+}
