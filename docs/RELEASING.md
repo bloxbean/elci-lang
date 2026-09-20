@@ -20,8 +20,12 @@ Release archives contain the `elci` executable and documentation:
 - `elci-<version>-linux-arm64.tar.gz`
 - `elci-<version>-macos-arm64.tar.gz`
 
-Linux binaries are built on Ubuntu 24.04 and require a compatible glibc-based system; they are not static binaries. macOS binaries are unsigned and not notarized. Intel macOS and Windows binaries are not produced by this workflow.
+Native compilation uses `--no-fallback` and `-H:+ReportExceptionStackTraces`, matching Julc CLI. It produces an executable. GraalVM 25.3.4.1 reports `--no-fallback` as deprecated with no effect; the flag is retained for consistency with Julc CLI, not as a static-linking setting.
+
+Linux binaries are built on Ubuntu 22.04 and require a compatible glibc-based system; they are not static binaries. macOS binaries are unsigned and not notarized. Intel macOS and Windows binaries are not produced by this workflow.
 
 After all three builds pass, a separate job uses `gh release` to upload the archives and `SHA256SUMS`, then publish the release. Only that job has repository write permission. Failed uploads leave a draft that the job can retry. It refuses to overwrite an already published release; use a new version/tag for replacement binaries.
 
 To install, download the archive for your platform, verify its checksum against `SHA256SUMS`, extract it, and place `elci` on your PATH. No Java installation is required for the native executable.
+
+Fully static musl builds are deferred to a later release. GraalVM 25.3.4.1 does not support musl on Linux ARM64, and the backend’s dynamically loaded BLS library needs a compatible implementation and runtime tests before we can promise no shared-library dependencies.

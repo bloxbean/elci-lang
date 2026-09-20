@@ -38,7 +38,8 @@ tasks.register('nativeCompile', Exec) {
             throw new GradleException('GRAALVM_HOME must point to a GraalVM installation containing native-image')
         }
         file('build/native').mkdirs()
-        commandLine "${graalHome.get()}/bin/native-image", '-H:+ReportExceptionStackTraces',
+        // Executable mode is the native-image default (equivalent to sharedLibrary = false).
+        commandLine "${graalHome.get()}/bin/native-image", '--no-fallback', '-H:+ReportExceptionStackTraces',
             '-cp', fileTree('build/install/elci/lib').files.collect { it.absolutePath }.join(File.pathSeparator),
             application.mainClass.get(), file('build/native/elci').absolutePath
     }

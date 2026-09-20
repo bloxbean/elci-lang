@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   metadata:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.metadata.outputs.version }}
       julc-version: ${{ steps.metadata.outputs.julcVersion }}
@@ -30,9 +30,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04
+          - runner: ubuntu-22.04
             platform: linux-x64
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-22.04-arm
             platform: linux-arm64
           - runner: macos-15
             platform: macos-arm64
@@ -106,7 +106,7 @@ jobs:
 
   release:
     needs: [metadata, build]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
     env:
