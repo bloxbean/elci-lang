@@ -30,6 +30,7 @@ argument**, with strict datum/redeemer decoding and Bool-to-success/failure wrap
 ```sh
 # After publishing the pinned local Julc dependencies; see Getting Started.
 ./gradlew test installDist
+build/install/elci/bin/elci init my-contract --purpose spend
 build/install/elci/bin/elci build examples/threshold
 
 # Set GRAALVM_HOME to a GraalVM installation containing native-image.

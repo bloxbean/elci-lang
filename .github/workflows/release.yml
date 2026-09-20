@@ -78,6 +78,8 @@ jobs:
         shell: bash
         run: |
           test "$(build/native/elci --version)" = "elci $RELEASE_VERSION / julc $JULC_VERSION"
+          build/native/elci init build/init-smoke --purpose mint
+          build/native/elci check build/init-smoke
           build/native/elci check examples/vesting
           build/native/elci build examples/vesting
           test -s examples/vesting/build/validator.plutus.json

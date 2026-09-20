@@ -46,13 +46,34 @@ build/install/elci/bin/elci build examples/threshold
 
 ## 2. Your first project
 
-Copy `examples/threshold` to a new directory. Its layout is:
+Create a spending-validator project:
+
+```sh
+elci init my-contract --purpose spend
+cd my-contract
+elci check .
+elci build .
+```
+
+The supported starter purposes are `spend` (the default), `mint`, and `function`:
+
+```sh
+elci init token-policy --purpose mint
+elci init calculation --purpose function
+```
+
+`--purpose` selects the initial source and entrypoint; it is not a permanent
+project classification. The current compiler uses one `[entrypoint]`. The accepted
+ADR for named validators will replace that limitation with multiple validator
+groups and purpose-specific handlers without changing the meaning of `init`.
+Initialization refuses to write into a non-empty directory.
+
+The generated layout is:
 
 ```text
 elci.toml
 src/
-  Example/
-    Threshold.elm
+  Main.elm
 ```
 
 The module header and source path must agree. Configuration is separate from the
