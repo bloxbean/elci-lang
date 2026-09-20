@@ -32,5 +32,16 @@ class LedgerTest {
         assertInstanceOf(EvalResult.Success.class,vm.evaluateWithArgs(result.program(),result.target().ledgerTarget(),List.of(yes),null,EvalOptions.DEFAULT));
         assertFalse(vm.evaluateWithArgs(result.program(),result.target().ledgerTarget(),List.of(no),null,EvalOptions.DEFAULT) instanceof EvalResult.Success);
     }
+    @Test void librarySignaturesPreserveContextAndNestedLedgerTypes() {
+        String source=SIGNED.replace("import Julc.Ledger", "import Julc.Contexts as Contexts\nimport Julc.Ledger")
+                .replace("ctx.txInfo.fee", "Contexts.txInfoFee (Contexts.getTxInfo ctx)");
+        var result=new ElciCompiler().compile(source,"validate",FrontendProgram.Purpose.SPEND,
+                java.util.Map.of("Julc.Contexts","org.julclang.stdlib.lib.ContextsLib"),new org.julclang.compiler.CompilerOptions());
+        var owner=new PubKeyHash(new byte[28]);
+        var ref=new TxOutRef(new TxId(new byte[32]),BigInteger.ZERO);
+        var context=ScriptContextBuilder.spending(ref,owner.toPlutusData()).redeemer(PlutusData.integer(10))
+                .fee(BigInteger.valueOf(20)).signer(owner).build().toPlutusData();
+        assertInstanceOf(EvalResult.Success.class,JulcVm.create().evaluateWithArgs(result.program(),result.target().ledgerTarget(),List.of(context),null,EvalOptions.DEFAULT));
+    }
     @Test void hashesDoNotUnifyWithBytes(){assertThrows(Diagnostic.class,()->new ElciCompiler().compile(SIGNED.replace("signer == owner","signer.hash == owner"),"validate",FrontendProgram.Purpose.SPEND));}
 }

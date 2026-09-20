@@ -7,8 +7,6 @@ import org.julclang.compiler.*;
 import org.julclang.compiler.backend.*;
 import org.julclang.stdlib.StdlibRegistry;
 import org.julclang.core.Program;
-import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import static org.elci.types.Types.*;
 
@@ -27,21 +25,26 @@ public final class ElciCompiler {
         return compileProject(Map.of(module.name(),source),module.name(),function,purpose,javaModules,options);
     }
     public Result compileProject(Map<String,String> sources,String module,String function,FrontendProgram.Purpose purpose,Map<String,String> javaModules,CompilerOptions options) {
-        return compileModule(new org.elci.modules.Modules(sources,javaModules).resolve(module),function,purpose,javaModules,options);
+        return compileProject(sources,module,function,purpose,javaModules,options,Map.of());
     }
-    private Result compileModule(Ast.Module module,String function,FrontendProgram.Purpose purpose,Map<String,String> javaModules,CompilerOptions options) {
+    public Result compileProject(Map<String,String> sources,String module,String function,FrontendProgram.Purpose purpose,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
+        return compileModule(new org.elci.modules.Modules(sources,javaModules).resolve(module),function,purpose,javaModules,options,librarySources);
+    }
+    private Result compileModule(Ast.Module module,String function,FrontendProgram.Purpose purpose,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
         var importedTypes=new LinkedHashMap<String,Ty>();var importedSymbols=new LinkedHashMap<String,String>();
         importedTypes.put("not",fn(con("Bool"),con("Bool")));
         importedTypes.put("remainderBy",fn(con("Int"),fn(con("Int"),con("Int"))));
         var ledger=new LedgerTypeProvider();var ledgerAliases=new LinkedHashMap<String,String>();
-        var sources=new ArrayList<String>();var loaded=new HashSet<String>();
+        var requestedLibraries=new ArrayList<String>();
         for(var imp:module.imports()) {
             if(imp.module().equals("Julc.Ledger"))continue;
             String java=javaModules.get(imp.module());
             if(java==null)throw new Diagnostic("ELCI2101",imp.token(),"Unknown module '"+imp.module()+"'");
-            if(loaded.add(java))sources.add(librarySource(java));
+            requestedLibraries.add(java);
         }
+        var sources=LibrarySources.resolve(requestedLibraries,librarySources,ElciCompiler.class.getClassLoader());
         var provider=new JavaLibraryProvider(sources,StdlibRegistry.defaultRegistry(),options);
+        var unsupportedImports=new LinkedHashMap<String,String>();
         for(var imp:module.imports()) {
             if(imp.module().equals("Julc.Ledger")) {
                 for(String exposed:imp.exposing()) {
@@ -56,9 +59,23 @@ public final class ElciCompiler {
                 ledgerAliases.put("ScriptContext","ScriptContext");continue;
             }
             var exports=provider.describe(javaModules.get(imp.module()));var found=new HashSet<String>();
+            String owner=javaModules.get(imp.module());
+            for(var descriptor:provider.types().values()) {
+                String id=descriptor.identity();
+                String packageName=owner.contains(".")?owner.substring(0,owner.lastIndexOf('.')+1):"";
+                String local=id.startsWith(owner+".")?id.substring(owner.length()+1):id.startsWith(packageName)?id.substring(packageName.length()):null;
+                if(local!=null&&!local.contains(".")) {
+                    String alias=imp.alias()+"."+local;
+                    String previous=ledgerAliases.putIfAbsent(alias,id);
+                    if(previous!=null&&!previous.equals(id))throw new Diagnostic("ELCI2102",imp.token(),"Ambiguous imported type "+alias);
+                }
+            }
+            provider.unsupportedExports().forEach((symbol,reason)->{
+                if(symbol.startsWith(owner+"."))unsupportedImports.put(imp.alias()+symbol.substring(owner.length()),symbol+": "+reason);
+            });
             for(var export:exports) {
                 String n=export.symbol().substring(export.symbol().lastIndexOf('.')+1);Ty type;
-                try{type=sourceType(export);}catch(IllegalArgumentException unsupported){continue;}
+                type=sourceType(export);
                 found.add(n);addImport(imp.alias()+"."+n,type,export.symbol(),imp.token(),importedTypes,importedSymbols);
                 if(imp.exposing().contains(n)||imp.exposing().contains(".."))addImport(n,type,export.symbol(),imp.token(),importedTypes,importedSymbols);
             }
@@ -67,7 +84,7 @@ public final class ElciCompiler {
         for(var d:module.declarations())if(importedTypes.containsKey(d.name()))throw new Diagnostic("ELCI2102",d.token(),"Declaration conflicts with imported name "+d.name());
         var entry=module.declarations().stream().filter(d->d.name().equals(function)).findFirst().orElseThrow(()->new IllegalArgumentException("Entrypoint not found: "+function));
         if(!module.exposing().contains(function)&&!module.exposing().contains(".."))throw new Diagnostic("ELCI2103",entry.token(),"Entrypoint must be exposed by its module");
-        var inference=new Inference();inference.aliases(module.aliases());inference.unions(module.name(),module.unions());inference.ledger(ledger,ledgerAliases);inference.check(module.declarations(),importedTypes);
+        var inference=new Inference();inference.aliases(module.aliases());inference.unions(module.name(),module.unions());inference.ledger(ledger,ledgerAliases);inference.library(provider);inference.unsupportedImports.putAll(unsupportedImports);inference.check(module.declarations(),importedTypes);
         Ty entryType=inference.globals.get(function).body();
         if(!Types.concrete(entryType))throw new Diagnostic("ELCI2009",entry.token(),"Deployed entrypoints require concrete types");
         if(purpose!=FrontendProgram.Purpose.FUNCTION) {
@@ -104,18 +121,12 @@ public final class ElciCompiler {
         symbols.put(name,symbol);
     }
     private static Ty sourceType(org.julclang.compiler.backend.LibraryExport export) {
-        return switch(export.symbol()) {
-            case "org.julclang.stdlib.lib.IntervalLib.finiteLowerBound",
-                 "org.julclang.stdlib.lib.IntervalLib.finiteUpperBound" ->
-                    fn(con("org.julclang.ledger.Interval"),con("Int"));
-            default -> Lowering.source(export.type());
-        };
+        if(export.result()==null)return Lowering.source(export.type());
+        Ty result=sourceType(export.result());
+        for(int i=export.parameters().size()-1;i>=0;i--)result=fn(sourceType(export.parameters().get(i)),result);
+        return result;
     }
-    private static String librarySource(String name) {
-        String path="META-INF/plutus-sources/"+name.replace('.','/')+".java";
-        try(var input=ElciCompiler.class.getClassLoader().getResourceAsStream(path)) {
-            if(input==null)throw new IllegalArgumentException("On-chain Java source is not bundled: "+name);
-            return new String(input.readAllBytes(),StandardCharsets.UTF_8);
-        }catch(IOException e){throw new UncheckedIOException(e);}
+    private static Ty sourceType(LibraryType.Reference reference) {
+        return new Con(reference.name().equals("org.julclang.ledger.ScriptContext")?"ScriptContext":reference.name(),reference.arguments().stream().map(ElciCompiler::sourceType).toList());
     }
 }

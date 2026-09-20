@@ -19,7 +19,7 @@ public final class Main {
             if(args[0].equals("--version")){System.out.println("elci 0.1.0-dev / julc "+ElciCompiler.JULC_VERSION);return 0;}
             if(args.length>2||!Set.of("check","build","eval").contains(args[0]))throw new IllegalArgumentException("Expected check, build or eval; see --help");
             var project=Project.read(Path.of(args.length==2?args[1]:"."));source=project.source().toString();
-            var result=new ElciCompiler().compileProject(project.sources(),project.module(),project.function(),project.purpose(),project.javaModules(),new CompilerOptions());
+            var result=new ElciCompiler().compileProject(project.sources(),project.module(),project.function(),project.purpose(),project.javaModules(),new CompilerOptions(),project.librarySources());
             if(!result.module().equals(project.module()))throw new IllegalArgumentException("Module header does not match configured source path");
             String manifest=org.elci.abi.Abi.manifest(result,project.purpose());
             if(project.expectedAbi()!=null&&!Files.readString(project.root().resolve(project.expectedAbi())).equals(manifest))throw new IllegalArgumentException("ELCI4001: ABI drift from "+project.expectedAbi()+"; compare constructor tags, field order, and entrypoint roles");

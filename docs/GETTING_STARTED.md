@@ -172,3 +172,7 @@ top-level function with a signature.
 runtime version may not match the supplied GraalVM's libgraal. Run Julc's
 cross-backend suite with the standard JDK 25 installation. Elci's evaluator uses
 the Java VM; native compilation still uses the supplied GraalVM.
+
+Custom on-chain libraries can be supplied as JARs using `project.library-jars`.
+See [Java libraries](JAVA_LIBRARIES.md) and the
+[custom-library example](../examples/custom-library/README.md).

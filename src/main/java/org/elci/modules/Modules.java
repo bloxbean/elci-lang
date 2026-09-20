@@ -106,13 +106,19 @@ public final class Modules {
                     String alias = module.name() + "$" + imp.alias();
                     imports.add(new Import(imp.module(), alias, List.of(), imp.token()));
                     names.put(imp.alias() + ".", alias + ".");
+                    types.put(imp.alias() + ".", alias + ".");
                     if (imp.exposing().contains(".."))
                         throw new Diagnostic(
                                 "ELCI2104",
                                 imp.token(),
                                 "Use explicit names when exposing Java exports in multi-module"
                                         + " projects");
-                    for (String n : imp.exposing()) put(names, n, alias + "." + n, imp.token());
+                    for (String n : imp.exposing()) {
+                        if (Character.isUpperCase(n.charAt(0))) {
+                            if(n.endsWith("(..)"))throw new Diagnostic("ELCI2104",imp.token(),"Imported Java constructors must be called through library factory functions");
+                            put(types,n,alias+"."+n,imp.token());
+                        } else put(names, n, alias + "." + n, imp.token());
+                    }
                     continue;
                 }
                 var dependency = available.get(imp.module());
@@ -243,7 +249,7 @@ public final class Modules {
                     name = entry.getValue() + t.name().substring(entry.getKey().length());
         if (name == null) {
             if (t.name().startsWith("Record:")
-                    || Set.of("Int", "Bool", "String", "Unit", "List", "Maybe", "Tuple", "->")
+                    || Set.of("Int", "Bool", "String", "Unit", "Bytes", "Data", "Map", "JulcOptional", "List", "Maybe", "Tuple", "->")
                             .contains(t.name())
                     || !t.name().contains(".") && Character.isLowerCase(t.name().charAt(0)))
                 name = t.name();

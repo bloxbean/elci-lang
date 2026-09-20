@@ -22,6 +22,13 @@ public final class Inference {
     public final Map<String, org.julclang.compiler.pir.PirType> importedRepresentations =
             new LinkedHashMap<>();
     private Map<String, String> importedAliases = Map.of();
+    public final Map<String, String> unsupportedImports = new LinkedHashMap<>();
+
+    public void library(org.julclang.compiler.backend.LibraryProvider provider) {
+        importedTypes.putAll(provider.types());
+        importedRepresentations.putAll(provider.namedDefinitions());
+        provider.types().forEach((n,t)->importedRepresentations.put(n,t.representation()));
+    }
 
     public void ledger(
             org.julclang.compiler.LedgerTypeProvider provider, Map<String, String> aliases) {
@@ -287,7 +294,8 @@ public final class Inference {
             if (expected < 2 || expected > 3)
                 throw new Diagnostic("ELCI2012", token, "Tuples require two or three elements");
         } else if (name.equals("->")) expected = 2;
-        else if (name.equals("List")) expected = 1;
+        else if (name.equals("List") || name.equals("JulcOptional")) expected = 1;
+        else if (name.equals("Map")) expected = 2;
         else if (!name.contains(".") && Character.isLowerCase(name.charAt(0))) expected = 0;
         else if (Set.of("Int", "Bool", "String", "Unit", "Bytes", "Data", "ScriptContext")
                         .contains(name)
@@ -509,6 +517,8 @@ public final class Inference {
                                                             ? "String"
                                                             : "Int");
                     case Name n -> {
+                        if(unsupportedImports.containsKey(n.name()))
+                            throw new Diagnostic("ELCI2105",n.token(),unsupportedImports.get(n.name()));
                         var scheme = env.get(n.name());
                         if (scheme == null)
                             throw new Diagnostic(

@@ -1,0 +1,14 @@
+[project]
+source-directories = ["src"]
+target = "plutus-v3-pv11-uplc-1.1.0"
+julc-version = "0.1.0-elci-dev"
+library-jars = ["build/pricing.jar"]
+
+[entrypoint]
+module = "Main"
+function = "main"
+purpose = "function"
+boundary = "julc-strict-v1"
+
+[java-modules]
+"Custom.Pricing" = "example.Pricing"

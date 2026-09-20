@@ -8,7 +8,7 @@ import java.util.*;
 
 /** Strict, documented project-configuration subset of TOML. Unknown keys fail closed. */
 public record Project(Path root,List<String> sourceDirectories,String module,String function,
-                      FrontendProgram.Purpose purpose,Map<String,String> javaModules,String expectedAbi) {
+                      FrontendProgram.Purpose purpose,Map<String,String> javaModules,String expectedAbi,List<String> libraryJars) {
     public static Project read(Path root) throws IOException {
         var sections=new LinkedHashMap<String,Map<String,String>>();String section="";int line=0;
         for(String raw:Files.readAllLines(root.resolve("elci.toml"))) {
@@ -20,7 +20,7 @@ public record Project(Path root,List<String> sourceDirectories,String module,Str
             if(values.putIfAbsent(key,text.substring(equal+1).strip())!=null)throw new IllegalArgumentException("Duplicate configuration key: "+key);
         }
         var project=sections.getOrDefault("project",Map.of());var entry=sections.getOrDefault("entrypoint",Map.of());
-        keys(project,Set.of("source-directories","target","julc-version","expected-abi"));keys(entry,Set.of("module","function","purpose","boundary"));
+        keys(project,Set.of("source-directories","target","julc-version","expected-abi","library-jars"));keys(entry,Set.of("module","function","purpose","boundary"));
         if(!quoted(required(project,"target")).equals(CompilerTarget.PLUTUS_V3_PV11.profileId()))throw new IllegalArgumentException("Unsupported target; expected "+CompilerTarget.PLUTUS_V3_PV11.profileId());
         if(!quoted(required(project,"julc-version")).equals(org.elci.driver.ElciCompiler.JULC_VERSION))throw new IllegalArgumentException("Julc version does not match this compiler");
         if(!quoted(required(entry,"boundary")).equals("julc-strict-v1"))throw new IllegalArgumentException("Unsupported boundary policy");
@@ -30,7 +30,14 @@ public record Project(Path root,List<String> sourceDirectories,String module,Str
         var modules=new LinkedHashMap<String,String>();sections.getOrDefault("java-modules",Map.of()).forEach((k,v)->modules.put(k,quoted(v)));
         String purpose=quoted(required(entry,"purpose"));
         var p=switch(purpose){case "spend"->FrontendProgram.Purpose.SPEND;case "mint"->FrontendProgram.Purpose.MINT;case "function"->FrontendProgram.Purpose.FUNCTION;default->throw new IllegalArgumentException("Unsupported purpose: "+purpose);};
-        return new Project(root.toAbsolutePath().normalize(),sourceDirs,quoted(required(entry,"module")),quoted(required(entry,"function")),p,Map.copyOf(modules),project.containsKey("expected-abi")?quoted(project.get("expected-abi")):null);
+        return new Project(root.toAbsolutePath().normalize(),sourceDirs,quoted(required(entry,"module")),quoted(required(entry,"function")),p,Map.copyOf(modules),project.containsKey("expected-abi")?quoted(project.get("expected-abi")):null, project.containsKey("library-jars")?paths(project.get("library-jars")):List.of());
+    }
+    private static List<String> paths(String value) {
+        if(!value.startsWith("[")||!value.endsWith("]"))throw new IllegalArgumentException("library-jars must be an array of quoted paths");
+        return Arrays.stream(value.substring(1,value.length()-1).split(",")).map(String::strip).filter(s->!s.isEmpty()).map(Project::quoted).toList();
+    }
+    public Map<String,String> librarySources() throws IOException {
+        return org.julclang.compiler.LibrarySources.readJars(libraryJars.stream().map(root::resolve).toList());
     }
     public Map<String,String> sources() throws IOException {
         var result=new LinkedHashMap<String,String>();

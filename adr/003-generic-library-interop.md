@@ -147,3 +147,19 @@ are the exact neutral scheme API, initial real export selection, explicit overlo
 configuration and provider capability/version negotiation. Settle these in the
 Julc design before adding dependent Elci implementation. This ADR does not claim
 those APIs or generic exports are available today.
+
+## Concrete source-description and JAR milestone (20 September 2026)
+
+The concrete portion of I1/I4 is implemented: Java export descriptors retain source
+parameter/result references, provider type definitions include nominal records,
+sums and newtypes, and Elci uses these instead of method-specific signatures.
+Representation agreement is checked against compiled PIR. Custom source JARs are
+configured with `project.library-jars` and compiled without loading JVM classes.
+The custom-library fixture demonstrates factories, nominal field access and JAR
+input. Tests also exercise sums, nested lists, newtype separation and diagnostics.
+
+This does not close I1–I4: quantified schemes, generic Java specialization, the
+programmatic provider catalogue and additional imported-type capabilities remain
+open. Imported sums are opaque to Elci patterns, and imported records retain the
+existing datum/redeemer restriction. The source descriptor work is governed by
+Julc ADR-050; it is not a claim of full generic Java interoperability.
