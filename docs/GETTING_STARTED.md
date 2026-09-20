@@ -124,6 +124,7 @@ context, not with three independent datum/redeemer/context arguments.
 build/native/elci --version
 build/native/elci check examples/threshold
 build/native/elci build examples/signed
+build/native/elci build examples/vesting
 build/native/elci eval examples/functional
 build/native/elci eval examples/core-completion
 ```

@@ -48,5 +48,6 @@ build/native/elci eval examples/functional
 Examples are semantic fixtures. `threshold` demonstrates compilation, `signed`
 demonstrates nominal ledger hashes and transaction fields, `functional`
 demonstrates custom types and list traversal, and `core-completion` demonstrates
-nested patterns, generic aliases, destructuring and structural equality. They are
-not complete application contracts.
+nested patterns, generic aliases, destructuring and structural equality.
+`vesting` demonstrates a typed datum and redeemer, transaction validity ranges,
+and beneficiary authorization. They are not complete application contracts.

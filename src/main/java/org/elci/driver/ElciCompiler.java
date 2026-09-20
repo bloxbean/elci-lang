@@ -58,7 +58,7 @@ public final class ElciCompiler {
             var exports=provider.describe(javaModules.get(imp.module()));var found=new HashSet<String>();
             for(var export:exports) {
                 String n=export.symbol().substring(export.symbol().lastIndexOf('.')+1);Ty type;
-                try{type=Lowering.source(export.type());}catch(IllegalArgumentException unsupported){continue;}
+                try{type=sourceType(export);}catch(IllegalArgumentException unsupported){continue;}
                 found.add(n);addImport(imp.alias()+"."+n,type,export.symbol(),imp.token(),importedTypes,importedSymbols);
                 if(imp.exposing().contains(n)||imp.exposing().contains(".."))addImport(n,type,export.symbol(),imp.token(),importedTypes,importedSymbols);
             }
@@ -102,6 +102,14 @@ public final class ElciCompiler {
     private static void addImport(String name,Ty type,String symbol,Token token,Map<String,Ty> types,Map<String,String> symbols) {
         if(types.putIfAbsent(name,type)!=null)throw new Diagnostic("ELCI2102",token,"Ambiguous imported name "+name);
         symbols.put(name,symbol);
+    }
+    private static Ty sourceType(org.julclang.compiler.backend.LibraryExport export) {
+        return switch(export.symbol()) {
+            case "org.julclang.stdlib.lib.IntervalLib.finiteLowerBound",
+                 "org.julclang.stdlib.lib.IntervalLib.finiteUpperBound" ->
+                    fn(con("org.julclang.ledger.Interval"),con("Int"));
+            default -> Lowering.source(export.type());
+        };
     }
     private static String librarySource(String name) {
         String path="META-INF/plutus-sources/"+name.replace('.','/')+".java";
