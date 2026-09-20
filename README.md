@@ -39,6 +39,7 @@ build/native/elci eval examples/functional
 ```
 
 - [Getting started](docs/GETTING_STARTED.md): build, first project, JVM/native CLI.
+- [Standard library guide](docs/STDLIB.md): verified Java exports, limitations and writing Elci libraries.
 - [Language guide](docs/LANGUAGE.md): syntax, semantics, types, libraries and limits.
 - [Compiler architecture](docs/ARCHITECTURE.md): frontend/backend API and invariants.
 - [Testing and review](docs/VALIDATION.md): reproducible checks and evidence.

@@ -1,0 +1,169 @@
+AddressLib	credentialHash	COMPILES	Ledger.Address -> Bytes
+AddressLib	isPubKeyAddress	COMPILES	Ledger.Address -> Bool
+AddressLib	isScriptAddress	COMPILES	Ledger.Address -> Bool
+AddressLib	paymentCredential	COMPILES	Ledger.Address -> Ledger.Credential
+BitwiseLib	andByteString	COMPILES	Bool -> Bytes -> Bytes -> Bytes
+BitwiseLib	complementByteString	COMPILES	Bytes -> Bytes
+BitwiseLib	countSetBits	COMPILES	Bytes -> Int
+BitwiseLib	findFirstSetBit	COMPILES	Bytes -> Int
+BitwiseLib	orByteString	COMPILES	Bool -> Bytes -> Bytes -> Bytes
+BitwiseLib	readBit	COMPILES	Bytes -> Int -> Bool
+BitwiseLib	rotateByteString	COMPILES	Bytes -> Int -> Bytes
+BitwiseLib	shiftByteString	COMPILES	Bytes -> Int -> Bytes
+BitwiseLib	xorByteString	COMPILES	Bool -> Bytes -> Bytes -> Bytes
+BitwiseLib	writeBits	UNSUPPORTED	Unsupported on-chain source type: PlutusData.ListData
+BlsLib	finalVerify	UNSUPPORTED	Unsupported on-chain source type: JulcMlResult
+BlsLib	g1Add	UNSUPPORTED	Unsupported on-chain source type: JulcG1
+BlsLib	g1Compress	UNSUPPORTED	Unsupported on-chain source type: JulcG1
+BlsLib	g1Equal	UNSUPPORTED	Unsupported on-chain source type: JulcG1
+BlsLib	g1HashToGroup	UNSUPPORTED	Unsupported on-chain source type: JulcG1
+BlsLib	g1MultiScalarMul	UNSUPPORTED	Unsupported on-chain source type: JulcScalars
+BlsLib	g1Neg	UNSUPPORTED	Unsupported on-chain source type: JulcG1
+BlsLib	g1ScalarMul	UNSUPPORTED	Unsupported on-chain source type: JulcG1
+BlsLib	g1Uncompress	UNSUPPORTED	Unsupported on-chain source type: JulcG1
+BlsLib	g2Add	UNSUPPORTED	Unsupported on-chain source type: JulcG2
+BlsLib	g2Compress	UNSUPPORTED	Unsupported on-chain source type: JulcG2
+BlsLib	g2Equal	UNSUPPORTED	Unsupported on-chain source type: JulcG2
+BlsLib	g2HashToGroup	UNSUPPORTED	Unsupported on-chain source type: JulcG2
+BlsLib	g2MultiScalarMul	UNSUPPORTED	Unsupported on-chain source type: JulcScalars
+BlsLib	g2Neg	UNSUPPORTED	Unsupported on-chain source type: JulcG2
+BlsLib	g2ScalarMul	UNSUPPORTED	Unsupported on-chain source type: JulcG2
+BlsLib	g2Uncompress	UNSUPPORTED	Unsupported on-chain source type: JulcG2
+BlsLib	millerLoop	UNSUPPORTED	Unsupported on-chain source type: JulcG1
+BlsLib	mulMlResult	UNSUPPORTED	Unsupported on-chain source type: JulcMlResult
+ByteStringLib	*	BLOCKED	Ambiguous overloaded library export: org.julclang.stdlib.lib.ByteStringLib.integerToByteString
+ContextsLib	findDatum	COMPILES	Ledger.TxInfo -> Data -> (JulcOptional Data)
+ContextsLib	findOwnInput	COMPILES	Ledger.ScriptContext -> (JulcOptional Ledger.TxInInfo)
+ContextsLib	getContinuingOutputs	COMPILES	Ledger.ScriptContext -> (List Ledger.TxOut)
+ContextsLib	getRedeemer	COMPILES	Ledger.ScriptContext -> Data
+ContextsLib	getSpendingDatum	COMPILES	Ledger.ScriptContext -> (JulcOptional Data)
+ContextsLib	getTxInfo	COMPILES	Ledger.ScriptContext -> Ledger.TxInfo
+ContextsLib	ownHash	COMPILES	Ledger.ScriptContext -> Bytes
+ContextsLib	ownInputScriptHash	COMPILES	Ledger.ScriptContext -> Bytes
+ContextsLib	scriptOutputsAt	COMPILES	Ledger.TxInfo -> Bytes -> (List Ledger.TxOut)
+ContextsLib	signedBy	COMPILES	Ledger.TxInfo -> Bytes -> Bool
+ContextsLib	trace	COMPILES	String -> Unit
+ContextsLib	txInfoFee	COMPILES	Ledger.TxInfo -> Int
+ContextsLib	txInfoId	COMPILES	Ledger.TxInfo -> Ledger.TxId
+ContextsLib	txInfoInputs	COMPILES	Ledger.TxInfo -> (List Ledger.TxInInfo)
+ContextsLib	txInfoMint	COMPILES	Ledger.TxInfo -> Ledger.Value
+ContextsLib	txInfoOutputs	COMPILES	Ledger.TxInfo -> (List Ledger.TxOut)
+ContextsLib	txInfoRedeemers	COMPILES	Ledger.TxInfo -> (Map Ledger.ScriptPurpose Data)
+ContextsLib	txInfoRefInputs	COMPILES	Ledger.TxInfo -> (List Ledger.TxInInfo)
+ContextsLib	txInfoSignatories	COMPILES	Ledger.TxInfo -> (List Ledger.PubKeyHash)
+ContextsLib	txInfoValidRange	COMPILES	Ledger.TxInfo -> Ledger.Interval
+ContextsLib	txInfoWithdrawals	COMPILES	Ledger.TxInfo -> (Map Ledger.Credential Int)
+ContextsLib	valuePaid	COMPILES	Ledger.TxInfo -> Ledger.Address -> (List Ledger.Value)
+ContextsLib	valueSpent	COMPILES	Ledger.TxInfo -> (List Ledger.Value)
+ContextsLib	listIndex	UNSUPPORTED	Unsupported on-chain source type: PlutusData.ListData
+CryptoLib	blake2b_224	COMPILES	Bytes -> Bytes
+CryptoLib	blake2b_256	COMPILES	Bytes -> Bytes
+CryptoLib	keccak_256	COMPILES	Bytes -> Bytes
+CryptoLib	ripemd_160	COMPILES	Bytes -> Bytes
+CryptoLib	sha2_256	COMPILES	Bytes -> Bytes
+CryptoLib	sha3_256	COMPILES	Bytes -> Bytes
+CryptoLib	verifyEcdsaSecp256k1	COMPILES	Bytes -> Bytes -> Bytes -> Bool
+CryptoLib	verifyEd25519Signature	COMPILES	Bytes -> Bytes -> Bytes -> Bool
+CryptoLib	verifySchnorrSecp256k1	COMPILES	Bytes -> Bytes -> Bytes -> Bool
+IntervalLib	after	COMPILES	Int -> Ledger.Interval
+IntervalLib	always	COMPILES	Ledger.Interval
+IntervalLib	before	COMPILES	Int -> Ledger.Interval
+IntervalLib	between	COMPILES	Int -> Int -> Ledger.Interval
+IntervalLib	contains	COMPILES	Ledger.Interval -> Int -> Bool
+IntervalLib	finiteLowerBound	COMPILES	Ledger.Interval -> Int
+IntervalLib	finiteUpperBound	COMPILES	Ledger.Interval -> Int
+IntervalLib	isEmpty	COMPILES	Ledger.Interval -> Bool
+IntervalLib	never	COMPILES	Ledger.Interval
+ListsLib	concat	COMPILES	(List Data) -> (List Data) -> (List Data)
+ListsLib	contains	COMPILES	(List Data) -> Data -> Bool
+ListsLib	containsBytes	COMPILES	(List Data) -> Bytes -> Bool
+ListsLib	containsInt	COMPILES	(List Data) -> Int -> Bool
+ListsLib	drop	COMPILES	(List Data) -> Int -> (List Data)
+ListsLib	empty	COMPILES	(List Data)
+ListsLib	hasDuplicateBytes	COMPILES	(List Data) -> Bool
+ListsLib	hasDuplicateInts	COMPILES	(List Data) -> Bool
+ListsLib	hasDuplicates	COMPILES	(List Data) -> Bool
+ListsLib	head	COMPILES	(List Data) -> Data
+ListsLib	isEmpty	COMPILES	(List Data) -> Bool
+ListsLib	length	COMPILES	(List Data) -> Int
+ListsLib	nth	COMPILES	(List Data) -> Int -> Data
+ListsLib	prepend	COMPILES	(List Data) -> Data -> (List Data)
+ListsLib	reverse	COMPILES	(List Data) -> (List Data)
+ListsLib	tail	COMPILES	(List Data) -> (List Data)
+ListsLib	take	COMPILES	(List Data) -> Int -> (List Data)
+MapLib	delete	COMPILES	(Map Data Data) -> Data -> (Map Data Data)
+MapLib	empty	COMPILES	(Map Data Data)
+MapLib	fromList	COMPILES	Data -> (Map Data Data)
+MapLib	insert	COMPILES	(Map Data Data) -> Data -> Data -> (Map Data Data)
+MapLib	keys	COMPILES	(Map Data Data) -> (List Data)
+MapLib	lookup	COMPILES	(Map Data Data) -> Data -> (JulcOptional Data)
+MapLib	member	COMPILES	(Map Data Data) -> Data -> Bool
+MapLib	size	COMPILES	(Map Data Data) -> Int
+MapLib	toList	COMPILES	(Map Data Data) -> (Map Data Data)
+MapLib	values	COMPILES	(Map Data Data) -> (List Data)
+MathLib	abs	COMPILES	Int -> Int
+MathLib	expMod	COMPILES	Int -> Int -> Int -> Int
+MathLib	floorDiv	COMPILES	Int -> Int -> Int
+MathLib	floorMod	COMPILES	Int -> Int -> Int
+MathLib	max	COMPILES	Int -> Int -> Int
+MathLib	min	COMPILES	Int -> Int -> Int
+MathLib	pow	COMPILES	Int -> Int -> Int
+MathLib	sign	COMPILES	Int -> Int
+MathLib	divMod	UNSUPPORTED	Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>
+MathLib	quotRem	UNSUPPORTED	Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>
+NativeValueLib	contains	UNSUPPORTED	Unsupported on-chain source type: JulcValue
+NativeValueLib	fromData	UNSUPPORTED	Unsupported on-chain source type: JulcValue
+NativeValueLib	insertCoin	UNSUPPORTED	Unsupported on-chain source type: JulcValue
+NativeValueLib	lookupCoin	UNSUPPORTED	Unsupported on-chain source type: JulcValue
+NativeValueLib	scale	UNSUPPORTED	Unsupported on-chain source type: JulcValue
+NativeValueLib	toData	UNSUPPORTED	Unsupported on-chain source type: JulcValue
+NativeValueLib	union	UNSUPPORTED	Unsupported on-chain source type: JulcValue
+OutputLib	countOutputsAt	COMPILES	(List Ledger.TxOut) -> Ledger.Address -> Int
+OutputLib	findInputWithToken	COMPILES	(List Ledger.TxInInfo) -> Bytes -> Bytes -> Bytes -> Ledger.TxInInfo
+OutputLib	findOutputWithToken	COMPILES	(List Ledger.TxOut) -> Bytes -> Bytes -> Bytes -> Ledger.TxOut
+OutputLib	getInlineDatum	COMPILES	Ledger.TxOut -> Data
+OutputLib	lovelacePaidTo	COMPILES	(List Ledger.TxOut) -> Ledger.Address -> Int
+OutputLib	outputsAt	COMPILES	(List Ledger.TxOut) -> Ledger.Address -> (List Ledger.TxOut)
+OutputLib	outputsWithToken	COMPILES	(List Ledger.TxOut) -> Bytes -> Bytes -> (List Ledger.TxOut)
+OutputLib	paidAtLeast	COMPILES	(List Ledger.TxOut) -> Ledger.Address -> Int -> Bool
+OutputLib	resolveDatum	COMPILES	Ledger.TxOut -> (Map Data Data) -> Data
+OutputLib	txOutAddress	COMPILES	Ledger.TxOut -> Ledger.Address
+OutputLib	txOutDatum	COMPILES	Ledger.TxOut -> Ledger.OutputDatum
+OutputLib	txOutValue	COMPILES	Ledger.TxOut -> Ledger.Value
+OutputLib	uniqueOutputAt	COMPILES	(List Ledger.TxOut) -> Ledger.Address -> Ledger.TxOut
+OutputLib	valueHasToken	COMPILES	Ledger.Value -> Bytes -> Bytes -> Bool
+ValuesLib	_containsPolicy	COMPILES	Ledger.Value -> Data -> Bool
+ValuesLib	_countTokensWithQty	COMPILES	Ledger.Value -> Data -> Int -> Int
+ValuesLib	_findTokenName	COMPILES	Ledger.Value -> Data -> Int -> Bytes
+ValuesLib	add	COMPILES	Ledger.Value -> Ledger.Value -> Ledger.Value
+ValuesLib	adjustOuterForAdd	COMPILES	Ledger.Value -> Ledger.Value -> Ledger.Value
+ValuesLib	assetOf	COMPILES	Ledger.Value -> Bytes -> Bytes -> Int
+ValuesLib	checkPolicyGeq	COMPILES	Ledger.Value -> Data -> Bool
+ValuesLib	containsPolicy	COMPILES	Ledger.Value -> Bytes -> Bool
+ValuesLib	countTokensWithQty	COMPILES	Ledger.Value -> Bytes -> Int -> Int
+ValuesLib	eq	COMPILES	Ledger.Value -> Ledger.Value -> Bool
+ValuesLib	extraOuterEntries	COMPILES	Ledger.Value -> Ledger.Value -> Ledger.Value
+ValuesLib	findTokenName	COMPILES	Ledger.Value -> Bytes -> Int -> Bytes
+ValuesLib	flatten	COMPILES	Ledger.Value -> (List Data)
+ValuesLib	flattenStep	COMPILES	Data -> (List Data) -> (List Data)
+ValuesLib	geq	COMPILES	Ledger.Value -> Ledger.Value -> Bool
+ValuesLib	geqMultiAsset	COMPILES	Ledger.Value -> Ledger.Value -> Bool
+ValuesLib	isZero	COMPILES	Ledger.Value -> Bool
+ValuesLib	leq	COMPILES	Ledger.Value -> Ledger.Value -> Bool
+ValuesLib	lovelaceOf	COMPILES	Ledger.Value -> Int
+ValuesLib	negate	COMPILES	Ledger.Value -> Ledger.Value
+ValuesLib	refBytes	COMPILES	Ledger.TxOutRef -> Bytes
+ValuesLib	singleton	COMPILES	Bytes -> Bytes -> Int -> Ledger.Value
+ValuesLib	subtract	COMPILES	Ledger.Value -> Ledger.Value -> Ledger.Value
+ValuesLib	uniqueTokenName	COMPILES	Ledger.TxOutRef -> Bytes
+ValuesLib	_assetOf	UNSUPPORTED	Unsupported on-chain source type: PlutusData.BytesData
+ValuesLib	_countInnerTokensWithQty	UNSUPPORTED	Unsupported on-chain source type: PlutusData.MapData
+ValuesLib	_findInnerTokenName	UNSUPPORTED	Unsupported on-chain source type: PlutusData.MapData
+ValuesLib	_singleton	UNSUPPORTED	Unsupported on-chain source type: PlutusData.BytesData
+ValuesLib	adjustInnerForAdd	UNSUPPORTED	Unsupported on-chain source type: PlutusData.MapData
+ValuesLib	extraInnerEntries	UNSUPPORTED	Unsupported on-chain source type: PlutusData.MapData
+ValuesLib	findTokenAmount	UNSUPPORTED	Unsupported on-chain source type: PlutusData.MapData
+ValuesLib	flattenPolicy	UNSUPPORTED	Unsupported on-chain source type: PlutusData.MapData
+ValuesLib	flattenTyped	UNSUPPORTED	Unsupported on-chain source type: AssetEntry
+ValuesLib	isTokenMapZero	UNSUPPORTED	Unsupported on-chain source type: PlutusData.MapData
+ValuesLib	negateTokenMap	UNSUPPORTED	Unsupported on-chain source type: PlutusData.MapData

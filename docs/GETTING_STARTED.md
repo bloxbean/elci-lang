@@ -176,3 +176,6 @@ the Java VM; native compilation still uses the supplied GraalVM.
 Custom on-chain libraries can be supplied as JARs using `project.library-jars`.
 See [Java libraries](JAVA_LIBRARIES.md) and the
 [custom-library example](../examples/custom-library/README.md).
+
+See the [standard library guide](STDLIB.md) for the current export inventory and
+how to write reusable Elci modules.

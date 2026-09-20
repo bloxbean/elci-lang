@@ -1,0 +1,10 @@
+[project]
+source-directories = ["src", "lib"]
+target = "plutus-v3-pv11-uplc-1.1.0"
+julc-version = "0.1.0-elci-dev"
+
+[entrypoint]
+module = "Main"
+function = "main"
+purpose = "function"
+boundary = "julc-strict-v1"

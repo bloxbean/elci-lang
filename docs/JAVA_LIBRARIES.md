@@ -1,5 +1,8 @@
 # Importing on-chain Java libraries
 
+For the checked stdlib export inventory and libraries written in Elci, see the
+[standard library guide](STDLIB.md).
+
 Elci imports public static methods from Julc `@OnchainLibrary` source. Julc owns
 Java parsing, source type descriptions, representation planning and compilation.
 Elci consumes the descriptions to type-check calls and uses the materialized PIR.
