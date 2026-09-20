@@ -34,7 +34,7 @@ jobs:
             platform: linux-x64
           - runner: ubuntu-22.04-arm
             platform: linux-arm64
-          - runner: macos-15
+          - runner: macos-14
             platform: macos-arm64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -56,6 +56,8 @@ jobs:
           distribution: graalvm
           version: '25.3.4.1'
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
       - name: Verify GraalVM version
         shell: bash
         run: |

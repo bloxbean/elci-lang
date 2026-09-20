@@ -478,6 +478,7 @@
     }
   ],
   "resources": [
+    { "glob": "META-INF/services/*" },
     { "glob": "elci-build.properties" },
     {
       "glob": "META-INF/plutus-sources/**"
