@@ -42,6 +42,7 @@ Validator builds include `build/validator.plutus.json` in Julc’s format for Ca
 Client Lib, plus `abi.json` for Elci schema and ABI drift checks. CIP-57 blueprint
 generation is not implemented yet.
 
+- [Release workflow](docs/RELEASING.md): versioning, native binaries and GitHub Releases.
 - [Getting started](docs/GETTING_STARTED.md): build, first project, JVM/native CLI.
 - [Standard library guide](docs/STDLIB.md): verified Java exports, limitations and writing Elci libraries.
 - [Language guide](docs/LANGUAGE.md): syntax, semantics, types, libraries and limits.

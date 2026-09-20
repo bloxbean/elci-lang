@@ -12,7 +12,7 @@ import static org.elci.types.Types.*;
 
 /** Stateless compiler facade. Each request owns inference, specialization and backend state. */
 public final class ElciCompiler {
-    public static final String JULC_VERSION="0.1.0-elci-dev";
+    public static final String JULC_VERSION=BuildInfo.JULC_VERSION;
     public record Result(Program program, String module, String function, Ty type, CompilerTarget target,
                          org.julclang.compiler.pir.PirType pirType,Map<String,org.julclang.compiler.pir.PirType> namedTypes) {
         public Result {namedTypes=Map.copyOf(namedTypes);}

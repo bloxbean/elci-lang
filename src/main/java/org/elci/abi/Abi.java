@@ -9,7 +9,7 @@ import java.util.*;
 public final class Abi {
     private Abi() {}
     public static String manifest(ElciCompiler.Result result,FrontendProgram.Purpose purpose) {
-        var root=new TreeMap<String,Object>();root.put("formatVersion",1);root.put("compiler","elci-0.1.0-dev");root.put("julcVersion",ElciCompiler.JULC_VERSION);
+        var root=new TreeMap<String,Object>();root.put("formatVersion",1);root.put("compiler","elci-"+org.elci.driver.BuildInfo.VERSION);root.put("julcVersion",ElciCompiler.JULC_VERSION);
         root.put("target",result.target().profileId());root.put("entrypoint",result.module()+"."+result.function());root.put("purpose",purpose.name().toLowerCase(Locale.ROOT));root.put("boundary","julc-strict-v1");root.put("parameters",List.of());
         root.put("ledgerArguments",purpose==FrontendProgram.Purpose.FUNCTION?0:1);
         var arguments=new ArrayList<Object>();PirType type=result.pirType();org.elci.types.Types.Ty sourceType=result.type();int index=0;

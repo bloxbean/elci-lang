@@ -14,9 +14,9 @@ public final class Main {
         String source="<project>";
         try {
             if(args.length==0||args[0].equals("--help")||args[0].equals("help")) {
-                System.out.println("Elci 0.1.0-dev — Elm-syntax compiler powered by Julc\nUsage: elci <check|build|eval> [project-directory]\n       elci --version\nBuild writes build/validator.flat, validator.plutus, validator.plutus.json (Julc format) and abi.json (Elci schema).");return 0;
+                System.out.println("Elci "+org.elci.driver.BuildInfo.VERSION+" — Elm-syntax compiler powered by Julc\nUsage: elci <check|build|eval> [project-directory]\n       elci --version\nBuild writes build/validator.flat, validator.plutus, validator.plutus.json (Julc format) and abi.json (Elci schema).");return 0;
             }
-            if(args[0].equals("--version")){System.out.println("elci 0.1.0-dev / julc "+ElciCompiler.JULC_VERSION);return 0;}
+            if(args[0].equals("--version")){System.out.println("elci "+org.elci.driver.BuildInfo.VERSION+" / julc "+ElciCompiler.JULC_VERSION);return 0;}
             if(args.length>2||!Set.of("check","build","eval").contains(args[0]))throw new IllegalArgumentException("Expected check, build or eval; see --help");
             var project=Project.read(Path.of(args.length==2?args[1]:"."));source=project.source().toString();
             var result=new ElciCompiler().compileProject(project.sources(),project.module(),project.function(),project.purpose(),project.javaModules(),new CompilerOptions(),project.librarySources());

@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      julc-version: ${{ steps.metadata.outputs.julcVersion }}
+      julc-revision: ${{ steps.metadata.outputs.julcRevision }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate release metadata
+        id: metadata
+        run: python3 scripts/release-metadata.py
+
+  build:
+    needs: metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux-x64
+          - runner: ubuntu-24.04-arm
+            platform: linux-arm64
+          - runner: macos-15
+            platform: macos-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    env:
+      RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+      JULC_VERSION: ${{ needs.metadata.outputs.julc-version }}
+      PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Check out pinned compiler backend
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: bloxbean/julc
+          ref: ${{ needs.metadata.outputs.julc-revision }}
+          path: tmp/julc
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@f60d4ea89f14098520aea588431217bbd9551570 # v1.6.5
+        with:
+          distribution: graalvm
+          version: '25.3.4.1'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify GraalVM version
+        shell: bash
+        run: |
+          grep -Fx 'GRAALVM_VERSION="25.3.4.1"' "$JAVA_HOME/release"
+          echo "GRAALVM_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+      - name: Publish backend dependencies locally
+        working-directory: tmp/julc
+        shell: bash
+        run: |
+          ./gradlew --no-daemon -Pversion="$JULC_VERSION" -PskipSigning=true \
+            :julc-core:publishToMavenLocal :julc-vm:publishToMavenLocal \
+            :julc-ledger-api:publishToMavenLocal :julc-compiler:publishToMavenLocal \
+            :julc-stdlib:publishToMavenLocal :julc-bls:publishToMavenLocal \
+            :julc-vm-java:publishToMavenLocal :julc-cardano-client-lib:publishToMavenLocal
+      - name: Test and build native CLI
+        run: ./gradlew --no-daemon test nativeCompile
+      - name: Smoke test native CLI
+        shell: bash
+        run: |
+          test "$(build/native/elci --version)" = "elci $RELEASE_VERSION / julc $JULC_VERSION"
+          build/native/elci check examples/vesting
+          build/native/elci build examples/vesting
+          test -s examples/vesting/build/validator.plutus.json
+          build/native/elci eval examples/elci-library | tee build/native-eval.txt
+          grep -F 'value=105' build/native-eval.txt
+      - name: Package CLI
+        shell: bash
+        run: |
+          package="elci-$RELEASE_VERSION-$PLATFORM"
+          mkdir -p "build/release/$package" build/assets
+          cp build/native/elci README.md "build/release/$package/"
+          cp -R docs "build/release/$package/"
+          if [ -f LICENSE ]; then cp LICENSE "build/release/$package/"; fi
+          tar -czf "build/assets/$package.tar.gz" -C build/release "$package"
+      - name: Upload release asset
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: elci-${{ matrix.platform }}
+          path: build/assets/*.tar.gz
+          if-no-files-found: error
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-reports-${{ matrix.platform }}
+          path: build/reports/tests/
+          if-no-files-found: ignore
+
+  release:
+    needs: [metadata, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: elci-*
+          merge-multiple: true
+          path: assets
+      - name: Create checksums and publish GitHub Release
+        shell: bash
+        working-directory: assets
+        run: |
+          sha256sum ./*.tar.gz > SHA256SUMS
+          # A failed upload can be retried against a draft; published assets are immutable.
+          if gh release view "$RELEASE_TAG" --json isDraft > release.json 2>/dev/null; then
+            test "$(jq -r .isDraft release.json)" = true || {
+              echo 'Release is already published; refusing to replace assets.' >&2
+              exit 1
+            }
+          else
+            args=(--draft --verify-tag --generate-notes --title "Elci $RELEASE_VERSION")
+            if [[ "$RELEASE_VERSION" == *-* ]]; then args+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" "${args[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" ./*.tar.gz SHA256SUMS --clobber
+          gh release edit "$RELEASE_TAG" --draft=false
