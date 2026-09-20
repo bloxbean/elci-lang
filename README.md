@@ -38,6 +38,10 @@ build/native/elci build examples/threshold
 build/native/elci eval examples/functional
 ```
 
+Validator builds include `build/validator.plutus.json` in Julc’s format for Cardano
+Client Lib, plus `abi.json` for Elci schema and ABI drift checks. CIP-57 blueprint
+generation is not implemented yet.
+
 - [Getting started](docs/GETTING_STARTED.md): build, first project, JVM/native CLI.
 - [Standard library guide](docs/STDLIB.md): verified Java exports, limitations and writing Elci libraries.
 - [Language guide](docs/LANGUAGE.md): syntax, semantics, types, libraries and limits.

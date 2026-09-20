@@ -28,7 +28,8 @@ cd "$JULC_WORKTREE"
   :julc-compiler:publishToMavenLocal \
   :julc-stdlib:publishToMavenLocal \
   :julc-bls:publishToMavenLocal \
-  :julc-vm-java:publishToMavenLocal -PskipSigning=true
+  :julc-vm-java:publishToMavenLocal \
+  :julc-cardano-client-lib:publishToMavenLocal -PskipSigning=true
 ```
 
 Return to the Elci project:
@@ -96,8 +97,36 @@ A validator build produces:
 
 - `validator.flat`: FLAT-encoded UPLC.
 - `validator.plutus`: a Plutus V3 text envelope with double-CBOR-wrapped script bytes.
+- `validator.plutus.json`: Julc-compatible validator artifact with `type`, `purpose`,
+  `description`, `cborHex`, `hash`, `params` and `sizeBytes`. Generated for spending
+  and minting validators; `params` is empty because deployment parameters are not
+  supported yet.
 - `abi.json`: target, entrypoint roles, nominal identities, codecs, constructor tags,
   record field order, and recursive type references.
+
+`validator.plutus.json` uses Julc's `ValidatorOutput` format, not CIP-57. The
+schema information stays in `abi.json`; neither file is a CIP-57 blueprint.
+The compiler uses Julc's existing script adapter for CBOR encoding and hashing.
+For a Cardano Client Lib application with `julc-cardano-client-lib` available:
+
+```java
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HexFormat;
+import org.julclang.clientlib.ValidatorOutput;
+import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script;
+
+var output = ValidatorOutput.fromJson(
+    Files.readString(Path.of("build/validator.plutus.json")));
+var script = PlutusV3Script.builder().cborHex(output.cborHex()).build();
+if (!HexFormat.of().formatHex(script.getScriptHash()).equals(output.hash())) {
+    throw new IllegalStateException("Script hash mismatch");
+}
+```
+
+A `purpose = "function"` build does not create the Julc validator artifact and
+removes a stale one from a previous validator build. Function outputs are intended
+for evaluation, not deployment as validators.
 
 Keep the ABI with application code that constructs datum/redeemer data. To reject
 unexpected ABI changes, save a copy outside `build/` and add:
