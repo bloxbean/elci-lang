@@ -32,6 +32,6 @@ Fully static musl builds are deferred to a later release. GraalVM 25.3.4.1 does 
 
 ## Alignment with Julc CLI
 
-Both release workflows use Ubuntu 22.04 for Linux x64/ARM64, macOS 14 for Apple Silicon, and `gradle/actions/setup-gradle@v4`. Both build native executables with `--no-fallback` and `-H:+ReportExceptionStackTraces` and include service-provider resources. Julc CLI has no `native-image.properties`; its options live in Gradle, as do Elci’s.
+Both release workflows use Ubuntu 22.04 for Linux x64/ARM64 and `gradle/actions/setup-gradle@v4`. Elci uses macOS 15 ARM64 for Apple Silicon rather than Julc’s macOS 14 runner. Both build native executables with `--no-fallback` and `-H:+ReportExceptionStackTraces` and include service-provider resources. Julc CLI has no `native-image.properties`; its options live in Gradle, as do Elci’s.
 
 Elci retains its exact GraalVM 25.3.4.1 pin, Gradle-sourced release version, frontend-specific reachability metadata, and compiler smoke tests. Julc’s scaffolding, verification, and CLI-specific reflection entries do not apply to Elci. Windows packaging remains outside this release’s platform set. These settings do not establish native BLS execution support, which is deferred for the developer preview.
