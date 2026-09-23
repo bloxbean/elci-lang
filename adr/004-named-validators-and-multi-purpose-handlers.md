@@ -2,6 +2,8 @@
 
 Status: **Accepted design direction; not implemented** — next iteration.
 Tracking issue: [#1](https://github.com/bloxbean/elci-lang/issues/1)
+Backend prerequisite: [Julc #180](https://github.com/bloxbean/julc/issues/180).
+Integration roadmap: [ADR-005](005-remaining-frontend-and-backend-integration.md).
 Date: 20 September 2026
 Baseline: Elci `011c293`; extends the
 [language design](elci-language-syntax-compiler-design-adr.md) and

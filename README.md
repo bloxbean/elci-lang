@@ -51,6 +51,7 @@ generation is not implemented yet.
 - [Testing and review](docs/VALIDATION.md): reproducible checks and evidence.
 - [Diagnostic catalogue](docs/DIAGNOSTICS.md): stable compiler error categories.
 - [Implementation log](docs/IMPLEMENTATION.md): decisions and milestone status.
+- [Remaining integration roadmap](adr/005-remaining-frontend-and-backend-integration.md): planned Elci work and shared backend dependencies.
 
 Examples are semantic fixtures. `threshold` demonstrates compilation, `signed`
 demonstrates nominal ledger hashes and transaction fields, `functional`

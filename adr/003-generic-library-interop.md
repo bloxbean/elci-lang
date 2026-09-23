@@ -1,6 +1,7 @@
 # ADR-003: Generic library interoperability
 
 Status: **Proposed** — provider extensions and acceptance gates remain open.
+Implementation roadmap and Julc dependencies: [ADR-005](005-remaining-frontend-and-backend-integration.md).
 Date: 19 September 2026
 Baseline: Elci `974bd41`; companion to [ADR-001](elci-language-syntax-compiler-design-adr.md),
 [ADR-002](002-functional-core-completion.md) and the
