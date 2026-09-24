@@ -1,0 +1,148 @@
+package org.elci.cli;
+
+import org.elci.abi.Abi;
+import org.elci.driver.ElciCompiler;
+import org.julclang.clientlib.JulcScriptAdapter;
+import org.julclang.clientlib.ValidatorOutput;
+import org.julclang.compiler.schema.ContractSchema;
+import org.julclang.core.flat.UplcFlatEncoder;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.*;
+
+/**
+ * Publication of named-validator artifacts beneath {@code build/validators/<name>/} (ADR-004).
+ * Every selected group is compiled and checked before anything is written; files are then
+ * replaced one by one with atomic moves. A generated-output manifest records the files Elci
+ * owns, so a group removed from the configuration is cleaned up without touching other files.
+ */
+final class ValidatorOutputs {
+    static final String MANIFEST = "elci-outputs.json";
+    private static final List<String> FILES = List.of("validator.flat", "validator.plutus", "validator.plutus.json", "abi.json");
+
+    /** The complete artifact set of one group, rendered in memory. */
+    record Rendered(String name, Map<String, byte[]> files, int size, String hash) {}
+
+    private ValidatorOutputs() {}
+
+    static Rendered render(ElciCompiler.ValidatorBuild build) {
+        var program = build.program();
+        byte[] flat = UplcFlatEncoder.encodeProgram(program);
+        var script = JulcScriptAdapter.fromProgram(program);
+        String hex = script.getCborHex();
+        // Julc leaves the hash empty for a parameterized script: it changes once parameters are applied.
+        String hash = build.parameters().isEmpty() ? JulcScriptAdapter.scriptHash(program) : "";
+        String params = String.join(",", build.parameters().stream().map(p -> p.name() + ":" + p.source()).toList());
+        var artifact = new ValidatorOutput("PlutusScriptV3", artifactPurpose(build), build.name(), hex, hash, params, flat.length);
+        var files = new LinkedHashMap<String, byte[]>();
+        files.put("validator.flat", flat);
+        files.put("validator.plutus", ("{\n  \"type\": \"PlutusScriptV3\",\n  \"description\": \"Elci validator " + build.name()
+                + "\",\n  \"cborHex\": \"" + hex + "\"\n}\n").getBytes(StandardCharsets.UTF_8));
+        files.put("validator.plutus.json", artifact.toJson().getBytes(StandardCharsets.UTF_8));
+        files.put("abi.json", Abi.validatorManifest(build).getBytes(StandardCharsets.UTF_8));
+        return new Rendered(build.name(), files, flat.length, hash);
+    }
+
+    /** Julc's artifact purpose vocabulary: {@code multi} for several handlers. */
+    static String artifactPurpose(ElciCompiler.ValidatorBuild build) {
+        if (build.handlers().size() > 1) return "multi";
+        return switch (build.handlers().getFirst().purpose()) {
+            case SPEND -> "spending";
+            case MINT -> "minting";
+            case WITHDRAW -> "withdraw";
+            case CERTIFY -> "certifying";
+            case VOTE -> "voting";
+            case PROPOSE -> "proposing";
+        };
+    }
+
+    /**
+     * Write the rendered groups. When {@code all} is true every configured group was built, so
+     * owned outputs of groups no longer configured are removed.
+     */
+    static void publish(Path build, List<Rendered> groups, boolean all) throws IOException {
+        Path root = build.resolve("validators");
+        Files.createDirectories(root);
+        var owned = readManifest(root);
+        var staged = new ArrayList<Path[]>();
+        try {
+            for (var group : groups) {
+                Path directory = root.resolve(group.name());
+                Files.createDirectories(directory);
+                for (var file : group.files().entrySet()) {
+                    Path temporary = Files.createTempFile(directory, "." + file.getKey() + ".", ".tmp");
+                    staged.add(new Path[] {temporary, directory.resolve(file.getKey())});
+                    Files.write(temporary, file.getValue());
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            for (var pair : staged) Files.deleteIfExists(pair[0]);
+            throw e;
+        }
+        for (var pair : staged) move(pair[0], pair[1]);
+        for (var group : groups) owned.put(group.name(), FILES);
+        if (all) {
+            var configured = new HashSet<String>();
+            groups.forEach(g -> configured.add(g.name()));
+            for (var name : List.copyOf(owned.keySet())) {
+                if (configured.contains(name)) continue;
+                Path directory = root.resolve(name).normalize();
+                if (!directory.getParent().equals(root.normalize())) continue;
+                for (String file : owned.get(name)) Files.deleteIfExists(directory.resolve(file));
+                try (var rest = Files.exists(directory) ? Files.list(directory) : java.util.stream.Stream.<Path>empty()) {
+                    if (rest.findAny().isEmpty()) Files.deleteIfExists(directory);
+                }
+                owned.remove(name);
+            }
+        }
+        writeManifest(root, owned);
+    }
+
+    private static void move(Path from, Path to) throws IOException {
+        try {
+            Files.move(from, to, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /** The owned files of each previously published group. */
+    private static TreeMap<String, List<String>> readManifest(Path root) throws IOException {
+        var result = new TreeMap<String, List<String>>();
+        Path manifest = root.resolve(MANIFEST);
+        if (!Files.exists(manifest)) return result;
+        // The manifest is Elci's own canonical output: {"validators":{"name":["file",...]}}.
+        String text = Files.readString(manifest);
+        var matcher = java.util.regex.Pattern.compile("\"([a-z][a-z0-9_-]*)\":\\[([^\\]]*)\\]").matcher(text);
+        while (matcher.find()) {
+            String name = matcher.group(1);
+            if (!Project.VALIDATOR_NAME.matcher(name).matches()) continue;
+            var files = new ArrayList<String>();
+            for (String part : matcher.group(2).split(",")) {
+                String file = part.strip().replace("\"", "");
+                if (FILES.contains(file)) files.add(file);
+            }
+            result.put(name, List.copyOf(files));
+        }
+        return result;
+    }
+
+    private static void writeManifest(Path root, Map<String, List<String>> owned) throws IOException {
+        Path temporary = Files.createTempFile(root, "." + MANIFEST + ".", ".tmp");
+        Files.writeString(temporary, Abi.json(Map.of("formatVersion", 1, "validators", owned)) + "\n");
+        move(temporary, root.resolve(MANIFEST));
+    }
+
+    /** One status line per group, as printed by {@code check} and {@code build}. */
+    static String summary(ElciCompiler.ValidatorBuild build, int size) {
+        var purposes = build.handlers().stream().map(h -> ElciCompiler.purpose(h.purpose())).toList();
+        return "validator " + build.name() + " (" + String.join(", ", purposes) + "): checked; " + size + " FLAT bytes; "
+                + build.target().profileId();
+    }
+
+    static boolean isPurpose(String name) {
+        return Arrays.stream(ContractSchema.Purpose.values()).anyMatch(p -> ElciCompiler.purpose(p).equals(name));
+    }
+}

@@ -63,13 +63,45 @@ public final class Modules {
     }
 
     public Ast.Module resolve(String root) {
-        visit(root);
+        return resolve(List.of(root), root);
+    }
+
+    /**
+     * Resolve several root modules into one program in which every declaration is
+     * module-qualified, for named validators whose handlers live in different modules.
+     */
+    public Ast.Module resolveAll(Collection<String> roots) {
+        return resolve(List.copyOf(new TreeSet<>(roots)), null);
+    }
+
+    /** Whether {@code module} exposes the top-level declaration {@code name}. */
+    public boolean exposes(String module, String name) {
+        var m = available.get(module);
+        if (m == null) throw new IllegalArgumentException("Missing source module: " + module);
+        return m.declarations().stream().anyMatch(d -> d.name().equals(name)) && exposes(m, name);
+    }
+
+    /** Whether {@code module} declares the top-level name {@code name}. */
+    public boolean declares(String module, String name) {
+        var m = available.get(module);
+        return m != null && m.declarations().stream().anyMatch(d -> d.name().equals(name));
+    }
+
+    /** The parsed source module, before resolution. */
+    public Ast.Module module(String module) {
+        var m = available.get(module);
+        if (m == null) throw new IllegalArgumentException("Missing source module: " + module);
+        return m;
+    }
+
+    private Ast.Module resolve(List<String> roots, String root) {
+        roots.forEach(this::visit);
         var definitions = new ArrayList<Decl>();
         var imports = new ArrayList<Import>();
         var aliases = new LinkedHashMap<String, Alias>();
         var unions = new ArrayList<Union>();
         for (var module : ordered.values()) {
-            boolean isRoot = module.name().equals(root);
+            boolean isRoot = root != null && module.name().equals(root);
             String prefix = isRoot ? "" : module.name() + ".";
             var names = new LinkedHashMap<String, String>();
             var types = new LinkedHashMap<String, String>();
@@ -122,7 +154,10 @@ public final class Modules {
                     continue;
                 }
                 var dependency = available.get(imp.module());
-                String dp = dependency.name().equals(root) ? "" : dependency.name() + ".";
+                String dp =
+                        root != null && dependency.name().equals(root)
+                                ? ""
+                                : dependency.name() + ".";
                 var exported = new LinkedHashMap<String, String>();
                 for (var d : dependency.declarations())
                     if (exposes(dependency, d.name())) exported.put(d.name(), dp + d.name());
@@ -214,6 +249,9 @@ public final class Modules {
                                         .toList(),
                                 u.token()));
         }
+        if (root == null)
+            return new Ast.Module(
+                    String.join("+", roots), List.of(), imports, definitions, aliases, unions);
         var original = available.get(root);
         return new Ast.Module(root, original.exposing(), imports, definitions, aliases, unions);
     }

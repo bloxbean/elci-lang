@@ -5,7 +5,11 @@ import static org.elci.types.Types.*;
 
 import org.elci.syntax.*;
 import org.elci.types.*;
+import org.julclang.compiler.backend.Definition;
+import org.julclang.compiler.backend.LibraryImports;
 import org.julclang.compiler.backend.LibraryProvider;
+import org.julclang.compiler.backend.LibraryRequest;
+import org.julclang.compiler.backend.PirLinker;
 import org.julclang.compiler.pir.*;
 import org.julclang.core.*;
 
@@ -14,11 +18,25 @@ import java.util.*;
 
 /** Demand specialization and strict, hygienic PIR construction. */
 public final class Lowering {
+    /**
+     * How library implementations reach the program. {@link #INLINE} copies each closed export
+     * at its use site (revision-1 programs, whose bytes are kept stable); {@link #LINK}
+     * references provider bindings that the backend links once as trusted imports (revision 2).
+     */
+    public enum ImportMode {
+        INLINE,
+        LINK
+    }
+
     private final Inference inference;
     private final Map<String, Decl> definitions = new LinkedHashMap<>();
     private final Map<String, String> imports;
     private final LibraryProvider provider;
+    private final ImportMode importMode;
     private final LinkedHashMap<String, PirTerm> specialized = new LinkedHashMap<>();
+    private final Map<String, PirType> specializedTypes = new HashMap<>();
+    private final LinkedHashMap<LibraryRequest, LibraryImports.Binding> requested =
+            new LinkedHashMap<>();
     private final Map<String, String> instances = new HashMap<>();
     private int fresh;
     private final Map<String, PirType> namedTypes = new LinkedHashMap<>();
@@ -39,16 +57,78 @@ public final class Lowering {
             Inference inference,
             Map<String, String> imports,
             LibraryProvider provider) {
+        this(declarations, inference, imports, provider, ImportMode.INLINE);
+    }
+
+    public Lowering(
+            List<Decl> declarations,
+            Inference inference,
+            Map<String, String> imports,
+            LibraryProvider provider,
+            ImportMode importMode) {
         declarations.forEach(d -> definitions.put(d.name(), d));
         this.inference = inference;
         this.imports = imports;
         this.provider = provider;
+        this.importMode = importMode;
         namedTypes.putAll(inference.importedRepresentations);
     }
 
+    /** A closed revision-1 term: every specialized definition is linked around the entry. */
     public PirTerm lower(String entry, Ty type) {
         PirTerm root = reference(entry, type);
-        return org.julclang.compiler.backend.PirLinker.link(specialized, root);
+        return PirLinker.link(specialized, root);
+    }
+
+    /**
+     * Specialize {@code entry} at {@code type} as a program-level definition and return a
+     * reference to it. The definition and its dependencies are available from
+     * {@link #definitions()}.
+     */
+    public PirTerm.Var entry(String entry, Ty type) {
+        return (PirTerm.Var) reference(entry, type);
+    }
+
+    /** Program-level definitions in encounter order, with their declared types. */
+    public SequencedMap<String, Definition> definitions() {
+        var result = new LinkedHashMap<String, Definition>();
+        specialized.forEach(
+                (name, term) -> result.put(name, new Definition(specializedTypes.get(name), term)));
+        return result;
+    }
+
+    /**
+     * The trusted import group for every library request made while lowering, materialized
+     * together so shared private dependencies are linked once. Empty in {@link
+     * ImportMode#INLINE}.
+     */
+    public List<LibraryImports> imports() {
+        if (requested.isEmpty()) return List.of();
+        var group = provider.materialize(List.copyOf(requested.keySet()));
+        requested.forEach(
+                (request, binding) -> {
+                    if (!group.binding(request).equals(binding))
+                        throw new IllegalStateException(
+                                "Provider changed the binding of " + request.describe());
+                });
+        return List.of(group);
+    }
+
+    /** Request a provider implementation and return a term that refers to it. */
+    private PirTerm library(LibraryRequest request) {
+        if (importMode == ImportMode.INLINE && request instanceof LibraryRequest.Export export)
+            return provider.materialize(export.symbol());
+        var binding = requested.get(request);
+        LibraryImports group = null;
+        if (binding == null) {
+            group = provider.materialize(List.of(request));
+            binding = group.binding(request);
+            if (importMode == ImportMode.LINK) requested.put(request, binding);
+        }
+        var reference = new PirTerm.Var(binding.name(), binding.type());
+        if (importMode == ImportMode.LINK) return reference;
+        // A revision-1 program has no import groups: link a closed copy at the use site.
+        return PirLinker.link(new LinkedHashMap<>(group.definitions()), reference);
     }
 
     private String fresh(String hint) {
@@ -71,6 +151,7 @@ public final class Lowering {
         String symbol = fresh(name);
         instances.put(key, symbol);
         specialized.put(symbol, null);
+        specializedTypes.put(symbol, pir(concrete));
         var d = definitions.get(name);
         var mapping = new HashMap<Var, Ty>();
         Ty instance = copy(inference.declarations.get(d), mapping);
@@ -228,7 +309,7 @@ public final class Lowering {
                     yield value;
                 }
                 if (imports.containsKey(n.name()))
-                    yield provider.materialize(imports.get(n.name()));
+                    yield library(new LibraryRequest.Export(imports.get(n.name())));
                 if (n.name().equals("not")) {
                     String p = fresh("not");
                     yield new PirTerm.Lam(
