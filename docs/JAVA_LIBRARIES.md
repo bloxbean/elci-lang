@@ -98,9 +98,10 @@ How instantiation works:
   templates.
 - **Evaluation:** calls are strict and curried in declared argument order. Each
   argument is evaluated once, even under partial application.
-- **Elci types:** Java-source templates cannot yet be specialized at Elci's own
-  records and unions, because Julc's Java provider describes only Java and ledger
-  types. Programmatic exports accept them.
+- **Elci types:** Elci's own records, tuples and unions are valid type arguments
+  for both Java-source templates and programmatic exports. Elci sends their
+  representations with each request as producer-owned types (Julc PR #195), and
+  specializations are keyed by them.
 
 Julc also provides **programmatic** exports: implementations built directly in
 PIR rather than from Java source. `org.julclang.stdlib.lib.ListsLib` offers
@@ -122,8 +123,7 @@ openTotal orders =
 ```
 
 The list is the first argument, as in the Java library. Unlike Java inlining, the
-function argument is evaluated once, strictly, even for an empty list. These
-exports accept Elci records and unions as type arguments. The bundled Elci `List`
+function argument is evaluated once, strictly, even for an empty list. The bundled Elci `List`
 module remains available and needs no configuration.
 
 Julc composes the Java-source provider, the programmatic provider and Elci's own

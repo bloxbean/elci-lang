@@ -847,6 +847,7 @@ public final class Lowering {
         var variables = new HashMap<String, Ty>();
         unify(org.elci.driver.ElciCompiler.schemeType(scheme, variables), use, token);
         var arguments = new ArrayList<LibraryType.Reference>();
+        var producerTypes = new TreeMap<String, PirType>();
         String export = scheme.symbol().substring(scheme.symbol().lastIndexOf('.') + 1);
         for (var parameter : scheme.typeParameters()) {
             Ty argument = variables.get(parameter.name());
@@ -857,25 +858,35 @@ public final class Lowering {
                 throw new Diagnostic("ELCI3003", token, "Type argument " + parameter.name() + " = " + prune(argument)
                         + " of " + export + " must have a Plutus Data encoding (DATA_ENCODABLE); functions, unit and"
                         + " native values do not");
-            arguments.add(reference(argument, token));
+            arguments.add(reference(argument, producerTypes));
         }
-        return new LibraryRequest.Instantiate(scheme.symbol(), arguments);
+        return new LibraryRequest.Instantiate(scheme.symbol(), arguments, producerTypes);
     }
 
-    /** The provider-neutral reference for a concrete source type. */
-    private LibraryType.Reference reference(Ty type, Token token) {
+    /**
+     * The provider-neutral reference for a concrete source type. Elci's own records, tuples and
+     * unions are producer-owned types: they are named by their stable identity and their
+     * representations travel with the request.
+     */
+    private LibraryType.Reference reference(Ty type, Map<String, PirType> producerTypes) {
         var c = (Con) prune(type);
         return switch (c.name()) {
             case "Int", "Bool", "String", "Bytes", "Data", "Unit" -> new LibraryType.Reference(c.name(), List.of());
             case "List", "Map", "JulcOptional" ->
-                    new LibraryType.Reference(c.name(), c.args().stream().map(a -> reference(a, token)).toList());
-            case "->" -> new LibraryType.Reference("Function", c.args().stream().map(a -> reference(a, token)).toList());
+                    new LibraryType.Reference(c.name(), c.args().stream().map(a -> reference(a, producerTypes)).toList());
+            case "->" -> new LibraryType.Reference("Function",
+                    c.args().stream().map(a -> reference(a, producerTypes)).toList());
             case "ScriptContext" -> new LibraryType.Reference("org.julclang.ledger.ScriptContext", List.of());
             default -> {
                 if (inference.importedTypes.containsKey(c.name())) yield new LibraryType.Reference(c.name(), List.of());
-                // An Elci record, tuple or union: described to the providers by its representation.
-                yield new LibraryType.Reference(
-                        libraries.describe(pir(type), namedTypes, libraries.uncheckable()), List.of());
+                var representation = pir(type);
+                String identity = switch (representation) {
+                    case PirType.SumType sum -> sum.name();
+                    case PirType.RecordType record -> record.name();
+                    default -> throw new IllegalArgumentException("Unsupported type argument " + type);
+                };
+                producerTypes.put(identity, representation);
+                yield new LibraryType.Reference(identity, List.of());
             }
         };
     }

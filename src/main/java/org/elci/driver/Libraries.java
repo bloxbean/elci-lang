@@ -12,8 +12,8 @@ import java.util.*;
  * The library providers of one compilation (ADR-059 #182), composed with Julc's deterministic
  * ownership: the Java-source provider (concrete exports and generic templates), Julc's
  * programmatic list exports, and a provider describing Elci's own types so that Julc can build
- * codecs for them and accept them as type arguments. Elci's type descriptions grow while
- * lowering specializes, so the composition is rebuilt from the current descriptions.
+ * codecs for them. Elci's type descriptions grow while lowering specializes, so the composition
+ * is rebuilt from the current descriptions.
  */
 public final class Libraries {
     private final JavaLibraryProvider java;
@@ -65,20 +65,21 @@ public final class Libraries {
         return java;
     }
 
-    /** The composed provider for the Elci type descriptions registered so far. */
+    /**
+     * The composed provider for the Elci type descriptions registered so far. Generic exports
+     * receive Elci types as producer-owned type arguments in each request; the programmatic
+     * provider resolves only the nominal types the Java provider describes.
+     */
     public LibraryProvider provider() {
         if (composed == null || composedTypes != producer.types.size()) {
-            var arguments = new LinkedHashMap<>(java.types());
-            arguments.putAll(producer.types);
-            composed = LibraryProviders.compose(List.of(java, new StdlibLibraryProvider(options, arguments), producer));
+            composed = LibraryProviders.compose(List.of(java, new StdlibLibraryProvider(options, java.types()), producer));
             composedTypes = producer.types.size();
         }
         return composed;
     }
 
     /**
-     * Describe an Elci-owned record or union representation so that providers can resolve it as
-     * a type argument and build its codecs. Elci owns these representations: they are
+     * Describe an Elci-owned record or union representation so that Julc can build its codecs. Elci owns these representations: they are
      * constructor-encoded by construction. Strict decoding is approved only when no nested type
      * is one whose Data layout the strict checker would misjudge.
      *

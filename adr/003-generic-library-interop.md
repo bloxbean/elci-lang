@@ -1,8 +1,7 @@
 # ADR-003: Generic library interoperability
 
 Status: **Implemented** for I1–I4 on Julc revision 2 (see
-[Revision-2 integration](#revision-2-integration-25-september-2026)). One gap remains:
-Java-source templates cannot be specialized at Elci-defined types.
+[Revision-2 integration](#revision-2-integration-25-september-2026)).
 Implementation roadmap and Julc dependencies: [ADR-005](005-remaining-frontend-and-backend-integration.md).
 Date: 19 September 2026
 Baseline: Elci `974bd41`; companion to [ADR-001](elci-language-syntax-compiler-design-adr.md),
@@ -216,6 +215,9 @@ operations.
   - unapproved uses are diagnosed: `TxOut` equality, decoding or boundary use,
     and `Value` constructors.
 
-Open: Java-source templates are not yet specialized at Elci-defined records and
-unions, because Julc's Java provider resolves only Java and ledger type
-arguments. The programmatic provider accepts them through descriptions.
+Elci's own records, tuples and unions are type arguments for both Java-source
+templates and programmatic exports. Each request carries their representations as
+producer-owned types, added by Julc PR #195, stacked on #192. Specialization keys
+include them, and requests without producer types keep their historical binding
+names. `GenericImportTest` specializes `firstOr`, `contains` and `count` at an Elci
+record containing an Elci union.

@@ -83,6 +83,10 @@ On 25 September 2026 Elci moved from Julc `d6e716e` (`0.1.0-elci-dev`) to Julc
   recursion-group fix (Julc #159), not from revision 2, which keeps
   revision-1 output byte-identical.
 
+The pin then moved to Julc `97e168c6` (`0.1.0-gb-97e168c`), which adds PR #195
+(producer-owned generic type arguments) on top of #192. Every example keeps
+identical script bytes; ABI manifests differ only in `julcVersion`.
+
 ## Review gates
 
 Before treating a new construct or adapter as supported, review its source

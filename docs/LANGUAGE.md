@@ -31,9 +31,8 @@ separate milestones.
 
 Intentionally outside this profile: row polymorphism and extensible records,
 polymorphic recursion, higher-rank and unrestricted let-polymorphism, Float,
-ports, browser effects and user-defined typeclasses. Specializing Java-source
-templates at Elci-defined types, complete ledger-sum adapters and a language
-server remain future integration work. Java wildcard exposing is currently rejected; use
+ports, browser effects and user-defined typeclasses. Complete ledger-wide contract
+adapters and a language server remain future integration work. Java wildcard exposing is currently rejected; use
 explicit exported names.
 
 ## Functions and types

@@ -179,6 +179,50 @@ class GenericImportTest {
     }
 
     @Test
+    void genericJavaExportsSpecializeAtElciRecordsAndUnions() {
+        var source = """
+                module Main exposing (main)
+
+                import Demo.Pick as Pick
+
+
+                type Side
+                    = Buy Int
+                    | Sell
+
+
+                type alias Order =
+                    { amount : Int, side : Side }
+
+
+                main : Int
+                main =
+                    let
+                        orders =
+                            [ { amount = 3, side = Buy 1 }, { amount = 9, side = Sell } ]
+
+                        first =
+                            Pick.firstOr orders { amount = 0, side = Sell }
+
+                        none =
+                            Pick.firstOr [] { amount = 7, side = Sell }
+
+                        hasSell =
+                            Pick.contains [ Buy 1, Sell ] Sell
+
+                        hasBuy2 =
+                            Pick.contains [ Buy 1, Sell ] (Buy 2)
+                    in
+                    if hasSell && not hasBuy2 then
+                        first.amount * 100 + none.amount * 10 + Pick.count orders
+
+                    else
+                        -1
+                """;
+        assertEquals(integer(372), run(source, PICK_MODULES, Map.of("demo.Pick", PICK)));
+    }
+
+    @Test
     void unsupportedInstantiationsAreDiagnosed() {
         var function = """
                 module Main exposing (main)
