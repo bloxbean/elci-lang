@@ -28,6 +28,7 @@ renders them as `path:line:column: code: message`.
 | `ELCI2105` | Unsupported Java export signature, with provider reason |
 | `ELCI3001` | PIR lowering cannot represent the inferred program |
 | `ELCI3002` | Specialization or polymorphic-recursion limit |
+| `ELCI3003` | Generic library type argument violates the export's constraint (for example `DATA_ENCODABLE`) |
 | `ELCI4001` | Invalid project configuration or CLI request |
 
 Named-validator failures are prefixed with the `elci.toml` line and

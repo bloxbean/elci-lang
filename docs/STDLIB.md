@@ -21,8 +21,9 @@ function preconditions still apply.
 
 The scan found **127 compile-verified exports**, **41 unsupported signatures**,
 and **one entire library blocked at import**. The blocked library's methods are
-not counted in either export total. Programmatic PIR exports absent from the
-Java-source catalogue are also outside these counts.
+not counted in either export total. The six programmatic `ListsLib` exports
+(`map`, `filter`, `any`, `all`, `find`, `foldl`) are generic schemes outside this
+concrete Java-source catalogue.
 
 ## Bundled Elci library
 
@@ -156,9 +157,11 @@ account for that sentinel when using these methods.
   helpers require inputs the current Elci API cannot conveniently construct.
 - Imported records do not automatically become valid datum/redeemer types or gain
   equality. Map/native-value representations are not interchangeable.
-- Polymorphic Java specialization and programmatic higher-order export metadata
-  remain unsupported. Missing capabilities must be added generically, rather than
-  by hardcoding library method names in Elci.
+- Generic Java methods are specialized per use, and `ListsLib`'s programmatic
+  `map`, `filter`, `any`, `all`, `find` and `foldl` are available (see
+  [Java libraries](JAVA_LIBRARIES.md#generic-methods-and-programmatic-exports)).
+  No bundled stdlib method is generic today. Missing capabilities must be added
+  generically, rather than by hardcoding library method names in Elci.
 
 See [Java libraries](JAVA_LIBRARIES.md) for custom source JARs and the provider
 boundary. The [exact inventory](stdlib-compatibility.tsv) records every described

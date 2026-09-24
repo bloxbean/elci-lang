@@ -1,6 +1,7 @@
 # ADR-003: Generic library interoperability
 
-Status: **Proposed** — provider extensions and acceptance gates remain open.
+Status: **Partially implemented** — I1–I3 on Julc revision 2 (see
+[Revision-2 integration](#revision-2-integration-25-september-2026)); I4 in progress.
 Implementation roadmap and Julc dependencies: [ADR-005](005-remaining-frontend-and-backend-integration.md).
 Date: 19 September 2026
 Baseline: Elci `974bd41`; companion to [ADR-001](elci-language-syntax-compiler-design-adr.md),
@@ -164,3 +165,36 @@ programmatic provider catalogue and additional imported-type capabilities remain
 open. Imported sums are opaque to Elci patterns, and imported records retain the
 existing datum/redeemer restriction. The source descriptor work is governed by
 Julc ADR-050; it is not a claim of full generic Java interoperability.
+
+## Revision-2 integration (25 September 2026)
+
+Julc's revision-2 backend (ADR-059, Julc `17da92bb`) supplies the provider
+extensions this ADR asked for. Elci now consumes them.
+
+- **I1:** `LibraryProvider.schemes` describes generic exports. Each scheme type
+  parameter becomes one quantified type variable, so every use is instantiated
+  freshly. The `DATA_ENCODABLE` constraint is retained and checked for each
+  concrete instance before any request (`ELCI3003`). Templates the provider cannot
+  describe, such as bounded parameters, stay unsupported with the provider's
+  reason (`ELCI2105`).
+- **I2:** a real generic Java-source library (`demo.Pick` in `GenericImportTest`)
+  is specialized by Julc's Java compiler.
+  - `firstOr`, `count` and `contains` run at `Int`, `String` and the nominal
+    `PubKeyHash`.
+  - Recursion and self-dependencies are closed by the provider.
+  - Strict single evaluation is inherited from the curried call.
+- **I3:** Julc's programmatic `ListsLib` exports (`map`, `filter`, `any`, `all`,
+  `find`, `foldl`) go through the same import, typing and lowering path.
+  - They agree with Elci's own `List` core at Int and at an Elci record type.
+  - A failing function argument fails even for an empty list, which shows
+    strict, single evaluation.
+- **Composition:** `LibraryProviders.compose` combines the Java-source provider,
+  the programmatic provider and Elci's own type descriptions. Named validators
+  link each specialization once. `[entrypoint]` projects link a closed copy at
+  each use.
+
+Open: Java-source templates are not yet specialized at Elci-defined records and
+unions, because Julc's Java provider resolves only Java and ledger type
+arguments. The programmatic provider accepts them through descriptions. I4
+(imported constructors, patterns, equality, boundaries and codecs) is tracked as
+ADR-005 E4.

@@ -23,15 +23,15 @@ separate milestones.
 | Pattern coverage | Nested exhaustiveness and usefulness analysis; duplicate/unreachable branches rejected |
 | Equality | Structural equality for eligible primitives, lists, tuples, records and unions |
 | Ledger access | Typed record views, transaction fields, nominal hash types |
-| Java libraries | Concrete supported exports from bundled on-chain Java sources |
+| Java libraries | Concrete exports, generic Java templates specialized per use, and Julc's programmatic list exports |
 | Validators | `[entrypoint]` spend/mint/function, or named `[validators.<name>]` groups with spend, mint, withdraw, certify, vote and propose handlers, deployment parameters and required/optional/absent spending datums |
 | CLI | Check/build/function evaluation; `--validator` selection; pinned target/version; ABI comparison |
 | Native image | GraalVM executable with bundled source and reflection resources |
 
 Intentionally outside this profile: row polymorphism and extensible records,
 polymorphic recursion, higher-rank and unrestricted let-polymorphism, Float,
-ports, browser effects and user-defined typeclasses. Generic Java export schemes,
-programmatic provider catalogues, complete ledger-sum adapters and a language
+ports, browser effects and user-defined typeclasses. Specializing Java-source
+templates at Elci-defined types, complete ledger-sum adapters and a language
 server remain future integration work. Java wildcard exposing is currently rejected; use
 explicit exported names.
 
@@ -191,8 +191,9 @@ import Julc.Math as Math exposing (max)
 `Math.max` and `max` resolve to the configured class's public on-chain export.
 The provider parses and compiles its real Java source into PIR. It does not run
 that Java function on the JVM to fake an on-chain result. Ambiguous Java overloads
-are rejected. Generic Java signatures and unmapped result/parameter types are not
-exported as erased Data.
+are rejected. Generic Java methods are imported as generic functions and compiled
+for each concrete use. Unmapped result or parameter types are never exported as
+erased Data. See [Java libraries](JAVA_LIBRARIES.md#generic-methods-and-programmatic-exports).
 
 ## Ledger context and boundaries
 

@@ -54,6 +54,84 @@ loaded or executed. This mechanism is also available to the native CLI.
 See [the runnable example](../examples/custom-library/README.md) for packaging
 commands and an Elci call into a custom library.
 
+## Generic methods and programmatic exports
+
+A generic `@OnchainLibrary` method is a template. Julc describes it as a
+**scheme** (type parameters, constraints and source signature) and compiles it
+only for concrete type arguments. Elci imports the scheme as an ordinary generic
+function and instantiates it freshly at every use:
+
+```java
+@OnchainLibrary
+public class Pick {
+    public static <T> T firstOr(JulcList<T> items, T fallback) {
+        if (items.isEmpty()) return fallback;
+        return items.head();
+    }
+}
+```
+
+```elm
+import Demo.Pick as Pick
+
+first : Int
+first =
+    Pick.firstOr [ 5, 6 ] 0          -- specialized at Int
+
+name : String
+name =
+    Pick.firstOr [] "none"           -- a separate specialization at String
+```
+
+How instantiation works:
+
+- **Type arguments:** each concrete use supplies the type arguments, in the
+  scheme's order.
+- **Constraints:** every type parameter currently carries `DATA_ENCODABLE`. A
+  type argument must have a Plutus Data encoding: an integer, bytes, string,
+  Bool, Data, a nominal or Elci record or union, or a list, map or Julc optional
+  of such types. Functions and unit are rejected with `ELCI3003` before anything
+  is compiled.
+- **Unsupported templates:** templates Julc cannot describe are reported with
+  `ELCI2105` and the provider's reason. Examples are bounded type parameters
+  (`<T extends Comparable<T>>`), wildcards, raw containers and calls between
+  templates.
+- **Evaluation:** calls are strict and curried in declared argument order. Each
+  argument is evaluated once, even under partial application.
+- **Elci types:** Java-source templates cannot yet be specialized at Elci's own
+  records and unions, because Julc's Java provider describes only Java and ledger
+  types. Programmatic exports accept them.
+
+Julc also provides **programmatic** exports: implementations built directly in
+PIR rather than from Java source. `org.julclang.stdlib.lib.ListsLib` offers
+`map`, `filter`, `any`, `all`, `find` and `foldl` this way, next to its Java-source
+exports:
+
+```toml
+[java-modules]
+"Julc.Lists" = "org.julclang.stdlib.lib.ListsLib"
+```
+
+```elm
+import Julc.Lists as Lists
+
+openTotal : List Order -> Int
+openTotal orders =
+    Lists.filter orders (\order -> order.open)
+        |> Lists.foldl (\sum order -> sum + order.amount) 0
+```
+
+The list is the first argument, as in the Java library. Unlike Java inlining, the
+function argument is evaluated once, strictly, even for an empty list. These
+exports accept Elci records and unions as type arguments. The bundled Elci `List`
+module remains available and needs no configuration.
+
+Julc composes the Java-source provider, the programmatic provider and Elci's own
+type descriptions with deterministic ownership. A symbol exported by two
+providers is rejected rather than ordered. Named validators link each
+specialization once per script. `[entrypoint]` projects inline a closed copy at
+each use, keeping their existing bytes for concrete exports.
+
 ## Types and supported operations
 
 The boundary preserves fully qualified source identities alongside concrete PIR

@@ -55,7 +55,7 @@ public final class ElciCompiler {
 
     /** Imported names, types and the library provider shared by both compilation paths. */
     private record Frontend(Ast.Module module, Inference inference, Map<String,Ty> importedTypes,
-                            Map<String,String> importedSymbols, LibraryProvider provider) {}
+                            Map<String,String> importedSymbols, Map<String,LibraryScheme> schemes, Libraries libraries) {}
 
     public Result compile(String source,String function,FrontendProgram.Purpose purpose) {
         return compile(source,function,purpose,Map.of("Julc.Math","org.julclang.stdlib.lib.MathLib"),new CompilerOptions());
@@ -87,7 +87,7 @@ public final class ElciCompiler {
             }
             if(module.imports().stream().noneMatch(i->i.module().equals("Julc.Ledger")&&(i.exposing().contains("ScriptContext")||i.exposing().contains(".."))))throw new Diagnostic("ELCI2101",entry.token(),"Import Julc.Ledger exposing (ScriptContext)");
         }
-        var lowering=new Lowering(module.declarations(),inference,frontend.importedSymbols(),frontend.provider());
+        var lowering=new Lowering(module.declarations(),inference,frontend.importedSymbols(),frontend.schemes(),frontend.libraries(),Lowering.ImportMode.INLINE);
         var pir=lowering.lower(function,entryType);
         var frontendProgram=new FrontendProgram(pir,lowering.pir(entryType),options.getTarget(),new FrontendProgram.Entrypoint(module.name()+"."+function,purpose,"julc-strict-v1"),lowering.namedTypes());
         var backend=new CompilerBackend().compile(frontendProgram,options);
@@ -145,7 +145,7 @@ public final class ElciCompiler {
         var firstToken=shapes.getFirst().declaration().token();
         for(var parameter:parameterTypes)checkBoundary(parameter,inference,new HashSet<>(),firstToken);
 
-        var lowering=new Lowering(module.declarations(),inference,frontend.importedSymbols(),frontend.provider(),Lowering.ImportMode.LINK);
+        var lowering=new Lowering(module.declarations(),inference,frontend.importedSymbols(),frontend.schemes(),frontend.libraries(),Lowering.ImportMode.LINK);
         var handlers=new ArrayList<ValidatorProgram.Handler>();var infos=new ArrayList<HandlerInfo>();
         var required=new TreeSet<BackendCapability>();required.add(BackendCapability.VALIDATOR_PROGRAM);required.add(BackendCapability.STRICT_BOUNDARY_V1);
         if(!spec.parameters().isEmpty())required.add(BackendCapability.VALIDATOR_PARAMETERS);
@@ -247,8 +247,9 @@ public final class ElciCompiler {
             requestedLibraries.add(java);
         }
         var sources=LibrarySources.resolve(requestedLibraries,librarySources,ElciCompiler.class.getClassLoader());
-        var provider=new JavaLibraryProvider(sources,StdlibRegistry.defaultRegistry(),options);
-        var unsupportedImports=new LinkedHashMap<String,String>();
+        var java=new JavaLibraryProvider(sources,StdlibRegistry.defaultRegistry(),options);
+        var libraries=new Libraries(java,options);var provider=libraries.provider();
+        var unsupportedImports=new LinkedHashMap<String,String>();var schemes=new LinkedHashMap<String,LibraryScheme>();
         for(var imp:module.imports()) {
             if(imp.module().equals("Julc.Ledger")) {
                 for(String exposed:imp.exposing()) {
@@ -264,7 +265,8 @@ public final class ElciCompiler {
             }
             var exports=provider.describe(javaModules.get(imp.module()));var found=new HashSet<String>();
             String owner=javaModules.get(imp.module());
-            for(var descriptor:provider.types().values()) {
+            var generic=provider.schemes(owner);
+            for(var descriptor:java.types().values()) {
                 String id=descriptor.identity();
                 String packageName=owner.contains(".")?owner.substring(0,owner.lastIndexOf('.')+1):"";
                 String local=id.startsWith(owner+".")?id.substring(owner.length()+1):id.startsWith(packageName)?id.substring(packageName.length()):null;
@@ -274,9 +276,18 @@ public final class ElciCompiler {
                     if(previous!=null&&!previous.equals(id))throw new Diagnostic("ELCI2102",imp.token(),"Ambiguous imported type "+alias);
                 }
             }
+            var instantiable=new HashSet<String>();generic.forEach(g->instantiable.add(g.symbol()));
             provider.unsupportedExports().forEach((symbol,reason)->{
-                if(symbol.startsWith(owner+"."))unsupportedImports.put(imp.alias()+symbol.substring(owner.length()),symbol+": "+reason);
+                // Generic templates are described by schemes and instantiated at each use.
+                if(symbol.startsWith(owner+".")&&!instantiable.contains(symbol))unsupportedImports.put(imp.alias()+symbol.substring(owner.length()),symbol+": "+reason);
             });
+            for(var scheme:generic) {
+                String n=scheme.symbol().substring(scheme.symbol().lastIndexOf('.')+1);
+                Ty type=schemeType(scheme,new HashMap<>());
+                schemes.put(scheme.symbol(),scheme);
+                found.add(n);addImport(imp.alias()+"."+n,type,scheme.symbol(),imp.token(),importedTypes,importedSymbols);
+                if(imp.exposing().contains(n)||imp.exposing().contains(".."))addImport(n,type,scheme.symbol(),imp.token(),importedTypes,importedSymbols);
+            }
             for(var export:exports) {
                 String n=export.symbol().substring(export.symbol().lastIndexOf('.')+1);Ty type;
                 type=sourceType(export);
@@ -286,8 +297,8 @@ public final class ElciCompiler {
             for(String exposed:imp.exposing())if(!exposed.equals("..")&&!found.contains(exposed))throw new Diagnostic("ELCI2101",imp.token(),"No supported export '"+exposed+"' in "+imp.module());
         }
         for(var d:module.declarations())if(importedTypes.containsKey(d.name()))throw new Diagnostic("ELCI2102",d.token(),"Declaration conflicts with imported name "+d.name());
-        var inference=new Inference();inference.aliases(module.aliases());inference.unions(module.name(),module.unions());inference.ledger(ledger,ledgerAliases);inference.library(provider);inference.unsupportedImports.putAll(unsupportedImports);
-        return new Frontend(module,inference,importedTypes,importedSymbols,provider);
+        var inference=new Inference();inference.aliases(module.aliases());inference.unions(module.name(),module.unions());inference.ledger(ledger,ledgerAliases);inference.library(java);inference.unsupportedImports.putAll(unsupportedImports);
+        return new Frontend(module,inference,importedTypes,importedSymbols,schemes,libraries);
     }
     private static void checkBoundary(Ty type,Inference inference,Set<String> visiting,Token token) {
         if(visiting.size()>64)throw new Diagnostic("ELCI2013",token,"Expanding recursive boundary type is unsupported");
@@ -311,6 +322,20 @@ public final class ElciCompiler {
         Ty result=sourceType(export.result());
         for(int i=export.parameters().size()-1;i>=0;i--)result=fn(sourceType(export.parameters().get(i)),result);
         return result;
+    }
+    /**
+     * The source type of a generic export: each scheme type parameter becomes one type variable,
+     * quantified when the import enters the environment, so every use is instantiated freshly.
+     */
+    public static Ty schemeType(LibraryScheme scheme,Map<String,Ty> variables) {
+        Ty result=schemeType(scheme.result(),variables);
+        for(int i=scheme.parameters().size()-1;i>=0;i--)result=fn(schemeType(scheme.parameters().get(i),variables),result);
+        return result;
+    }
+    private static Ty schemeType(LibraryType.Reference reference,Map<String,Ty> variables) {
+        if(reference.variable())return variables.computeIfAbsent(reference.name(),n->new Var());
+        if(reference.name().equals("Function"))return fn(schemeType(reference.arguments().get(0),variables),schemeType(reference.arguments().get(1),variables));
+        return new Con(reference.name().equals("org.julclang.ledger.ScriptContext")?"ScriptContext":reference.name(),reference.arguments().stream().map(a->schemeType(a,variables)).toList());
     }
     private static Ty sourceType(LibraryType.Reference reference) {
         return new Con(reference.name().equals("org.julclang.ledger.ScriptContext")?"ScriptContext":reference.name(),reference.arguments().stream().map(ElciCompiler::sourceType).toList());

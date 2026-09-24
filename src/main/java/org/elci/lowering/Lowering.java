@@ -7,9 +7,12 @@ import org.elci.syntax.*;
 import org.elci.types.*;
 import org.julclang.compiler.backend.Definition;
 import org.julclang.compiler.backend.LibraryImports;
-import org.julclang.compiler.backend.LibraryProvider;
 import org.julclang.compiler.backend.LibraryRequest;
+import org.julclang.compiler.backend.LibraryScheme;
+import org.julclang.compiler.backend.LibraryType;
 import org.julclang.compiler.backend.PirLinker;
+import org.julclang.compiler.backend.TypeReferences;
+import org.elci.driver.Libraries;
 import org.julclang.compiler.pir.*;
 import org.julclang.core.*;
 
@@ -31,7 +34,8 @@ public final class Lowering {
     private final Inference inference;
     private final Map<String, Decl> definitions = new LinkedHashMap<>();
     private final Map<String, String> imports;
-    private final LibraryProvider provider;
+    private final Map<String, LibraryScheme> schemes;
+    private final Libraries libraries;
     private final ImportMode importMode;
     private final LinkedHashMap<String, PirTerm> specialized = new LinkedHashMap<>();
     private final Map<String, PirType> specializedTypes = new HashMap<>();
@@ -52,24 +56,22 @@ public final class Lowering {
         return Map.copyOf(namedTypes);
     }
 
+    /**
+     * @param imports  imported source names and their provider symbols
+     * @param schemes  generic provider exports by symbol, instantiated at each concrete use
+     */
     public Lowering(
             List<Decl> declarations,
             Inference inference,
             Map<String, String> imports,
-            LibraryProvider provider) {
-        this(declarations, inference, imports, provider, ImportMode.INLINE);
-    }
-
-    public Lowering(
-            List<Decl> declarations,
-            Inference inference,
-            Map<String, String> imports,
-            LibraryProvider provider,
+            Map<String, LibraryScheme> schemes,
+            Libraries libraries,
             ImportMode importMode) {
         declarations.forEach(d -> definitions.put(d.name(), d));
         this.inference = inference;
         this.imports = imports;
-        this.provider = provider;
+        this.schemes = schemes;
+        this.libraries = libraries;
         this.importMode = importMode;
         namedTypes.putAll(inference.importedRepresentations);
     }
@@ -104,7 +106,7 @@ public final class Lowering {
      */
     public List<LibraryImports> imports() {
         if (requested.isEmpty()) return List.of();
-        var group = provider.materialize(List.copyOf(requested.keySet()));
+        var group = libraries.provider().materialize(List.copyOf(requested.keySet()));
         requested.forEach(
                 (request, binding) -> {
                     if (!group.binding(request).equals(binding))
@@ -117,11 +119,11 @@ public final class Lowering {
     /** Request a provider implementation and return a term that refers to it. */
     private PirTerm library(LibraryRequest request) {
         if (importMode == ImportMode.INLINE && request instanceof LibraryRequest.Export export)
-            return provider.materialize(export.symbol());
+            return libraries.java().materialize(export.symbol());
         var binding = requested.get(request);
         LibraryImports group = null;
         if (binding == null) {
-            group = provider.materialize(List.of(request));
+            group = libraries.provider().materialize(List.of(request));
             binding = group.binding(request);
             if (importMode == ImportMode.LINK) requested.put(request, binding);
         }
@@ -308,8 +310,12 @@ public final class Lowering {
                         value = new PirTerm.Lam(ids.get(i), pts.get(i), value);
                     yield value;
                 }
-                if (imports.containsKey(n.name()))
-                    yield library(new LibraryRequest.Export(imports.get(n.name())));
+                if (imports.containsKey(n.name())) {
+                    String symbol = imports.get(n.name());
+                    var scheme = schemes.get(symbol);
+                    if (scheme == null) yield library(new LibraryRequest.Export(symbol));
+                    yield library(instantiate(scheme, type(n, map), n.token()));
+                }
                 if (n.name().equals("not")) {
                     String p = fresh("not");
                     yield new PirTerm.Lam(
@@ -732,6 +738,48 @@ public final class Lowering {
         return b.op().equals(">") || b.op().equals(">=")
                 ? new PirTerm.IfThenElse(result, bool(false), bool(true))
                 : result;
+    }
+
+    /**
+     * The request for one concrete use of a generic export: its type arguments are read off the
+     * use's type in the order of the scheme's type parameters, and must satisfy the scheme's
+     * constraints before anything is materialized.
+     */
+    private LibraryRequest.Instantiate instantiate(LibraryScheme scheme, Ty use, Token token) {
+        var variables = new HashMap<String, Ty>();
+        unify(org.elci.driver.ElciCompiler.schemeType(scheme, variables), use, token);
+        var arguments = new ArrayList<LibraryType.Reference>();
+        String export = scheme.symbol().substring(scheme.symbol().lastIndexOf('.') + 1);
+        for (var parameter : scheme.typeParameters()) {
+            Ty argument = variables.get(parameter.name());
+            if (argument == null || !Types.concrete(argument))
+                throw new Diagnostic("ELCI3001", token, "Cannot determine type argument " + parameter.name() + " of " + export);
+            if (parameter.constraints().contains(LibraryScheme.Constraint.DATA_ENCODABLE)
+                    && !TypeReferences.dataEncodable(pir(argument)))
+                throw new Diagnostic("ELCI3003", token, "Type argument " + parameter.name() + " = " + prune(argument)
+                        + " of " + export + " must have a Plutus Data encoding (DATA_ENCODABLE); functions, unit and"
+                        + " native values do not");
+            arguments.add(reference(argument, token));
+        }
+        return new LibraryRequest.Instantiate(scheme.symbol(), arguments);
+    }
+
+    /** The provider-neutral reference for a concrete source type. */
+    private LibraryType.Reference reference(Ty type, Token token) {
+        var c = (Con) prune(type);
+        return switch (c.name()) {
+            case "Int", "Bool", "String", "Bytes", "Data", "Unit" -> new LibraryType.Reference(c.name(), List.of());
+            case "List", "Map", "JulcOptional" ->
+                    new LibraryType.Reference(c.name(), c.args().stream().map(a -> reference(a, token)).toList());
+            case "->" -> new LibraryType.Reference("Function", c.args().stream().map(a -> reference(a, token)).toList());
+            case "ScriptContext" -> new LibraryType.Reference("org.julclang.ledger.ScriptContext", List.of());
+            default -> {
+                if (inference.importedTypes.containsKey(c.name())) yield new LibraryType.Reference(c.name(), List.of());
+                // An Elci record, tuple or union: described to the providers by its representation.
+                yield new LibraryType.Reference(
+                        libraries.describe(pir(type), namedTypes, libraries.uncheckable()), List.of());
+            }
+        };
     }
 
     public PirType pir(Ty type) {

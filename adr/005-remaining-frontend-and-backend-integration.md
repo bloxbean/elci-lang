@@ -194,6 +194,8 @@ language features through a frozen backend contract.
 | --- | --- | --- |
 | E0 | Done: pinned to Julc `17da92bb` (`0.1.0-gb-17da92b`), the head of the revision-2 stack (Julc PRs #187–#192) | [Validation](../docs/VALIDATION.md#julc-revision-2-baseline-evidence-adr-005-e0) |
 | E1 | Done: named validators, handler roles, `--validator`, per-group artifacts and ABI revision 2 | [ADR-004 evidence](004-named-validators-and-multi-purpose-handlers.md#implementation-evidence) |
+| E2 | Done: provider schemes imported as generic functions, fresh instantiation, `DATA_ENCODABLE` checked before materialization (`ELCI3003`), real generic Java templates specialized per use | `GenericImportTest` |
+| E3 | Done: Julc's programmatic `ListsLib` exports through the same import, typing and lowering path, composed with `LibraryProviders.compose`; Elci types described to providers | `GenericImportTest` |
 | E5 | Done: `parameters` and `spend-datum = required/optional/absent` configuration, ABI revision 2, and `elci apply` with off-chain strict parameter checks | [ADR-004 evidence](004-named-validators-and-multi-purpose-handlers.md#implementation-evidence), `ApplyCommandTest` |
 
 ## Alternatives and open decisions
