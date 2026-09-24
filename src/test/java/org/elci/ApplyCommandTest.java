@@ -142,4 +142,18 @@ class ApplyCommandTest {
         assertTrue(result.err().contains("ABI drift"), result.err());
         assertFalse(Files.exists(applied("badge")));
     }
+
+    @Test
+    void theDetailedJsonSchemaIsParsedWithoutReflection() throws Exception {
+        copyTreasury();
+        // Nested maps, lists, constructors and negative integers, in a wrong-kind admin value.
+        var nested = NamedValidatorCliTest.run("apply", project.toString(), "--validator", "badge", "--param",
+                "admin={\"constructor\": 0, \"fields\": [{\"list\": [{\"int\": -5}]}, {\"map\": [{\"k\": {\"bytes\": \"ab\"}, \"v\": {\"int\": 1}}]}]}");
+        assertTrue(nested.err().contains("not a well-formed"), nested.err());
+        for (var bad : new String[] {"{\"int\": 1, \"bytes\": \"ab\"}", "{\"text\": 1}", "{\"bytes\": \"zz\"}", "[1]",
+                "{\"int\": 1} extra", "{\"constructor\": -1, \"fields\": []}"}) {
+            var result = NamedValidatorCliTest.run("apply", project.toString(), "--validator", "badge", "--param", "admin=" + bad);
+            assertTrue(result.err().contains("not Plutus Data JSON"), bad + " / " + result.err());
+        }
+    }
 }

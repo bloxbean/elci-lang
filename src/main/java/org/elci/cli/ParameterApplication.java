@@ -1,13 +1,11 @@
 package org.elci.cli;
 
-import com.bloxbean.cardano.client.plutus.spec.serializers.PlutusDataJsonConverter;
 import org.elci.driver.ElciCompiler;
 import org.julclang.clientlib.JulcScriptAdapter;
 import org.julclang.clientlib.ValidatorOutput;
 import org.julclang.compiler.CompilerOptions;
 import org.julclang.compiler.backend.BoundaryPrograms;
 import org.julclang.core.PlutusData;
-import org.julclang.core.cbor.PlutusDataCborDecoder;
 import org.julclang.core.flat.UplcFlatEncoder;
 import org.julclang.vm.EvalOptions;
 import org.julclang.vm.EvalResult;
@@ -81,8 +79,7 @@ final class ParameterApplication {
         String json = value;
         try {
             if (value.startsWith("@")) json = Files.readString(root.resolve(value.substring(1)));
-            var data = PlutusDataJsonConverter.toPlutusData(json);
-            return PlutusDataCborDecoder.decode(data.serializeToBytes());
+            return DataJson.parse(json);
         } catch (Exception e) {
             throw new IllegalArgumentException("ELCI4001: parameter " + name + " is not Plutus Data JSON "
                     + "(for example {\"int\": 5}, {\"bytes\": \"ab\"} or {\"constructor\": 0, \"fields\": []}): "
