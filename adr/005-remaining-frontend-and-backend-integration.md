@@ -193,6 +193,8 @@ language features through a frozen backend contract.
 | Track | State | Evidence |
 | --- | --- | --- |
 | E0 | Done: pinned to Julc `17da92bb` (`0.1.0-gb-17da92b`), the head of the revision-2 stack (Julc PRs #187–#192) | [Validation](../docs/VALIDATION.md#julc-revision-2-baseline-evidence-adr-005-e0) |
+| E1 | Done: named validators, handler roles, `--validator`, per-group artifacts and ABI revision 2 | [ADR-004 evidence](004-named-validators-and-multi-purpose-handlers.md#implementation-evidence) |
+| E5 | Configuration and ABI done: `parameters`, `spend-datum = required/optional/absent` | [ADR-004 evidence](004-named-validators-and-multi-purpose-handlers.md#implementation-evidence) |
 
 ## Alternatives and open decisions
 

@@ -104,6 +104,69 @@ class ModuleTest {
     }
 
     @Test
+    void qualifiedReferencesRespectExposureAndImports() {
+        var helpers =
+                "module Helpers exposing (public)\n"
+                        + "type Hidden = Hidden Int\n"
+                        + "public : Int\n"
+                        + "public = 1\n"
+                        + "hidden : Int\n"
+                        + "hidden = 2\n";
+        // A private declaration is not reachable through its module qualifier.
+        var qualified =
+                assertThrows(
+                        Diagnostic.class,
+                        () ->
+                                compile(
+                                        Map.of(
+                                                "Main",
+                                                "module Main exposing (main)\n"
+                                                        + "import Helpers\n"
+                                                        + "main : Int\n"
+                                                        + "main = Helpers.hidden\n",
+                                                "Helpers",
+                                                helpers)));
+        assertEquals("ELCI2104", qualified.code());
+        // Nor is a module that this module does not import, even if another module does.
+        var unimported =
+                assertThrows(
+                        Diagnostic.class,
+                        () ->
+                                compile(
+                                        Map.of(
+                                                "Main",
+                                                "module Main exposing (main)\n"
+                                                        + "import Middle\n"
+                                                        + "main : Int\n"
+                                                        + "main = Middle.value + Helpers.public\n",
+                                                "Middle",
+                                                "module Middle exposing (value)\n"
+                                                        + "import Helpers\n"
+                                                        + "value : Int\n"
+                                                        + "value = Helpers.public\n",
+                                                "Helpers",
+                                                helpers)));
+        assertEquals("ELCI2104", unimported.code());
+        // Constructors of a type exposed without (..) stay private in patterns too.
+        var constructor =
+                assertThrows(
+                        Diagnostic.class,
+                        () ->
+                                compile(
+                                        Map.of(
+                                                "Main",
+                                                "module Main exposing (main)\n"
+                                                        + "import Helpers\n"
+                                                        + "main : Int\n"
+                                                        + "main = case Helpers.public of\n"
+                                                        + "    Helpers.Hidden -> 1\n"
+                                                        + "    _ -> 2\n",
+                                                "Helpers",
+                                                helpers)));
+        assertEquals("ELCI2104", constructor.code());
+    }
+
+    @Test
     void genericRecordAliasAndConstructorCanBeImported() {
         var result =
                 compile(

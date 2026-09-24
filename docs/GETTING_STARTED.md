@@ -68,10 +68,18 @@ elci init calculation --purpose function
 ```
 
 `--purpose` selects the initial source and entrypoint; it is not a permanent
-project classification. The current compiler uses one `[entrypoint]`. The accepted
-ADR for named validators will replace that limitation with multiple validator
-groups and purpose-specific handlers without changing the meaning of `init`.
-Initialization refuses to write into a non-empty directory.
+project classification. Add `--validator <name>` to start with a named validator
+instead of an `[entrypoint]` (see [Named validators](#named-validators)):
+
+```sh
+elci init treasury --validator treasury
+elci init rewards --validator rewards --purpose withdraw
+```
+
+A named-validator template accepts only transactions signed by an `owner`
+deployment parameter. The `withdraw`, `certify`, `vote` and `propose` purposes
+exist only in named validators. Initialization refuses to write into a non-empty
+directory.
 
 The generated layout is:
 
@@ -114,8 +122,68 @@ Entrypoint profiles:
 | `mint` | `Redeemer -> ScriptContext -> Bool` | One ledger context argument |
 | `function` | Concrete function/value | Unwrapped computation, useful for evaluation |
 
-Deployment parameters and optional-datum profiles are not implemented. Entrypoint
-roles are positional; parameter names do not determine their meaning.
+Entrypoint roles are positional; parameter names do not determine their meaning.
+Deployment parameters, optional or absent spending datums and the other ledger
+purposes are available in named validators.
+
+### Named validators
+
+A project can instead define one or more named validators. Each
+`[validators.<name>]` table is one deployed script with its own hash. Handler keys
+name exposed functions, and the ledger purpose selects the handler to run:
+
+```toml
+[project]
+source-directories = ["src"]
+target = "plutus-v3-pv11-uplc-1.1.0"
+julc-version = "0.1.0-gb-17da92b"
+
+# One script: spends payouts and withdraws the address's staking rewards.
+[validators.treasury]
+boundary = "julc-strict-v1"
+parameters = ["admin"]
+spend = "Treasury.spend"
+withdraw = "Treasury.withdraw"
+
+# A separate script and minting policy.
+[validators.badge]
+boundary = "julc-strict-v1"
+parameters = ["admin"]
+mint = "Badge.mint"
+```
+
+Rules:
+
+- **Handler keys:** `spend`, `mint`, `withdraw`, `certify`, `vote` and `propose`,
+  each at most once per table. Unconfigured purposes fail on-chain.
+- **Validator names:** lowercase letters, digits, `-` and `_`, starting with a
+  letter, at most 64 characters. The name is the artifact directory.
+- **`parameters`** (optional): deployment parameter names in application order.
+- **`spend-datum`** (optional): `"required"` (default), `"optional"` or `"absent"`.
+- **`expected-abi`** (optional): a committed `abi.json` for this group to compare.
+- **Exclusive forms:** a project uses either `[entrypoint]` or named validators.
+  Mixing them is an error.
+
+See the [language guide](LANGUAGE.md#validators-and-handler-roles) for handler
+signatures. `examples/treasury` is a complete example.
+
+```sh
+elci check .                       # every validator, in name order
+elci build .                       # writes build/validators/<name>/
+elci build . --validator treasury  # only the selected group(s)
+```
+
+Every selected group is compiled, and compared with its `expected-abi` if one is
+set, before anything is written. A failure therefore publishes nothing. A full
+build removes the outputs of groups that are no longer configured. It uses
+`build/validators/elci-outputs.json`, which records the files Elci owns; other
+files in those directories are left alone. A `--validator` build never removes
+unselected outputs. `eval` applies only to `[entrypoint]` `function` projects.
+
+To move an `[entrypoint]` project to named validators, replace `[entrypoint]` with a
+`[validators.<name>]` table whose handler key is the old purpose. Its value is the
+old `module.function`. Treat this as a deployment change: named validators check
+the purpose before calling the handler, so the script hash changes.
 
 ## 3. Read the outputs
 
@@ -153,6 +221,28 @@ if (!HexFormat.of().formatHex(script.getScriptHash()).equals(output.hash())) {
 A `purpose = "function"` build does not create the Julc validator artifact and
 removes a stale one from a previous validator build. Function outputs are intended
 for evaluation, not deployment as validators.
+
+A named validator writes the same four files beneath `build/validators/<name>/`:
+
+- **`validator.plutus.json`:** the Julc artifact.
+  - `purpose` is `multi` for several handlers. For one handler it is Julc's
+    purpose word: `spending`, `minting`, `withdraw`, `certifying`, `voting` or
+    `proposing`.
+  - `params` lists `name:type` in application order.
+  - As in Julc, `hash` is empty for a parameterized script, because the hash
+    changes when the parameters are applied.
+- **`abi.json`:** `formatVersion` 2. It records the parameters, each handler's
+  purpose, ledger tag, datum profile and datum/redeemer schemas, and the shared
+  type definitions.
+
+Apply parameters in the listed order:
+
+```java
+var output = ValidatorOutput.fromJson(Files.readString(
+    Path.of("build/validators/treasury/validator.plutus.json")));
+var program = JulcScriptAdapter.toProgram(output.cborHex())
+    .applyParams(adminPubKeyHash.toPlutusData());
+```
 
 Keep the ABI with application code that constructs datum/redeemer data. To reject
 unexpected ABI changes, save a copy outside `build/` and add:

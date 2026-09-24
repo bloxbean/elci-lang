@@ -85,6 +85,13 @@ jobs:
           test -s examples/vesting/build/validator.plutus.json
           build/native/elci eval examples/elci-library | tee build/native-eval.txt
           grep -F 'value=105' build/native-eval.txt
+          build/native/elci build examples/treasury
+          test -s examples/treasury/build/validators/treasury/validator.plutus.json
+          test -s examples/treasury/build/validators/badge/abi.json
+          build/native/elci check examples/treasury --validator badge
+          build/native/elci init build/init-named --validator rewards --purpose withdraw
+          build/native/elci build build/init-named
+          test -s build/init-named/build/validators/rewards/validator.plutus.json
       - name: Package CLI
         shell: bash
         run: |

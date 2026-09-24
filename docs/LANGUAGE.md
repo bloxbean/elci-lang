@@ -24,15 +24,15 @@ separate milestones.
 | Equality | Structural equality for eligible primitives, lists, tuples, records and unions |
 | Ledger access | Typed record views, transaction fields, nominal hash types |
 | Java libraries | Concrete supported exports from bundled on-chain Java sources |
-| CLI | Check/build/function evaluation; pinned target/version; ABI comparison |
+| Validators | `[entrypoint]` spend/mint/function, or named `[validators.<name>]` groups with spend, mint, withdraw, certify, vote and propose handlers, deployment parameters and required/optional/absent spending datums |
+| CLI | Check/build/function evaluation; `--validator` selection; pinned target/version; ABI comparison |
 | Native image | GraalVM executable with bundled source and reflection resources |
 
 Intentionally outside this profile: row polymorphism and extensible records,
 polymorphic recursion, higher-rank and unrestricted let-polymorphism, Float,
 ports, browser effects and user-defined typeclasses. Generic Java export schemes,
-programmatic provider catalogues, deployment parameters, optional-datum profiles,
-other script purposes, complete ledger-sum adapters and a language server remain
-future integration work. Java wildcard exposing is currently rejected; use
+programmatic provider catalogues, complete ledger-sum adapters and a language
+server remain future integration work. Java wildcard exposing is currently rejected; use
 explicit exported names.
 
 ## Functions and types
@@ -178,8 +178,9 @@ branches are errors.
 
 A source module `Market.Pricing` belongs at `src/Market/Pricing.elm` under a
 configured source directory. Imports can use `as` and explicit `exposing`. Only
-exposed source names are importable. Module cycles and duplicate ownership are
-errors.
+exposed source names are importable, whether exposed unqualified or referenced
+through a qualifier such as `Pricing.fee`. A qualified name must belong to a module
+that the current module imports. Module cycles and duplicate ownership are errors.
 
 Configure a Java library mapping in `elci.toml`, then write normal Elm imports:
 
@@ -221,6 +222,45 @@ Strict boundary checks validate nested datum/redeemer kinds, constructor tags,
 arity and fields, even when the handler ignores those values. The ledger context
 uses Julc's existing ledger-supplied-context convention; it is not a new universal
 decoder that certifies arbitrary off-chain context data.
+
+## Validators and handler roles
+
+Configuration, not source syntax, decides how a function is deployed. A legacy
+`[entrypoint]` compiles one function as a spending or minting validator, or as a
+plain `function` for `elci eval`. A named validator is a
+`[validators.<name>]` table. Each table is **one script** with one hash. Its handler
+keys name exposed functions as `Module.function`. The ledger purpose selects
+exactly one handler; purposes without a handler fail.
+
+| Handler key | Required source type |
+| --- | --- |
+| `spend` | `parameters -> datum -> redeemer -> ScriptContext -> Bool` |
+| `spend` with `spend-datum = "optional"` | `parameters -> Maybe datum -> redeemer -> ScriptContext -> Bool` |
+| `spend` with `spend-datum = "absent"` | `parameters -> redeemer -> ScriptContext -> Bool` |
+| `mint`, `withdraw`, `certify`, `vote`, `propose` | `parameters -> redeemer -> ScriptContext -> Bool` |
+
+`parameters = ["owner", "limit"]` declares deployment parameters in application
+order. Every handler of the group receives all of them as leading arguments, and
+their types must agree across handlers. Parameter, datum and redeemer types must
+have a strict Data boundary: the same rules as datums and redeemers below. Each
+parameter is decoded once when the script is applied. As with Julc Java `@Param`
+fields, parameters are decoded but not validated on-chain.
+
+A spending datum is `required` by default: a missing datum fails. With `optional`,
+the handler receives `Just datum` or `Nothing`. The present datum is still strictly
+checked. Elci converts Julc's optional value to Elci's `Maybe`, whose tags differ,
+before calling the handler. With `absent`, the datum is never inspected.
+
+Only the selected handler's datum and redeemer are decoded, so handlers may use
+different redeemer types. Top-level values reachable from any handler are
+program-level definitions. They are evaluated once per script execution, before
+dispatch, exactly as in a single-entrypoint script. A failing top-level value
+therefore fails every purpose; keep purpose-specific work inside the handler.
+
+Adding, removing or changing a handler changes the group's script hash. Named
+validators always dispatch on the purpose, even with one handler. A one-handler
+group therefore has a different hash from the equivalent `[entrypoint]` script.
+Moving a project to named validators is a deployment change.
 
 ## Costs and limits
 

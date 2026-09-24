@@ -40,7 +40,10 @@ build/native/elci eval examples/functional
 ```
 
 Validator builds include `build/validator.plutus.json` in Julc’s format for Cardano
-Client Lib, plus `abi.json` for Elci schema and ABI drift checks. CIP-57 blueprint
+Client Lib, plus `abi.json` for Elci schema and ABI drift checks. Named validators
+(`[validators.<name>]`) combine spend, mint, withdraw, certify, vote and propose
+handlers in one script, with deployment parameters and datum profiles. They
+publish per-group artifacts under `build/validators/<name>/`. CIP-57 blueprint
 generation is not implemented yet.
 
 - [Release workflow](docs/RELEASING.md): versioning, native binaries and GitHub Releases.
@@ -58,4 +61,6 @@ demonstrates nominal ledger hashes and transaction fields, `functional`
 demonstrates custom types and list traversal, and `core-completion` demonstrates
 nested patterns, generic aliases, destructuring and structural equality.
 `vesting` demonstrates a typed datum and redeemer, transaction validity ranges,
-and beneficiary authorization. They are not complete application contracts.
+and beneficiary authorization. `treasury` demonstrates named validators: one
+parameterized script with spending and withdrawal handlers plus a separate
+minting policy. They are not complete application contracts.

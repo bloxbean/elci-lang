@@ -300,6 +300,12 @@ public final class Modules {
         return new Type(name, t.arguments().stream().map(a -> type(a, names)).toList());
     }
 
+    private static boolean resolves(String n, Map<String, String> names) {
+        if (names.containsKey(n)) return true;
+        for (var key : names.keySet()) if (key.endsWith(".") && n.startsWith(key)) return true;
+        return false;
+    }
+
     private static String resolve(String n, Map<String, String> names, Set<String> bound) {
         if (bound.contains(n)) return n;
         if (names.containsKey(n)) return names.get(n);
@@ -309,11 +315,34 @@ public final class Modules {
         return n;
     }
 
+    /**
+     * A module-qualified name must come from an import that exposes it. Without this check a
+     * qualified reference would reach a private or unimported declaration of the flattened
+     * program by its internal name.
+     */
+    private static String qualified(String n, Map<String, String> names, Token token) {
+        int dot = n.lastIndexOf('.');
+        if (dot <= 0 || !Character.isUpperCase(n.charAt(0))) return n;
+        throw new Diagnostic(
+                "ELCI2104",
+                token,
+                "Module "
+                        + n.substring(0, dot)
+                        + " is not imported or does not expose '"
+                        + n.substring(dot + 1)
+                        + "'");
+    }
+
     private static Expr expr(
             Expr e, Map<String, String> names, Set<String> bound, Map<String, String> types) {
         return switch (e) {
             case Literal l -> l;
-            case Name n -> new Name(resolve(n.name(), names, bound), n.token());
+            case Name n -> {
+                // Unresolved qualified names would otherwise alias internal flattened symbols.
+                if (!bound.contains(n.name()) && !resolves(n.name(), names))
+                    qualified(n.name(), names, n.token());
+                yield new Name(resolve(n.name(), names, bound), n.token());
+            }
             case Apply a ->
                     new Apply(
                             expr(a.function(), names, bound, types),
@@ -389,6 +418,8 @@ public final class Modules {
                 variable || p.name().startsWith("$") || p.token().kind() != Token.Kind.NAME
                         ? p.name()
                         : names.getOrDefault(p.name(), p.name());
+        if (!variable && p.token().kind() == Token.Kind.NAME && !names.containsKey(p.name()))
+            qualified(p.name(), names, p.token());
         return new Pattern(
                 name,
                 p.arguments().stream().map(a -> pattern(a, names, bound)).toList(),

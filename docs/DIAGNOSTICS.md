@@ -20,14 +20,19 @@ renders them as `path:line:column: code: message`.
 | `ELCI2011` | Duplicate type or constructor |
 | `ELCI2012` | Invalid type, alias, arity or alias cycle |
 | `ELCI2013` | Unsupported serialized boundary type |
+| `ELCI2014` | Validator handler signature does not match its configured purpose, parameters or datum profile |
 | `ELCI2101` | Unknown module or imported export |
 | `ELCI2102` | Ambiguous or conflicting imported name |
 | `ELCI2103` | Entrypoint is not exposed |
-| `ELCI2104` | Source module path, ownership or cycle error |
+| `ELCI2104` | Source module path, ownership or cycle error; qualified reference to an unexposed or unimported name |
 | `ELCI2105` | Unsupported Java export signature, with provider reason |
 | `ELCI3001` | PIR lowering cannot represent the inferred program |
 | `ELCI3002` | Specialization or polymorphic-recursion limit |
 | `ELCI4001` | Invalid project configuration or CLI request |
+
+Named-validator failures are prefixed with the `elci.toml` line and
+`[validators.<name>]` table, followed by the source diagnostic. Julc backend
+rejections keep their catalogued `JULC00xx` code in the message.
 
 The code identifies the failure class; the message supplies the construct and
 type involved. Parser rejections share `ELCI1002` while their messages distinguish
