@@ -13,7 +13,7 @@ import java.util.*;
 public final class Main {
     public static void main(String[] args) { System.exit(run(args)); }
     public static int run(String...args) {
-        String source="<project>";
+        String source="<project>";java.util.function.Function<String,String> files=module->null;
         try {
             if(args.length==0||args[0].equals("--help")||args[0].equals("help")) {
                 System.out.println("Elci "+org.elci.driver.BuildInfo.VERSION+" — Elm-syntax compiler powered by Julc\n"
@@ -47,6 +47,7 @@ public final class Main {
                 else throw new IllegalArgumentException("Expected at most one project directory; see --help");
             }
             var project=Project.read(Path.of(directory==null?".":directory));
+            files=module->{try{return project.source(module).toString();}catch(RuntimeException e){return null;}};
             if(args[0].equals("apply")) {
                 if(selected.size()>1)throw new IllegalArgumentException("ELCI4001: apply takes exactly one --validator");
                 return ParameterApplication.run(project,selected.isEmpty()?null:selected.iterator().next(),parameters,appliedOutput);
@@ -82,7 +83,7 @@ public final class Main {
                 Files.writeString(output.resolve("abi.json"),manifest);
             }
             System.out.println(result.module()+"."+result.function()+": checked; "+flat.length+" FLAT bytes; "+result.target().profileId());return 0;
-        } catch(Diagnostic e) {System.err.println(e.render(source));return 1;}
+        } catch(Diagnostic e) {System.err.println(e.render(files,source));return 1;}
         catch(Exception e){System.err.println("elci: "+e.getMessage());return 1;}
     }
 
@@ -102,7 +103,8 @@ public final class Main {
             try {
                 build=new ElciCompiler().compileValidator(sources,group.spec(),project.javaModules(),new CompilerOptions(),librarySources);
             } catch(Diagnostic e) {
-                throw new IllegalArgumentException(where(project,group)+"\n"+e.render(sourceFor(project,group,e)),e);
+                java.util.function.Function<String,String> files=module->{try{return project.source(module).toString();}catch(RuntimeException x){return null;}};
+                throw new IllegalArgumentException(where(project,group)+"\n"+e.render(files,sourceFor(project,group,e)),e);
             } catch(BackendException e) {
                 throw new IllegalArgumentException(where(project,group)+": backend rejected the validator: "+e.getMessage(),e);
             } catch(IllegalArgumentException e) {

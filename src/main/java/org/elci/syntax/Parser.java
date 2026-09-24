@@ -49,7 +49,12 @@ public final class Parser {
                     "port");
 
     public Parser(String source) {
-        tokens = new Lexer(source).lex();
+        this(source, null);
+    }
+
+    /** @param module the module the source defines, recorded on tokens for diagnostics */
+    public Parser(String source, String module) {
+        tokens = new Lexer(source, module).lex();
         for (int i = 0; i < tokens.size() - 2; i++)
             if (tokens.get(i).text().equals("type") && !tokens.get(i + 1).text().equals("alias")) {
                 int j = i + 2;

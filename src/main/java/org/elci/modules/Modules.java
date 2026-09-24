@@ -37,7 +37,7 @@ public final class Modules {
         }
         allSources.forEach(
                 (name, source) -> {
-                    var module = new Parser(source).parse();
+                    var module = new Parser(source, name).parse();
                     if (!module.name().equals(name))
                         throw new IllegalArgumentException(
                                 "Module header "

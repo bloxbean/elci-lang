@@ -208,6 +208,28 @@ class NamedValidatorCliTest {
     }
 
     @Test
+    void diagnosticsNameTheModuleFileTheyOccurIn() throws Exception {
+        sources();
+        config(VAULT_TABLE, TOKEN_TABLE);
+        Files.writeString(project.resolve("src/Shared.elm"), SHARED.replace("value >= Math.max minimum 0", "value >= True"));
+        var named = run("check", project.toString());
+        assertEquals(1, named.status());
+        assertTrue(named.err().contains("src/Shared.elm:8:"), named.err());
+        // The same holds for an [entrypoint] project whose dependency has the error.
+        Files.writeString(project.resolve("elci.toml"), HEADER + """
+
+                [entrypoint]
+                module = "Token"
+                function = "mint"
+                purpose = "mint"
+                boundary = "julc-strict-v1"
+                """);
+        var legacy = run("check", project.toString());
+        assertEquals(1, legacy.status());
+        assertTrue(legacy.err().contains("src/Shared.elm:8:"), legacy.err());
+    }
+
+    @Test
     void removedGroupsLoseOnlyTheirOwnedOutputs() throws Exception {
         sources();
         config(VAULT_TABLE, TOKEN_TABLE);

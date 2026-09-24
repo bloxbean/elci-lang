@@ -126,6 +126,7 @@ public final class Lowering {
         var binding = requested.get(request);
         LibraryImports group = null;
         if (binding == null) {
+            libraries.require(request, token);
             try {
                 group = libraries.provider().materialize(List.of(request));
             } catch (org.julclang.compiler.backend.BackendException e) {

@@ -197,6 +197,7 @@ language features through a frozen backend contract.
 | E2 | Done: provider schemes imported as generic functions, fresh instantiation, `DATA_ENCODABLE` checked before materialization (`ELCI3003`), real generic Java templates specialized per use | `GenericImportTest` |
 | E3 | Done: Julc's programmatic `ListsLib` exports through the same import, typing and lowering path, composed with `LibraryProviders.compose`; Elci types described to providers | `GenericImportTest` |
 | E4 | Done: approved constructors/patterns/field access/equality/boundaries for ledger and Java types, `Julc.Data` codecs and optional adapters | `ImportedTypeTest`, [ADR-003](003-generic-library-interop.md#revision-2-integration-25-september-2026) |
+| E6 | Done: revision and role capabilities checked before type checking, request-kind capabilities before each materialization (`ELCI4003`); backend rejections located at the Elci declaration (`ELCI4002`); diagnostics rendered at their own module's file | `BackendCompatibilityTest`, `NamedValidatorCliTest` |
 | E5 | Done: `parameters` and `spend-datum = required/optional/absent` configuration, ABI revision 2, and `elci apply` with off-chain strict parameter checks | [ADR-004 evidence](004-named-validators-and-multi-purpose-handlers.md#implementation-evidence), `ApplyCommandTest` |
 
 ## Alternatives and open decisions

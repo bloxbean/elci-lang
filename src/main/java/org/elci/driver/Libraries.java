@@ -18,13 +18,46 @@ import java.util.*;
 public final class Libraries {
     private final JavaLibraryProvider java;
     private final CompilerOptions options;
+    private final BackendCapabilities capabilities;
     private final ProducerTypes producer = new ProducerTypes();
+    private final SortedSet<BackendCapability> used = new TreeSet<>();
     private LibraryProvider composed;
     private int composedTypes = -1;
 
-    Libraries(JavaLibraryProvider java, CompilerOptions options) {
+    Libraries(JavaLibraryProvider java, CompilerOptions options, BackendCapabilities capabilities) {
         this.java = java;
         this.options = options;
+        this.capabilities = capabilities;
+    }
+
+    /**
+     * Check, before a request is materialized, that the backend supports its kind (ADR-059
+     * capabilities), and record what the program relies on. A missing capability becomes a
+     * diagnostic at the use rather than a provider or linkage failure.
+     */
+    public void require(LibraryRequest request, org.elci.syntax.Token token) {
+        var needed = new ArrayList<BackendCapability>();
+        needed.add(BackendCapability.LIBRARY_IMPORTS);
+        switch (request) {
+            case LibraryRequest.Export _ -> needed.add(BackendCapability.LIBRARY_REQUEST_EXPORT);
+            case LibraryRequest.Instantiate _ -> needed.addAll(List.of(BackendCapability.LIBRARY_SCHEMES,
+                    BackendCapability.LIBRARY_REQUEST_INSTANTIATE, BackendCapability.LIBRARY_COMPOSITION));
+            case LibraryRequest.Operation _ -> needed.addAll(List.of(BackendCapability.LIBRARY_REQUEST_OPERATION,
+                    BackendCapability.LIBRARY_TYPE_OPERATIONS));
+            case LibraryRequest.Codec _ -> needed.addAll(List.of(BackendCapability.LIBRARY_REQUEST_CODEC,
+                    BackendCapability.LIBRARY_TYPE_OPERATIONS));
+        }
+        for (var capability : needed)
+            if (!capabilities.provides(capability))
+                throw new org.elci.syntax.Diagnostic("ELCI4003", token, "The Julc backend (contract revision "
+                        + capabilities.revision() + ", target " + capabilities.target().profileId()
+                        + ") does not provide " + capability + ", required for " + request.describe());
+        used.addAll(needed);
+    }
+
+    /** Capabilities the materialized requests rely on, for the descriptor's requirements. */
+    public SortedSet<BackendCapability> used() {
+        return Collections.unmodifiableSortedSet(used);
     }
 
     /** The Java-source provider, whose descriptions define imported types. */

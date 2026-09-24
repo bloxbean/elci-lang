@@ -16,6 +16,15 @@ import static org.elci.types.Types.*;
 /** Stateless compiler facade. Each request owns inference, specialization and backend state. */
 public final class ElciCompiler {
     public static final String JULC_VERSION=BuildInfo.JULC_VERSION;
+    private final java.util.function.Function<CompilerOptions,BackendCapabilities> capabilities;
+
+    public ElciCompiler() {this(options->new CompilerBackend().capabilities(options));}
+
+    /**
+     * A compiler that negotiates against the given backend capabilities, for example to check a
+     * project against an older backend's declared capability set.
+     */
+    public ElciCompiler(java.util.function.Function<CompilerOptions,BackendCapabilities> capabilities) {this.capabilities=capabilities;}
     public record Result(Program program, String module, String function, Ty type, CompilerTarget target,
                          org.julclang.compiler.pir.PirType pirType,Map<String,org.julclang.compiler.pir.PirType> namedTypes) {
         public Result {namedTypes=Map.copyOf(namedTypes);}
@@ -102,7 +111,9 @@ public final class ElciCompiler {
         var lowering=new Lowering(module.declarations(),inference,frontend.importedSymbols(),frontend.schemes(),frontend.libraries(),Lowering.ImportMode.INLINE);
         var pir=lowering.lower(function,entryType);
         var frontendProgram=new FrontendProgram(pir,lowering.pir(entryType),options.getTarget(),new FrontendProgram.Entrypoint(module.name()+"."+function,purpose,"julc-strict-v1"),lowering.namedTypes());
-        var backend=new CompilerBackend().compile(frontendProgram,options);
+        PirBackend.Result backend;
+        try {backend=new CompilerBackend().compile(frontendProgram,options);}
+        catch(BackendException e){var byName=new HashMap<String,Ast.Decl>();module.declarations().forEach(d->byName.put(d.name(),d));throw located(e,byName,entry.token());}
         return new Result(backend.program(),module.name(),function,entryType,options.getTarget(),frontendProgram.type(),frontendProgram.namedTypes());
     }
 
@@ -116,6 +127,8 @@ public final class ElciCompiler {
         var purposes=EnumSet.noneOf(ContractSchema.Purpose.class);
         for(var handler:spec.handlers())if(!purposes.add(handler.purpose()))throw new IllegalArgumentException("Validator "+spec.name()+" configures "+purpose(handler.purpose())+" more than once");
         if(spec.spendDatum()!=DatumProfile.REQUIRED&&!purposes.contains(ContractSchema.Purpose.SPEND))throw new IllegalArgumentException("Validator "+spec.name()+" sets a spending datum profile without a spend handler");
+        var available=capabilities.apply(options);
+        requireRoles(available,spec);
         var modules=new org.elci.modules.Modules(sources,javaModules);
         for(var handler:spec.handlers()) {
             if(!sources.containsKey(handler.module()))throw new IllegalArgumentException("Handler "+handler.symbol()+" for "+purpose(handler.purpose())+": no source module "+handler.module());
@@ -188,7 +201,7 @@ public final class ElciCompiler {
             parameterInfos.add(new ParameterInfo(spec.parameters().get(i),prune(parameterTypes.get(i)),pt));
         }
         var imports=lowering.imports();
-        if(!imports.isEmpty()){required.add(BackendCapability.LIBRARY_IMPORTS);required.add(BackendCapability.LIBRARY_REQUEST_EXPORT);}
+        required.addAll(frontend.libraries().used());
         // Named definitions are records and sums; newtype identities are representations only.
         // Imported named types come from their import groups (ADR-059).
         var namedTypes=new TreeMap<String,PirType>();
@@ -197,10 +210,51 @@ public final class ElciCompiler {
         var program=new ValidatorProgram(BackendContract.REVISION_2,required,spec.name(),options.getTarget(),BackendContract.STRICT_BOUNDARY_V1,
                 namedTypes,imports,lowering.definitions(),parameters,handlers);
         var backend=new CompilerBackend();
-        backend.capabilities(options).require(required,"validator "+spec.name());
-        var result=backend.compile(program,options);
+        available.require(required,"validator "+spec.name());
+        ValidatorResult result;
+        try {result=backend.compile(program,options);}
+        catch(BackendException e){throw located(e,declarations,shapes.getFirst().declaration().token());}
         var allTypes=new LinkedHashMap<>(lowering.namedTypes());for(var group:imports)group.namedTypes().forEach(allTypes::putIfAbsent);
         return new ValidatorBuild(spec.name(),result,options.getTarget(),parameterInfos,infos,allTypes);
+    }
+
+    /**
+     * Check the backend's contract revision and the role capabilities a validator needs before
+     * any lowering or materialization.
+     */
+    private static void requireRoles(BackendCapabilities available,ValidatorSpec spec) {
+        String subject="validator "+spec.name();
+        if(available.revision()<BackendContract.REVISION_2)
+            throw new IllegalArgumentException("ELCI4003: "+subject+" needs Julc backend contract revision 2; the backend implements "+available.revision());
+        var needed=new TreeSet<BackendCapability>();
+        needed.add(BackendCapability.VALIDATOR_PROGRAM);needed.add(BackendCapability.STRICT_BOUNDARY_V1);
+        if(!spec.parameters().isEmpty())needed.add(BackendCapability.VALIDATOR_PARAMETERS);
+        for(var handler:spec.handlers()) {
+            needed.add(BackendContract.purposeCapability(handler.purpose()));
+            if(handler.purpose()==ContractSchema.Purpose.SPEND)needed.add(switch(spec.spendDatum()){case REQUIRED->BackendCapability.SPEND_DATUM_REQUIRED;case OPTIONAL->BackendCapability.SPEND_DATUM_OPTIONAL;case ABSENT->BackendCapability.SPEND_DATUM_ABSENT;});
+        }
+        for(var capability:needed)if(!available.provides(capability))
+            throw new IllegalArgumentException("ELCI4003: the Julc backend (contract revision "+available.revision()+", target "+available.target().profileId()+") does not provide "+capability+", required by "+subject);
+    }
+
+    private static final java.util.regex.Pattern DEFINITION=java.util.regex.Pattern.compile("\\$elci\\$([A-Za-z_][A-Za-z0-9_.]*)\\$[0-9]+");
+
+    /**
+     * Map a backend rejection to the Elci declaration it names. Elci's definitions are named
+     * {@code $elci$<declaration>$<n>} and handlers by their source symbol; the backend's
+     * catalogued code stays in the message.
+     */
+    static Diagnostic located(BackendException e,Map<String,Ast.Decl> declarations,Token fallback) {
+        String message=e.getMessage();
+        var matcher=DEFINITION.matcher(message);
+        while(matcher.find()) {
+            var declaration=declarations.get(matcher.group(1));
+            if(declaration!=null)return new Diagnostic("ELCI4002",declaration.token(),"Julc rejected the PIR generated for "+matcher.group(1)+": "+message);
+        }
+        for(var entry:declarations.entrySet())
+            if(message.contains(entry.getKey()+" ")||message.endsWith(entry.getKey()))
+                return new Diagnostic("ELCI4002",entry.getValue().token(),"Julc rejected "+entry.getKey()+": "+message);
+        return new Diagnostic("ELCI4002",fallback,"Julc rejected the program: "+message);
     }
 
     /** The source signature a handler of {@code purpose} must have, for diagnostics. */
@@ -258,7 +312,7 @@ public final class ElciCompiler {
             if(imp.module().equals("Julc.Ledger"))continue;
             if(javaModules.get(imp.module())==null)throw new Diagnostic("ELCI2101",imp.token(),"Unknown module '"+imp.module()+"'");
         }
-        var libraries=new Libraries(java,options);var provider=libraries.provider();
+        var libraries=new Libraries(java,options,capabilities.apply(options));var provider=libraries.provider();
         var unsupportedImports=new LinkedHashMap<String,String>();var schemes=new LinkedHashMap<String,LibraryScheme>();
         for(var imp:module.imports()) {
             if(imp.module().equals("Julc.Ledger")) {

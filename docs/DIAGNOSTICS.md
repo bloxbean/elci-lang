@@ -30,10 +30,23 @@ renders them as `path:line:column: code: message`.
 | `ELCI3002` | Specialization or polymorphic-recursion limit |
 | `ELCI3003` | Generic library type argument violates the export's constraint (for example `DATA_ENCODABLE`) |
 | `ELCI4001` | Invalid project configuration or CLI request |
+| `ELCI4002` | Julc backend rejected generated PIR; reported at the Elci declaration it names, with the `JULC00xx` code |
+| `ELCI4003` | The Julc backend lacks a contract revision or capability the program needs |
 
-Named-validator failures are prefixed with the `elci.toml` line and
-`[validators.<name>]` table, followed by the source diagnostic. Julc backend
-rejections keep their catalogued `JULC00xx` code in the message.
+A diagnostic is rendered at the file of the module its token came from, including
+modules imported by the entrypoint or handlers. Named-validator failures are
+prefixed with the `elci.toml` line and `[validators.<name>]` table, followed by the
+source diagnostic.
+
+Julc's catalogued `JULC00xx` backend codes are kept in the message.
+
+- **Early capability checks.** Before type checking, Elci checks that the backend
+  implements contract revision 2 and every capability the validator's roles
+  need. Before each library request is materialized, it checks the request kind.
+  A missing capability is `ELCI4003`, reported at the configuration or the use.
+- **Located rejections.** If Julc's verifier rejects generated PIR, the rejection
+  names an Elci definition (`$elci$<declaration>$<n>`) or a handler symbol. Elci
+  maps it back to that declaration as `ELCI4002`.
 
 The code identifies the failure class; the message supplies the construct and
 type involved. Parser rejections share `ELCI1002` while their messages distinguish
