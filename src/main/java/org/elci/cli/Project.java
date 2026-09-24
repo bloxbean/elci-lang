@@ -16,7 +16,7 @@ import java.util.regex.Pattern;
  * groups, never both.
  */
 public record Project(Path root,List<String> sourceDirectories,Entrypoint entrypoint,List<Validator> validators,
-                      Map<String,String> javaModules,String expectedAbi,List<String> libraryJars) {
+                      Map<String,String> javaModules,String expectedAbi,List<String> libraryJars,List<String> testDirectories) {
     /** The legacy single entrypoint. */
     public record Entrypoint(String module,String function,FrontendProgram.Purpose purpose) {}
 
@@ -40,7 +40,7 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
 
     public Project {
         sourceDirectories=List.copyOf(sourceDirectories);validators=List.copyOf(validators);
-        javaModules=Map.copyOf(javaModules);libraryJars=List.copyOf(libraryJars);
+        javaModules=Map.copyOf(javaModules);libraryJars=List.copyOf(libraryJars);testDirectories=List.copyOf(testDirectories);
     }
 
     /** Legacy accessors for single-entrypoint projects. */
@@ -57,7 +57,7 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
             line++;String text=raw.strip();if(text.isEmpty()||text.startsWith("#"))continue;
             if(text.startsWith("[")&&text.endsWith("]")) {
                 section=text.substring(1,text.length()-1).strip();
-                if(!Set.of("project","entrypoint","java-modules").contains(section)&&!section.startsWith("validators."))throw new IllegalArgumentException("elci.toml:"+line+": unknown configuration section: "+section);
+                if(!Set.of("project","entrypoint","java-modules","tests").contains(section)&&!section.startsWith("validators."))throw new IllegalArgumentException("elci.toml:"+line+": unknown configuration section: "+section);
                 if(section.startsWith("validators.")) {
                     String name=section.substring("validators.".length());
                     if(!VALIDATOR_NAME.matcher(name).matches())throw new IllegalArgumentException("elci.toml:"+line+": invalid validator name '"+name+"'; use lowercase letters, digits, '-' or '_', starting with a letter (at most 64 characters)");
@@ -84,6 +84,8 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
         if(!legacy&&validatorSections.isEmpty())throw new IllegalArgumentException("ELCI4001: elci.toml must configure [entrypoint] or at least one [validators.<name>]");
         String expected=project.containsKey("expected-abi")?quoted(project.get("expected-abi")):null;
         var jars=project.containsKey("library-jars")?paths(project.get("library-jars"),"library-jars"):List.<String>of();
+        var tests=sections.getOrDefault("tests",Map.of());keys(tests,Set.of("source-directories"),"tests");
+        var testDirs=tests.containsKey("source-directories")?paths(tests.get("source-directories"),"source-directories"):List.of("tests");
         if(legacy) {
             var entry=sections.get("entrypoint");
             keys(entry,Set.of("module","function","purpose","boundary"),"entrypoint");
@@ -91,12 +93,12 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
             String purpose=quoted(required(entry,"purpose","entrypoint"));
             var p=switch(purpose){case "spend"->FrontendProgram.Purpose.SPEND;case "mint"->FrontendProgram.Purpose.MINT;case "function"->FrontendProgram.Purpose.FUNCTION;
                 default->throw new IllegalArgumentException("Unsupported purpose: "+purpose+(PURPOSES.containsKey(purpose)?"; the "+purpose+" purpose requires a [validators.<name>] group":""));};
-            return new Project(root.toAbsolutePath().normalize(),sourceDirs,new Entrypoint(quoted(required(entry,"module","entrypoint")),quoted(required(entry,"function","entrypoint")),p),List.of(),modules,expected,jars);
+            return new Project(root.toAbsolutePath().normalize(),sourceDirs,new Entrypoint(quoted(required(entry,"module","entrypoint")),quoted(required(entry,"function","entrypoint")),p),List.of(),modules,expected,jars,testDirs);
         }
         if(expected!=null)throw new IllegalArgumentException("ELCI4001: [project] expected-abi applies to [entrypoint] projects; set expected-abi in each [validators.<name>] table");
         var validators=new ArrayList<Validator>();
         for(String name:validatorSections)validators.add(validator(name.substring("validators.".length()),sections.get(name),headers.get(name),lines));
-        return new Project(root.toAbsolutePath().normalize(),sourceDirs,null,validators,modules,null,jars);
+        return new Project(root.toAbsolutePath().normalize(),sourceDirs,null,validators,modules,null,jars,testDirs);
     }
 
     private static Validator validator(String name,Map<String,String> values,int line,Map<String,Integer> lines) {
@@ -147,10 +149,17 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
         return org.julclang.compiler.LibrarySources.readJars(libraryJars.stream().map(root::resolve).toList());
     }
     public Map<String,String> sources() throws IOException {
+        return modules(sourceDirectories,true);
+    }
+    /** Test modules from the {@code [tests]} directories; a missing default directory holds none. */
+    public Map<String,String> testSources() throws IOException {
+        return modules(testDirectories,false);
+    }
+    private Map<String,String> modules(List<String> directories,boolean required) throws IOException {
         var result=new LinkedHashMap<String,String>();
-        for(String directory:sourceDirectories) {
+        for(String directory:directories) {
             Path base=root.resolve(directory);
-            if(!Files.isDirectory(base))throw new IllegalArgumentException("Source directory not found: "+base);
+            if(!Files.isDirectory(base)){if(required)throw new IllegalArgumentException("Source directory not found: "+base);continue;}
             try(var files=Files.walk(base)) {
                 for(Path path:files.filter(p->p.toString().endsWith(".elm")).sorted().toList()) {
                     String module=base.relativize(path).toString().replace(java.io.File.separatorChar,'.');module=module.substring(0,module.length()-4);
@@ -164,7 +173,8 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
     public Path source() {return source(module());}
     /** The source file of {@code module}. */
     public Path source(String module) {
-        var found=sourceDirectories.stream().map(d->root.resolve(d).resolve(module.replace('.','/')+".elm")).filter(Files::isRegularFile).toList();
+        var directories=new ArrayList<>(sourceDirectories);directories.addAll(testDirectories);
+        var found=directories.stream().map(d->root.resolve(d).resolve(module.replace('.','/')+".elm")).filter(Files::isRegularFile).toList();
         if(found.size()!=1)throw new IllegalArgumentException("Expected exactly one source for "+module+", found "+found.size());return found.getFirst();
     }
     private static String required(Map<String,String> values,String key,String section){String v=values.get(key);if(v==null)throw new IllegalArgumentException("Missing configuration key: ["+section+"] "+key);return v;}

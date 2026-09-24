@@ -11,7 +11,7 @@ guide, then run:
 ```sh
 ./gradlew clean test
 npm exec --yes --package elm-format@0.8.8 -- \
-  elm-format examples src/main/resources/elci/core \
+  elm-format examples src/main/resources/elci/core src/main/resources/elci/test \
   src/test/resources/syntax/valid src/test/resources/syntax/unsupported --validate
 GRAALVM_HOME=/path/to/graalvm ./gradlew nativeCompile
 build/native/elci check examples/threshold
@@ -86,6 +86,23 @@ On 25 September 2026 Elci moved from Julc `d6e716e` (`0.1.0-elci-dev`) to Julc
 The pin then moved to Julc `97e168c6` (`0.1.0-gb-97e168c`), which adds PR #195
 (producer-owned generic type arguments) on top of #192. Every example keeps
 identical script bytes; ABI manifests differ only in `julcVersion`.
+
+## Source-level testing evidence (ADR-006)
+
+`elci test` is exercised by `TestCommandTest`, `IntrinsicsTest` and `InitTest`:
+
+- The treasury example has 9 tests: scenarios for both validators across all their
+  roles, and `Bool` and `Expectation` unit tests. The vesting example's 4
+  `[entrypoint]` scenarios check validity ranges and signatures.
+- Failures show `Expect.equal` values, a rejected transaction, a budget ceiling
+  broken through julc-testkit's `BudgetAssertions`, `Debug.trace` output and
+  runtime errors, each without aborting other tests.
+- Custom test directories work. Module shadowing, unknown validators and empty
+  runs are diagnosed.
+- `ElciTestkit` scripts pass julc-testkit's `ValidatorTest` checks, and their
+  applied hashes equal those of the published artifacts.
+- `elci init --validator` projects pass their generated scenarios for all six
+  purposes.
 
 ## Review gates
 

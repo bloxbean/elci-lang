@@ -77,6 +77,8 @@ final class ProjectInitializer {
         } else {
             Files.writeString(target.resolve("elci.toml"), validatorConfiguration(validator, purpose));
             Files.writeString(target.resolve("src/Main.elm"), handlerSource(purpose));
+            Files.createDirectories(target.resolve("tests"));
+            Files.writeString(target.resolve("tests/MainTest.elm"), testSource(validator, purpose));
         }
         Files.writeString(target.resolve("README.md"), readme(target.getFileName().toString(), purpose, validator));
         Files.writeString(target.resolve(".gitignore"), "build/\n");
@@ -173,6 +175,55 @@ final class ProjectInitializer {
                 """.formatted(purpose, purpose, spend ? "() -> " : "", purpose, spend ? "_ " : "");
     }
 
+    /**
+     * Two scenarios for the owner-signature handler: the owner's transaction passes and anyone
+     * else's is rejected. Helpers stay unexposed, so only the scenarios are tests.
+     */
+    private static String testSource(String validator, String purpose) {
+        String transaction = switch (purpose) {
+            case "spend" -> "Scenario.spend \"%s\" (Scenario.outRef \"%s\" 0) Scenario.unit".formatted(validator, validator);
+            case "mint" -> "Scenario.mint \"%s\"".formatted(validator);
+            case "withdraw" -> "Scenario.withdraw \"%s\"".formatted(validator);
+            case "certify" -> "Scenario.certify \"%s\" 0 (Ledger.RegStaking (Ledger.PubKeyCredential owner) (Data.toOptional Nothing))"
+                    .formatted(validator);
+            case "vote" -> "Scenario.vote \"%s\" (Ledger.DRepVoter (Ledger.PubKeyCredential owner))".formatted(validator);
+            case "propose" -> "Scenario.propose \"%s\" 0 (Ledger.ProposalProcedure 0 (Ledger.PubKeyCredential owner) Ledger.InfoAction)"
+                    .formatted(validator);
+            default -> throw new IllegalArgumentException("Unsupported handler purpose: " + purpose);
+        };
+        return """
+                module MainTest exposing (othersAreRejected, ownerSigns)
+
+                import Julc.Data as Data
+                import Julc.Ledger as Ledger exposing (PubKeyHash)
+                import Scenario exposing (Scenario)
+
+
+                owner : PubKeyHash
+                owner =
+                    Scenario.key "owner"
+
+
+                transaction : Scenario
+                transaction =
+                    %s
+                        |> Scenario.parameters [ Data.encode owner ]
+
+
+                ownerSigns : Scenario
+                ownerSigns =
+                    transaction
+                        |> Scenario.signedBy owner
+
+
+                othersAreRejected : Scenario
+                othersAreRejected =
+                    transaction
+                        |> Scenario.signedBy (Scenario.key "someone else")
+                        |> Scenario.expectFailure
+                """.formatted(transaction);
+    }
+
     private static String readme(String name, String purpose, String validator) {
         if (validator != null) {
             return """
@@ -184,10 +235,13 @@ final class ProjectInitializer {
 
                     ```sh
                     elci check .
+                    elci test .
                     elci build .
                     ```
 
-                    Artifacts are written to `build/validators/%s/`.
+                    `tests/MainTest.elm` holds two transaction scenarios. The owner's transaction
+                    passes and anyone else's is rejected. Artifacts are written to
+                    `build/validators/%s/`.
                     """.formatted(name, validator, purpose, validator);
         }
         String next = purpose.equals("function") ? "eval" : "build";

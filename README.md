@@ -32,6 +32,7 @@ argument**, with strict datum/redeemer decoding and Bool-to-success/failure wrap
 ./gradlew test installDist
 build/install/elci/bin/elci init my-contract --purpose spend
 build/install/elci/bin/elci build examples/threshold
+build/install/elci/bin/elci test examples/treasury
 
 # Set GRAALVM_HOME to a GraalVM installation containing native-image.
 ./gradlew nativeCompile
@@ -48,6 +49,7 @@ generation is not implemented yet.
 
 - [Release workflow](docs/RELEASING.md): versioning, native binaries and GitHub Releases.
 - [Getting started](docs/GETTING_STARTED.md): build, first project, JVM/native CLI.
+- [Testing](docs/TESTING.md): `elci test`, expectations, transaction scenarios and JUnit.
 - [Standard library guide](docs/STDLIB.md): verified Java exports, limitations and writing Elci libraries.
 - [Language guide](docs/LANGUAGE.md): syntax, semantics, types, libraries and limits.
 - [Compiler architecture](docs/ARCHITECTURE.md): frontend/backend API and invariants.

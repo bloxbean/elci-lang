@@ -117,6 +117,39 @@ public final class ElciCompiler {
         return new Result(backend.program(),module.name(),function,entryType,options.getTarget(),frontendProgram.type(),frontendProgram.namedTypes());
     }
 
+    /** A zero-argument exposed declaration of a module, with its inferred type. */
+    public record Value(String name,Ty type,Token token) {}
+
+    /**
+     * Type-check {@code module} once and compile each exposed, zero-argument declaration that
+     * {@code select} accepts into its own function program, as an {@code [entrypoint]} with
+     * {@code purpose = "function"} would be compiled. Used by {@code elci test}, where every test
+     * must run in isolation.
+     */
+    public Map<Value,Result> compileValues(Map<String,String> sources,String module,java.util.function.Predicate<Ty> select,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
+        var modules=new org.elci.modules.Modules(sources,javaModules);
+        var java=javaProvider(modules,List.of(module),options,librarySources);
+        var resolved=modules.resolve(module);
+        var frontend=frontend(resolved,javaModules,options,java);
+        var inference=frontend.inference();inference.check(resolved.declarations(),frontend.importedTypes());
+        var results=new LinkedHashMap<Value,Result>();
+        for(var declaration:resolved.declarations()) {
+            // Only the root module's own declarations; imported ones are module-qualified.
+            if(!declaration.parameters().isEmpty()||declaration.name().contains("."))continue;
+            if(!resolved.exposing().contains(declaration.name())&&!resolved.exposing().contains(".."))continue;
+            Ty type=prune(inference.globals.get(declaration.name()).body());
+            if(!Types.concrete(type)||!select.test(type))continue;
+            var lowering=new Lowering(resolved.declarations(),inference,frontend.importedSymbols(),frontend.schemes(),frontend.libraries(),Lowering.ImportMode.INLINE);
+            var pir=lowering.lower(declaration.name(),type);
+            var program=new FrontendProgram(pir,lowering.pir(type),options.getTarget(),new FrontendProgram.Entrypoint(module+"."+declaration.name(),FrontendProgram.Purpose.FUNCTION,"julc-strict-v1"),lowering.namedTypes());
+            PirBackend.Result backend;
+            try {backend=new CompilerBackend().compile(program,options);}
+            catch(BackendException e){var byName=new HashMap<String,Ast.Decl>();resolved.declarations().forEach(d->byName.put(d.name(),d));throw located(e,byName,declaration.token());}
+            results.put(new Value(declaration.name(),type,declaration.token()),new Result(backend.program(),module,declaration.name(),type,options.getTarget(),program.type(),program.namedTypes()));
+        }
+        return results;
+    }
+
     /**
      * Compile a named validator (ADR-004) as one revision-2 {@link ValidatorProgram}: handlers
      * share program-level definitions and linked library imports, and Julc's wrapper decodes
@@ -432,6 +465,15 @@ public final class ElciCompiler {
         var b=new Var();importedTypes.put(prefix+"encode",fn(b,con("Data")));
         var c=new Var();importedTypes.put(prefix+"fromOptional",fn(con("JulcOptional",c),con("Elci.Maybe",c)));
         var d=new Var();importedTypes.put(prefix+"toOptional",fn(con("Elci.Maybe",d),con("JulcOptional",d)));
+        var e=new Var();importedTypes.put(org.elci.modules.Modules.DEBUG_PREFIX+"trace",fn(con("String"),fn(e,e)));
+        String bytes=org.elci.modules.Modules.BYTES_PREFIX;
+        importedTypes.put(bytes+"empty",con("Bytes"));
+        importedTypes.put(bytes+"fromString",fn(con("String"),con("Bytes")));
+        importedTypes.put(bytes+"toString",fn(con("Bytes"),con("String")));
+        importedTypes.put(bytes+"length",fn(con("Bytes"),con("Int")));
+        importedTypes.put(bytes+"append",fn(con("Bytes"),fn(con("Bytes"),con("Bytes"))));
+        importedTypes.put(bytes+"slice",fn(con("Int"),fn(con("Int"),fn(con("Bytes"),con("Bytes")))));
+        for(String hash:List.of("blake2b224","blake2b256","sha256"))importedTypes.put(bytes+hash,fn(con("Bytes"),con("Bytes")));
     }
 
     /**

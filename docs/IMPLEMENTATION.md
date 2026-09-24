@@ -18,6 +18,9 @@ application; the supplied Julc worktree owns all backend changes.
   parameters and datum profiles from ADR-005 E5.
 - [ADR-005](../adr/005-remaining-frontend-and-backend-integration.md) tracks the
   remaining integration work and its progress.
+- [ADR-006: source-level tests](../adr/006-source-level-tests.md) adds `elci test`,
+  the `Expect` and `Scenario` test library, `Debug.trace` and the JVM facade over
+  julc-testkit.
 
 ADR-003 remains proposed integration work. ADR-002's conservative value
 restriction does not promise unrestricted let-polymorphism. General recursion is

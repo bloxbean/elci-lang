@@ -34,7 +34,8 @@ git checkout "$(sed -n 's/^julcRevision=//p' /path/to/elci-lang/gradle.propertie
   :julc-stdlib:publishToMavenLocal \
   :julc-bls:publishToMavenLocal \
   :julc-vm-java:publishToMavenLocal \
-  :julc-cardano-client-lib:publishToMavenLocal -PskipSigning=true
+  :julc-cardano-client-lib:publishToMavenLocal \
+  :julc-testkit:publishToMavenLocal -PskipSigning=true
 ```
 
 Return to the Elci project:
@@ -77,7 +78,8 @@ elci init rewards --validator rewards --purpose withdraw
 ```
 
 A named-validator template accepts only transactions signed by an `owner`
-deployment parameter. The `withdraw`, `certify`, `vote` and `propose` purposes
+deployment parameter. It comes with `tests/MainTest.elm`, two transaction
+scenarios that `elci test` runs (see [Testing](TESTING.md)). The `withdraw`, `certify`, `vote` and `propose` purposes
 exist only in named validators. Initialization refuses to write into a non-empty
 directory.
 

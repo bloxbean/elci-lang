@@ -332,6 +332,17 @@ public final class Lowering {
                             LibraryType.Operation.CONSTRUCT,
                             imported.constructor() == null ? null : imported.constructor().name()), n.token());
                 }
+                if (n.name().equals(org.elci.modules.Modules.DEBUG_PREFIX + "trace")) {
+                    // \message -> \value -> trace message value: evaluated strictly, like any call.
+                    var fn = (Con) prune(type(n, map));
+                    PirType valueType = pir(((Con) prune(fn.args().get(1))).args().get(0));
+                    String message = fresh("message"), value = fresh("traced");
+                    yield new PirTerm.Lam(message, new PirType.StringType(), new PirTerm.Lam(value, valueType,
+                            new PirTerm.Trace(new PirTerm.Var(message, new PirType.StringType()),
+                                    new PirTerm.Var(value, valueType))));
+                }
+                if (n.name().startsWith(org.elci.modules.Modules.BYTES_PREFIX))
+                    yield bytesIntrinsic(n.name().substring(org.elci.modules.Modules.BYTES_PREFIX.length()));
                 if (n.name().startsWith(org.elci.modules.Modules.DATA_PREFIX))
                     yield dataIntrinsic(n.name().substring(org.elci.modules.Modules.DATA_PREFIX.length()), type(n, map), n.token());
                 if (imports.containsKey(n.name())) {
@@ -798,6 +809,38 @@ public final class Lowering {
             case "toOptional" -> retag(pir(input), pir(output), 1, 0);
             default -> throw new Diagnostic("ELCI2005", token, "Unknown name 'Julc.Data." + function + "'");
         };
+    }
+
+    /** {@code Bytes}: each function is one Plutus builtin, curried in source argument order. */
+    private PirTerm bytesIntrinsic(String function) {
+        PirType bytes = new PirType.ByteStringType(), integer = new PirType.IntegerType(), string = new PirType.StringType();
+        return switch (function) {
+            case "empty" -> new PirTerm.Const(Constant.byteString(new byte[0]));
+            case "fromString" -> builtin(DefaultFun.EncodeUtf8, List.of(string));
+            case "toString" -> builtin(DefaultFun.DecodeUtf8, List.of(bytes));
+            case "length" -> builtin(DefaultFun.LengthOfByteString, List.of(bytes));
+            case "append" -> builtin(DefaultFun.AppendByteString, List.of(bytes, bytes));
+            // slice start length bytes, as SliceByteString.
+            case "slice" -> builtin(DefaultFun.SliceByteString, List.of(integer, integer, bytes));
+            case "blake2b224" -> builtin(DefaultFun.Blake2b_224, List.of(bytes));
+            case "blake2b256" -> builtin(DefaultFun.Blake2b_256, List.of(bytes));
+            case "sha256" -> builtin(DefaultFun.Sha2_256, List.of(bytes));
+            default -> throw new IllegalArgumentException("Unknown Bytes function " + function);
+        };
+    }
+
+    /** {@code \a -> \b -> ... -> fun a b ...}: a strict, curried builtin application. */
+    private PirTerm builtin(DefaultFun fun, List<PirType> parameters) {
+        var names = new ArrayList<String>();
+        var arguments = new ArrayList<PirTerm>();
+        for (var parameter : parameters) {
+            String name = fresh("argument");
+            names.add(name);
+            arguments.add(new PirTerm.Var(name, parameter));
+        }
+        PirTerm body = call(fun, arguments.toArray(PirTerm[]::new));
+        for (int i = parameters.size() - 1; i >= 0; i--) body = new PirTerm.Lam(names.get(i), parameters.get(i), body);
+        return body;
     }
 
     private PirTerm codec(Ty type, LibraryRequest.Codec.Direction direction, Token token) {

@@ -13,6 +13,20 @@ public final class Modules {
     /** Its functions, resolved to intrinsic names with this prefix. */
     public static final String DATA_PREFIX = "$julc.data.";
     public static final List<String> DATA_FUNCTIONS = List.of("decode", "encode", "fromOptional", "toOptional");
+    /** The compiler-provided debugging module: {@code Debug.trace}. */
+    public static final String DEBUG_MODULE = "Debug";
+    public static final String DEBUG_PREFIX = "$debug.";
+    public static final List<String> DEBUG_FUNCTIONS = List.of("trace");
+    /** The compiler-provided byte-string module: single Plutus builtins. */
+    public static final String BYTES_MODULE = "Bytes";
+    public static final String BYTES_PREFIX = "$bytes.";
+    public static final List<String> BYTES_FUNCTIONS = List.of("empty", "fromString", "toString", "length", "append",
+            "slice", "blake2b224", "blake2b256", "sha256");
+    /** Intrinsic modules without source: their functions and resolved-name prefixes. */
+    private static final Map<String, Map.Entry<String, List<String>>> INTRINSICS = Map.of(
+            DATA_MODULE, Map.entry(DATA_PREFIX, DATA_FUNCTIONS),
+            DEBUG_MODULE, Map.entry(DEBUG_PREFIX, DEBUG_FUNCTIONS),
+            BYTES_MODULE, Map.entry(BYTES_PREFIX, BYTES_FUNCTIONS));
 
     private final Map<String, Ast.Module> available = new LinkedHashMap<>();
     private final Map<String, String> javaModules;
@@ -44,7 +58,7 @@ public final class Modules {
                                         + module.name()
                                         + " does not match source path "
                                         + name);
-                    if (javaModules.containsKey(name) || name.equals("Julc.Ledger") || name.equals(DATA_MODULE))
+                    if (javaModules.containsKey(name) || intrinsic(name))
                         throw new IllegalArgumentException(
                                 "Duplicate source/library module ownership: " + name);
                     if (!name.equals("List")
@@ -106,7 +120,7 @@ public final class Modules {
     }
 
     private static boolean intrinsic(String module) {
-        return module.equals("Julc.Ledger") || module.equals(DATA_MODULE);
+        return module.equals("Julc.Ledger") || INTRINSICS.containsKey(module);
     }
 
     /**
@@ -222,15 +236,17 @@ public final class Modules {
                 for (var v : u.variants()) names.put(v.name(), prefix + v.name());
             }
             for (var imp : module.imports()) {
-                if (imp.module().equals(DATA_MODULE)) {
-                    for (String function : DATA_FUNCTIONS) names.put(imp.alias() + "." + function, DATA_PREFIX + function);
+                if (INTRINSICS.containsKey(imp.module())) {
+                    String intrinsicPrefix = INTRINSICS.get(imp.module()).getKey();
+                    var functions = INTRINSICS.get(imp.module()).getValue();
+                    for (String function : functions) names.put(imp.alias() + "." + function, intrinsicPrefix + function);
                     for (String exposed : imp.exposing()) {
                         if (exposed.equals(".."))
-                            for (String function : DATA_FUNCTIONS) put(names, function, DATA_PREFIX + function, imp.token());
-                        else if (DATA_FUNCTIONS.contains(exposed)) put(names, exposed, DATA_PREFIX + exposed, imp.token());
+                            for (String function : functions) put(names, function, intrinsicPrefix + function, imp.token());
+                        else if (functions.contains(exposed)) put(names, exposed, intrinsicPrefix + exposed, imp.token());
                         else
-                            throw new Diagnostic("ELCI2104", imp.token(), DATA_MODULE + " does not expose '" + exposed
-                                    + "'; it provides " + String.join(", ", DATA_FUNCTIONS));
+                            throw new Diagnostic("ELCI2104", imp.token(), imp.module() + " does not expose '" + exposed
+                                    + "'; it provides " + String.join(", ", functions));
                     }
                     continue;
                 }

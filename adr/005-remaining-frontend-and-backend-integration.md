@@ -200,6 +200,9 @@ language features through a frozen backend contract.
 | E6 | Done: revision and role capabilities checked before type checking, request-kind capabilities before each materialization (`ELCI4003`); backend rejections located at the Elci declaration (`ELCI4002`); diagnostics rendered at their own module's file | `BackendCompatibilityTest`, `NamedValidatorCliTest` |
 | E5 | Done: `parameters` and `spend-datum = required/optional/absent` configuration, ABI revision 2, and `elci apply` with off-chain strict parameter checks | [ADR-004 evidence](004-named-validators-and-multi-purpose-handlers.md#implementation-evidence), `ApplyCommandTest` |
 
+Follow-up: the source-level contract test runner deferred above is designed and
+implemented in [ADR-006](006-source-level-tests.md).
+
 ## Alternatives and open decisions
 
 Keeping the current API forever would force duplicated dispatch and guessed

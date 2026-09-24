@@ -39,6 +39,10 @@ class InitTest {
             assertFalse(Files.readString(project.resolve("src/Main.elm")).contains("True"), "no accept-all placeholder");
             assertEquals(0, Main.run("build", project.toString()), purpose);
             assertTrue(Files.exists(project.resolve("build/validators/main/validator.plutus.json")));
+            // The generated scenarios run and pass for every purpose.
+            var tests = NamedValidatorCliTest.run("test", project.toString());
+            assertEquals(0, tests.status(), purpose + ": " + tests.out() + tests.err());
+            assertTrue(tests.out().contains("2 passed, 0 failed"), tests.out());
         }
         assertEquals(0, Main.run("init", directory.resolve("default-named").toString(), "--validator", "vault"));
         assertTrue(Files.readString(directory.resolve("default-named/elci.toml")).contains("spend = \"Main.spend\""));

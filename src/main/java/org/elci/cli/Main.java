@@ -19,6 +19,7 @@ public final class Main {
                 System.out.println("Elci "+org.elci.driver.BuildInfo.VERSION+" — Elm-syntax compiler powered by Julc\n"
                         +"Usage: elci <check|build> [project-directory] [--validator <name>]...\n"
                         +"       elci eval [project-directory]\n"
+                        +"       elci test [project-directory] [--match <substring>]\n"
                         +"       elci apply [project-directory] --validator <name> --param <name>=<plutus-data-json|@file> [--output <file>]\n"
                         +"       elci init <project-directory> [--purpose spend|mint|function]\n"
                         +"       elci --version\n"
@@ -27,7 +28,8 @@ public final class Main {
             }
             if(args[0].equals("--version")){System.out.println("elci "+org.elci.driver.BuildInfo.VERSION+" / julc "+ElciCompiler.JULC_VERSION);return 0;}
             if(args[0].equals("init"))return ProjectInitializer.run(Arrays.copyOfRange(args,1,args.length));
-            if(!Set.of("check","build","eval","apply").contains(args[0]))throw new IllegalArgumentException("Expected init, check, build, eval or apply; see --help");
+            if(args[0].equals("test"))return test(Arrays.copyOfRange(args,1,args.length));
+            if(!Set.of("check","build","eval","apply").contains(args[0]))throw new IllegalArgumentException("Expected init, check, build, eval, test or apply; see --help");
             String directory=null;var selected=new LinkedHashSet<String>();var parameters=new LinkedHashMap<String,String>();Path appliedOutput=null;
             for(int i=1;i<args.length;i++) {
                 if(args[0].equals("apply")&&args[i].equals("--param")) {
@@ -121,6 +123,38 @@ public final class Main {
         if(command.equals("build"))ValidatorOutputs.publish(project.root().resolve("build"),rendered,selected.isEmpty());
         lines.forEach(System.out::println);
         return 0;
+    }
+
+    /** {@code elci test}: run source-level tests (ADR-006) and report each with its budget. */
+    private static int test(String... args) throws Exception {
+        String directory=null,match=null;
+        for(int i=0;i<args.length;i++) {
+            if(args[i].equals("--match")){if(++i==args.length||match!=null)throw new IllegalArgumentException("ELCI4001: --match requires one substring");match=args[i];}
+            else if(args[i].startsWith("--"))throw new IllegalArgumentException("Unknown option: "+args[i]);
+            else if(directory==null)directory=args[i];
+            else throw new IllegalArgumentException("Expected at most one project directory; see --help");
+        }
+        var project=Project.read(Path.of(directory==null?".":directory));
+        java.util.function.Function<String,String> files=module->{try{return project.source(module).toString();}catch(RuntimeException x){return null;}};
+        java.util.List<org.elci.test.TestRunner.Outcome> outcomes;
+        try {outcomes=new org.elci.test.TestRunner(project).run(match);}
+        catch(Diagnostic e){System.err.println(e.render(files,"<tests>"));return 1;}
+        int failed=0;
+        for(var outcome:outcomes) {
+            String budget=outcome.budget()==null?"":" (cpu "+outcome.budget().cpuSteps()+", mem "+outcome.budget().memoryUnits()+")";
+            System.out.println((outcome.passed()?"PASS ":"FAIL ")+outcome.name()+budget);
+            if(!outcome.passed()) {
+                failed++;
+                for(String line:outcome.detail().split("\n"))System.out.println("    "+line);
+                for(String trace:outcome.traces())System.out.println("    trace: "+trace);
+            }
+        }
+        if(outcomes.isEmpty()) {
+            System.out.println(match==null?"No tests found in "+project.testDirectories():"No tests match '"+match+"'");
+            return 1;
+        }
+        System.out.println((outcomes.size()-failed)+" passed, "+failed+" failed");
+        return failed==0?0:1;
     }
 
     private static String where(Project project,Project.Validator group) {

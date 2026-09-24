@@ -26,7 +26,8 @@ separate milestones.
 | Data conversions | `Julc.Data.decode`/`encode` strict codecs and Julc optional ↔ `Maybe` adapters |
 | Java libraries | Concrete exports, generic Java templates specialized per use, and Julc's programmatic list exports |
 | Validators | `[entrypoint]` spend/mint/function, or named `[validators.<name>]` groups with spend, mint, withdraw, certify, vote and propose handlers, deployment parameters and required/optional/absent spending datums |
-| CLI | Check/build/function evaluation; `--validator` selection; pinned target/version; ABI comparison |
+| CLI | Check/build/function evaluation; `--validator` selection; `apply` parameters; `test`; pinned target/version; ABI comparison |
+| Testing | `elci test`: `Bool`/`Expect` unit tests and transaction scenarios on the deployed scripts ([Testing](TESTING.md)) |
 | Native image | GraalVM executable with bundled source and reflection resources |
 
 Intentionally outside this profile: row polymorphism and extensible records,
@@ -255,6 +256,21 @@ contain it (`TxOut`, `TxInfo`, `TxInInfo`, `ScriptContext`) keep field access an
 matching, but have no equality, strict decoding or boundary use. Complex
 ledger-wide contract patterns and `Value` arithmetic are not yet a complete
 supported surface.
+
+### Compiler-provided modules
+
+Besides `List`, which every module sees, these modules have no source and are
+imported explicitly:
+
+| Module | Functions |
+| --- | --- |
+| `Julc.Data` | `decode`, `encode`, `fromOptional`, `toOptional` (below) |
+| `Bytes` | `empty`, `fromString`, `toString`, `length`, `append`, `slice start length`, `blake2b224`, `blake2b256`, `sha256` |
+| `Debug` | `trace : String -> a -> a`, which emits a Plutus trace and returns its second argument |
+
+Each `Bytes` function is one Plutus builtin. For example, `Bytes.fromString` is
+UTF-8 encoding, so token names can be written as `Bytes.fromString "GOLD"`.
+`Bytes.toString` fails on invalid UTF-8. `Debug.trace` costs budget like any trace.
 
 ### Explicit Data conversions
 

@@ -44,7 +44,11 @@ List.map (\value -> value + 1) [ 1, 2, 3 ]
 ```
 
 `not` and `remainderBy` are compiler-provided functions. `Julc.Data` provides
-explicit `decode`, `encode`, `fromOptional` and `toOptional` conversions. `Maybe` with `Just` and
+explicit `decode`, `encode`, `fromOptional` and `toOptional` conversions. `Bytes`
+wraps byte-string builtins (`fromString`, `length`, `append`, `slice`, hashes).
+`Debug.trace` emits traces (see the
+[language guide](LANGUAGE.md#compiler-provided-modules)). Test modules
+additionally see the `Expect` and `Scenario` test library ([Testing](TESTING.md)). `Maybe` with `Just` and
 `Nothing` is a built-in type; a complete Elm-style `Maybe` module is not bundled.
 `Julc.Ledger` exposes ledger types and supported fields rather than an ordinary
 Java function library.

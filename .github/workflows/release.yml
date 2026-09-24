@@ -71,7 +71,8 @@ jobs:
             :julc-core:publishToMavenLocal :julc-vm:publishToMavenLocal \
             :julc-ledger-api:publishToMavenLocal :julc-compiler:publishToMavenLocal \
             :julc-stdlib:publishToMavenLocal :julc-bls:publishToMavenLocal \
-            :julc-vm-java:publishToMavenLocal :julc-cardano-client-lib:publishToMavenLocal
+            :julc-vm-java:publishToMavenLocal :julc-cardano-client-lib:publishToMavenLocal \
+            :julc-testkit:publishToMavenLocal
       - name: Test and build native CLI
         run: ./gradlew --no-daemon test nativeCompile
       - name: Smoke test native CLI
@@ -95,6 +96,9 @@ jobs:
           build/native/elci init build/init-named --validator rewards --purpose withdraw
           build/native/elci build build/init-named
           test -s build/init-named/build/validators/rewards/validator.plutus.json
+          build/native/elci test build/init-named
+          build/native/elci test examples/treasury
+          build/native/elci test examples/vesting
       - name: Package CLI
         shell: bash
         run: |
