@@ -6,7 +6,9 @@ package ecosystem.
 
 This inventory was checked on 20 September 2026 using Julc's source-description
 boundary at `d6e716e2` and Elci `c7552e9`, with target
-`plutus-v3-pv11-uplc-1.1.0`. It is a snapshot of the current implementation.
+`plutus-v3-pv11-uplc-1.1.0`. It was regenerated unchanged on 25 September 2026
+against Julc `17da92bb` (generic backend revision 2). It is a snapshot of the
+current implementation.
 
 ## What “available” means here
 

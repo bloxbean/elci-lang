@@ -67,6 +67,22 @@ The `3f1b675` functional-core implementation was validated on 19 September 2026:
 - All 30 unchanged Java compiler configurations retained identical FLAT hashes,
   parameter metadata, and source-map entry counts.
 
+## Julc revision-2 baseline evidence (ADR-005 E0)
+
+On 25 September 2026 Elci moved from Julc `d6e716e` (`0.1.0-elci-dev`) to Julc
+`17da92bb`, the head of the stacked generic-backend revision-2 branch
+(`0.1.0-gb-17da92b`). Evidence:
+
+- All 86 Elci tests passed before and after the change.
+- The stdlib inventory (`docs/stdlib-compatibility.tsv`) regenerated identically.
+- All seven examples built with identical script bytes except `core-completion`.
+  Its ABI manifests differ only in the embedded `julcVersion`.
+- `core-completion` keeps its 827 FLAT bytes, its result (`15`) and its budget
+  (CPU 11,311,095, memory 41,004), but its bytes change. Julc main `c95ee610`
+  produces the same new bytes. The change therefore comes from the merged
+  recursion-group fix (Julc #159), not from revision 2, which keeps
+  revision-1 output byte-identical.
+
 ## Review gates
 
 Before treating a new construct or adapter as supported, review its source

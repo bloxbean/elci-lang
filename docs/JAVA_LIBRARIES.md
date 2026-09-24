@@ -96,11 +96,11 @@ worked around by pretending their signatures are concrete Data.
 
 ## Development dependency
 
-This milestone requires Julc's library-description boundary from commit
-`d6e716e2` (`feat/library-source-descriptions`, ADR-050). Republish that compiler
-artifact to Maven local before building Elci if your existing
-`0.1.0-elci-dev` installation predates the change. The development version remains
-local; source JARs are compiled using the target and compiler selected by Elci.
+This milestone was introduced against Julc's library-description boundary
+(`d6e716e2`, ADR-050), which is now merged. Elci currently pins the Julc revision
+in `gradle.properties` (see [Getting started](GETTING_STARTED.md)); publish that
+exact version to Maven local before building Elci. Source JARs are compiled using
+the target and compiler selected by Elci.
 
 Validation for this milestone: 81 Elci tests and 2,276 Julc compiler, stdlib,
 testkit and annotation-processor tests passed. The GraalVM native executable

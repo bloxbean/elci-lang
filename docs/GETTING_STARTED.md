@@ -5,8 +5,10 @@
 Use Java 25 and the checked-in Gradle wrapper. Building a native executable also
 requires GraalVM Native Image and the platform C toolchain.
 
-This development build depends on **Julc `0.1.0-elci-dev`**, published locally from
-the companion worktree. Maven Central's existing Julc release does not contain
+This development build depends on the Julc revision named by `julcVersion` and
+`julcRevision` in `gradle.properties` (currently **`0.1.0-gb-17da92b`**, Julc commit
+`17da92bb`, the generic-backend revision-2 stack). Publish it locally from a Julc
+checkout at that commit. Maven Central's existing Julc release does not contain
 this experimental frontend boundary.
 
 Set these paths for your development machine:
@@ -17,12 +19,15 @@ export GRAALVM_HOME=/path/to/graalvm
 export JULC_WORKTREE=/path/to/julc-worktree
 ```
 
-Publish the required modules from the Julc worktree, whose `gradle.properties`
-version must be `0.1.0-elci-dev`:
+Publish the required modules from the Julc worktree. Pass the pinned version on
+the command line so that stale JARs published under another development version
+cannot be picked up:
 
 ```sh
 cd "$JULC_WORKTREE"
-./gradlew :julc-core:publishToMavenLocal \
+git checkout "$(sed -n 's/^julcRevision=//p' /path/to/elci-lang/gradle.properties)"
+./gradlew -Pversion="$(sed -n 's/^julcVersion=//p' /path/to/elci-lang/gradle.properties)" \
+  :julc-core:publishToMavenLocal \
   :julc-vm:publishToMavenLocal \
   :julc-ledger-api:publishToMavenLocal \
   :julc-compiler:publishToMavenLocal \
@@ -83,7 +88,7 @@ Elm source:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-elci-dev"
+julc-version = "0.1.0-gb-17da92b"
 
 [entrypoint]
 module = "Example.Threshold"
@@ -207,8 +212,9 @@ currently have less precise location information.
 
 ## 6. Troubleshooting
 
-**Dependency not found:** publish the exact `0.1.0-elci-dev` modules above, then
-check Elci's `gradle.properties`. Both projects require Java 25.
+**Dependency not found:** publish the exact `julcVersion` modules above, then
+check Elci's `gradle.properties`. A project's `julc-version` must equal the
+compiler's pinned `julcVersion` (`elci --version` prints it). Both projects require Java 25.
 
 **No supported Java export:** only bundled `@OnchainLibrary` sources with mapped
 concrete signatures are exposed. Arbitrary JVM methods and overloaded methods

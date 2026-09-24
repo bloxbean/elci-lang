@@ -1,6 +1,6 @@
 # ADR-005: Remaining frontend work and shared backend integration
 
-Status: **Accepted planning direction; implementation not started by this ADR**.
+Status: **Accepted planning direction; implementation in progress** (see Progress).
 Date: 24 September 2026
 Elci baseline: `e0b4be0`.
 Verified Julc main baseline: `c95ee610fd334fc1650a3d99ae9254fbf2afdad4`.
@@ -187,6 +187,12 @@ library/runtime integration and is not part of these frontend abstraction issues
 Row polymorphism, polymorphic recursion, Float and browser effects retain their
 existing excluded/deferred status. This roadmap does not promise all future
 language features through a frozen backend contract.
+
+## Progress
+
+| Track | State | Evidence |
+| --- | --- | --- |
+| E0 | Done: pinned to Julc `17da92bb` (`0.1.0-gb-17da92b`), the head of the revision-2 stack (Julc PRs #187–#192) | [Validation](../docs/VALIDATION.md#julc-revision-2-baseline-evidence-adr-005-e0) |
 
 ## Alternatives and open decisions
 

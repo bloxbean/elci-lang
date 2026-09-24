@@ -22,13 +22,13 @@ class ArtifactTest {
             [project]
             source-directories = ["src"]
             target = "plutus-v3-pv11-uplc-1.1.0"
-            julc-version = "0.1.0-elci-dev"
+            julc-version = "%s"
             [entrypoint]
             module = "Main"
             function = "validate"
             purpose = "%s"
             boundary = "julc-strict-v1"
-            """.formatted(purpose));
+            """.formatted(org.elci.driver.ElciCompiler.JULC_VERSION,purpose));
     }
 
     @Test void spendingArtifactRoundTripsThroughJulcAndCardanoClientLib() throws Exception {
