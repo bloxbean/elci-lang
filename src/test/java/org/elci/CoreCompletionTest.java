@@ -394,4 +394,49 @@ class CoreCompletionTest {
                                         """));
         assertEquals("ELCI2012", freeVariable.code());
     }
+
+    @Test
+    void usefulnessTerminatesForWildcardsOverRecursiveFields() {
+        // A variable after constructor patterns over a union with a List field used to
+        // expand List's constructors forever.
+        var result = new ElciCompiler().compile("""
+                module Main exposing (main)
+                type Outcome
+                    = Ok
+                    | Bad String (List Int)
+                firstBad : List Outcome -> Outcome
+                firstBad outcomes =
+                    case outcomes of
+                        [] ->
+                            Ok
+                        Ok :: rest ->
+                            firstBad rest
+                        bad :: _ ->
+                            bad
+                main : Int
+                main =
+                    case firstBad [ Ok, Bad "x" [ 1, 2 ], Ok ] of
+                        Bad _ values ->
+                            List.length values
+                        Ok ->
+                            0
+                """, "main", org.julclang.compiler.backend.FrontendProgram.Purpose.FUNCTION);
+        assertEquals(new org.julclang.core.Term.Const(org.julclang.core.Constant.integer(2)),
+                ((org.julclang.vm.EvalResult.Success) org.julclang.vm.JulcVm.create()
+                        .evaluate(result.program(), result.target().ledgerTarget())).resultTerm());
+        // Usefulness is still checked: a branch after a total cons pattern is unreachable.
+        var unreachable = assertThrows(org.elci.syntax.Diagnostic.class, () -> new ElciCompiler().compile("""
+                module Main exposing (main)
+                main : Int
+                main =
+                    case [ 1 ] of
+                        [] ->
+                            0
+                        _ :: _ ->
+                            1
+                        _ ->
+                            2
+                """, "main", org.julclang.compiler.backend.FrontendProgram.Purpose.FUNCTION));
+        assertEquals("ELCI2006", unreachable.code());
+    }
 }

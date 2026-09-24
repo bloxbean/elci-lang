@@ -1037,7 +1037,17 @@ public final class Inference {
         var restTypes = types.subList(1, types.size());
         var universe = patternConstructors(type);
         if (irrefutable(head)) {
-            if (universe == null) return useful(defaultRows(matrix), tail, restTypes);
+            // Expand a wildcard into every constructor only when the column already names
+            // them all (Maranget's complete-signature case). Otherwise the default matrix
+            // decides; expanding recursive types such as List would never terminate.
+            var present = new HashSet<String>();
+            for (var row : matrix) {
+                Pattern first = unwrap(row.getFirst());
+                if (!irrefutable(first)) present.add(first.name());
+            }
+            if (universe == null
+                    || !present.containsAll(universe.stream().map(PatternCtor::name).toList()))
+                return useful(defaultRows(matrix), tail, restTypes);
             for (var constructor : universe) {
                 var expanded = new ArrayList<Pattern>();
                 for (int i = 0; i < constructor.fields().size(); i++)
