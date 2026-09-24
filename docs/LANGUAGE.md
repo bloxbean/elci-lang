@@ -327,6 +327,8 @@ different redeemer types. Top-level values reachable from any handler are
 program-level definitions. They are evaluated once per script execution, before
 dispatch, exactly as in a single-entrypoint script. A failing top-level value
 therefore fails every purpose; keep purpose-specific work inside the handler.
+Library functions are linked once per script. A zero-argument library value is
+evaluated where it is used, as in `[entrypoint]` projects.
 
 Adding, removing or changing a handler changes the group's script hash. Named
 validators always dispatch on the purpose, even with one handler. A one-handler

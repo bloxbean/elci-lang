@@ -188,4 +188,28 @@ class ModuleTest {
                                         .evaluate(result.program(), result.target().ledgerTarget()))
                         .resultTerm());
     }
+
+    @Test
+    void otherModulesCannotReachTheRootModulesNames() {
+        // The root module's declarations are unqualified internally; a module the root imports
+        // must still not see them.
+        var error =
+                assertThrows(
+                        Diagnostic.class,
+                        () ->
+                                compile(
+                                        Map.of(
+                                                "Main",
+                                                "module Main exposing (main)\n"
+                                                        + "import Helper\n"
+                                                        + "hidden : Int\n"
+                                                        + "hidden = 41\n"
+                                                        + "main : Int\n"
+                                                        + "main = Helper.useIt\n",
+                                                "Helper",
+                                                "module Helper exposing (useIt)\n"
+                                                        + "useIt : Int\n"
+                                                        + "useIt = hidden + 1\n")));
+        assertEquals("ELCI2005", error.code());
+    }
 }

@@ -118,4 +118,28 @@ class ApplyCommandTest {
         assertTrue(accepts(program, context(Purpose.MINT, PlutusData.integer(5))));
         assertFalse(accepts(program, context(Purpose.MINT, PlutusData.integer(10))));
     }
+
+    @Test
+    void anExplicitDefaultOutputIsStillOwned() throws Exception {
+        copyTreasury();
+        assertEquals(0, NamedValidatorCliTest.run("build", project.toString()).status());
+        var result = NamedValidatorCliTest.run("apply", project.toString(), "--validator", "badge",
+                "--param", "admin={\"bytes\": \"" + ADMIN_HEX + "\"}", "--output", applied("badge").toString());
+        assertEquals(0, result.status(), result.err());
+        assertEquals(0, NamedValidatorCliTest.run("build", project.toString()).status());
+        assertFalse(Files.exists(applied("badge")), "a rebuild removes the stale applied script");
+    }
+
+    @Test
+    void applyChecksTheExpectedAbi() throws Exception {
+        copyTreasury();
+        Files.writeString(project.resolve("expected.json"), "{}\n");
+        Files.writeString(project.resolve("elci.toml"), Files.readString(project.resolve("elci.toml"))
+                .replace("mint = \"Badge.mint\"", "mint = \"Badge.mint\"\nexpected-abi = \"expected.json\""));
+        var result = NamedValidatorCliTest.run("apply", project.toString(), "--validator", "badge",
+                "--param", "admin={\"bytes\": \"" + ADMIN_HEX + "\"}");
+        assertEquals(1, result.status());
+        assertTrue(result.err().contains("ABI drift"), result.err());
+        assertFalse(Files.exists(applied("badge")));
+    }
 }

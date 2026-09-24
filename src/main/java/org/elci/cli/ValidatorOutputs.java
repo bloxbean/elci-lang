@@ -37,7 +37,7 @@ final class ValidatorOutputs {
         String hex = script.getCborHex();
         // Julc leaves the hash empty for a parameterized script: it changes once parameters are applied.
         String hash = build.parameters().isEmpty() ? JulcScriptAdapter.scriptHash(program) : "";
-        String params = String.join(",", build.parameters().stream().map(p -> p.name() + ":" + p.source()).toList());
+        String params = String.join(",", build.parameters().stream().map(p -> p.name() + ":" + display(p.source())).toList());
         var artifact = new ValidatorOutput("PlutusScriptV3", artifactPurpose(build), build.name(), hex, hash, params, flat.length);
         var files = new LinkedHashMap<String, byte[]>();
         files.put("validator.flat", flat);
@@ -46,6 +46,23 @@ final class ValidatorOutputs {
         files.put("validator.plutus.json", artifact.toJson().getBytes(StandardCharsets.UTF_8));
         files.put("abi.json", Abi.validatorManifest(build).getBytes(StandardCharsets.UTF_8));
         return new Rendered(build.name(), files, flat.length, hash);
+    }
+
+    /**
+     * A parameter type for Julc's {@code name:type} list, which is split on commas: short names
+     * and space-separated arguments, with records shown as {@code Record}.
+     */
+    static String display(org.elci.types.Types.Ty type) {
+        var c = (org.elci.types.Types.Con) org.elci.types.Types.prune(type);
+        String name = c.name();
+        if (name.startsWith("Record:")) return "Record";
+        if (name.contains(".")) name = name.substring(name.lastIndexOf('.') + 1);
+        var result = new StringBuilder(name);
+        for (var argument : c.args()) {
+            String shown = display(argument);
+            result.append(' ').append(shown.contains(" ") ? "(" + shown + ")" : shown);
+        }
+        return result.toString();
     }
 
     /** Julc's artifact purpose vocabulary: {@code multi} for several handlers. */
@@ -69,22 +86,30 @@ final class ValidatorOutputs {
         Path root = build.resolve("validators");
         Files.createDirectories(root);
         var owned = readManifest(root);
+        // Only regular files are ever replaced: anything else at an output path stops the build
+        // before a single file is written.
+        for (var group : groups)
+            for (String file : group.files().keySet()) {
+                Path target = root.resolve(group.name()).resolve(file);
+                if (Files.exists(target, LinkOption.NOFOLLOW_LINKS) && !Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS))
+                    throw new IOException("Cannot publish " + target + ": it exists and is not a regular file");
+            }
         var staged = new ArrayList<Path[]>();
         try {
             for (var group : groups) {
                 Path directory = root.resolve(group.name());
                 Files.createDirectories(directory);
                 for (var file : group.files().entrySet()) {
-                    Path temporary = Files.createTempFile(directory, "." + file.getKey() + ".", ".tmp");
+                    Path temporary = temporary(directory, file.getKey());
                     staged.add(new Path[] {temporary, directory.resolve(file.getKey())});
-                    Files.write(temporary, file.getValue());
+                    Files.write(temporary, file.getValue(), StandardOpenOption.CREATE_NEW);
                 }
             }
         } catch (IOException | RuntimeException e) {
             for (var pair : staged) Files.deleteIfExists(pair[0]);
             throw e;
         }
-        for (var pair : staged) move(pair[0], pair[1]);
+        replace(staged);
         for (var group : groups) {
             // Other owned files (an applied script) derive from the previous build: remove them.
             for (String file : owned.getOrDefault(group.name(), List.of()))
@@ -115,8 +140,8 @@ final class ValidatorOutputs {
     static void writeApplied(Path build, String group, Path target, String json, boolean owned) throws IOException {
         Path parent = target.toAbsolutePath().getParent();
         Files.createDirectories(parent);
-        Path temporary = Files.createTempFile(parent, "." + target.getFileName() + ".", ".tmp");
-        Files.writeString(temporary, json);
+        Path temporary = temporary(parent, target.getFileName().toString());
+        Files.writeString(temporary, json, StandardOpenOption.CREATE_NEW);
         move(temporary, target);
         if (!owned) return;
         Path root = build.resolve("validators");
@@ -125,6 +150,37 @@ final class ValidatorOutputs {
         if (!files.contains(ParameterApplication.APPLIED)) files.add(ParameterApplication.APPLIED);
         manifest.put(group, List.copyOf(files));
         writeManifest(root, manifest);
+    }
+
+    /**
+     * Move every staged file over its target. The previous targets are kept aside until all moves
+     * succeed; if one fails, the moved files are restored so no mixture of old and new remains.
+     */
+    private static void replace(List<Path[]> staged) throws IOException {
+        var backups = new ArrayList<Path[]>();
+        var placed = new ArrayList<Path>();
+        try {
+            for (var pair : staged) {
+                if (Files.exists(pair[1], LinkOption.NOFOLLOW_LINKS)) {
+                    Path backup = pair[1].resolveSibling("." + pair[1].getFileName() + "." + UUID.randomUUID() + ".old");
+                    move(pair[1], backup);
+                    backups.add(new Path[] {backup, pair[1]});
+                }
+                move(pair[0], pair[1]);
+                placed.add(pair[1]);
+            }
+        } catch (IOException | RuntimeException e) {
+            for (var target : placed) Files.deleteIfExists(target);
+            for (var backup : backups) move(backup[0], backup[1]);
+            for (var pair : staged) Files.deleteIfExists(pair[0]);
+            throw new IOException("Publishing validator outputs failed; previous outputs were restored: " + e.getMessage(), e);
+        }
+        for (var backup : backups) Files.deleteIfExists(backup[0]);
+    }
+
+    /** A new file beside {@code name}, created with the default permissions of the directory. */
+    private static Path temporary(Path directory, String name) {
+        return directory.resolve("." + name + "." + UUID.randomUUID() + ".tmp");
     }
 
     private static void move(Path from, Path to) throws IOException {
@@ -157,8 +213,9 @@ final class ValidatorOutputs {
     }
 
     private static void writeManifest(Path root, Map<String, List<String>> owned) throws IOException {
-        Path temporary = Files.createTempFile(root, "." + MANIFEST + ".", ".tmp");
-        Files.writeString(temporary, Abi.json(Map.of("formatVersion", 1, "validators", owned)) + "\n");
+        Path temporary = temporary(root, MANIFEST);
+        Files.writeString(temporary, Abi.json(Map.of("formatVersion", 1, "validators", owned)) + "\n",
+                StandardOpenOption.CREATE_NEW);
         move(temporary, root.resolve(MANIFEST));
     }
 

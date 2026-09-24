@@ -141,8 +141,10 @@ The Julc artifact is not renamed or represented as a CIP-57 blueprint.
 - Keep `[entrypoint]` working, including `purpose = "function"`, existing artifact
   paths and single-entrypoint ABI drift checks.
 - Reject mixing `[entrypoint]` and `[validators.*]` in one configuration.
-- Preserve existing script bytes/hashes when using the legacy configuration;
-  use the same single-purpose wrapping path for equivalent one-handler groups.
+- Preserve existing script bytes/hashes when using the legacy configuration.
+  Named groups, including one-handler groups, always dispatch on the purpose
+  (Julc's multi-validator wrapper, so unconfigured purposes fail). A one-handler
+  group therefore hashes differently from the equivalent `[entrypoint]` script.
 - Multiple handlers share a script; separate validator groups never share a
   deployment identity implicitly.
 - Do not change evaluation order, eager-value behavior, serialization, constructor
@@ -218,8 +220,22 @@ parameters and datum profiles). Julc's generic companion is
 - **Beyond this ADR:** parameters and optional/absent datums (ADR-005 E5) are
   configured with `parameters` and `spend-datum`. An optional datum reaches the
   source as Elci's `Maybe` through a verified re-tagging adapter.
-- **Pre-existing defect fixed:** a qualified reference could reach a private or
-  unimported declaration of the flattened module graph. It is now `ELCI2104`.
+- **Pre-existing defects fixed:**
+  - A qualified reference could reach a private or unimported declaration of the
+    flattened module graph. It is now `ELCI2104`.
+  - An unqualified name in an imported module could reach the root module's
+    private declarations. It is now `ELCI2005`.
+- **Review hardening:** an independent review of this work led to these changes:
+  - imported constructors resolve deterministically, and shared qualified names are
+    ambiguous (`ELCI2102`);
+  - `Julc.Data` rejects any type containing `ScriptContext`;
+  - value exports of libraries are evaluated at their use;
+  - `params` entries contain no commas;
+  - an unreplaceable output path stops publication before anything is written;
+  - outputs get default file permissions;
+  - an applied script at the default path is always owned;
+  - `apply` checks `expected-abi`;
+  - PROJECT approval is enforced in both modes.
 - **Publication:** CLI outputs are validated for all selected groups before
   anything is written. Each file is replaced with an atomic move, and
   `build/validators/elci-outputs.json` records owned files for cleanup.

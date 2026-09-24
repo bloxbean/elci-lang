@@ -33,7 +33,7 @@ class TreasuryExampleTest {
     Program load(String group) throws Exception {
         var output = ValidatorOutput.fromJson(Files.readString(copy.resolve("build/validators/" + group + "/validator.plutus.json")));
         assertTrue(output.isParameterized());
-        assertEquals("admin:org.julclang.ledger.PubKeyHash", output.params());
+        assertEquals("admin:PubKeyHash", output.params());
         return JulcScriptAdapter.toProgram(output.cborHex()).applyParams(ADMIN.toPlutusData());
     }
 

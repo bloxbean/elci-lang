@@ -137,7 +137,14 @@ public final class Lowering {
             if (importMode == ImportMode.LINK) requested.put(request, binding);
         }
         var reference = new PirTerm.Var(binding.name(), binding.type());
-        if (importMode == ImportMode.LINK) return reference;
+        // Linked imports are evaluated when the script starts. Functions are safe to share that
+        // way; a value export (a zero-argument method) is evaluated at its use instead, as in
+        // [entrypoint] projects, so an unused failing value cannot fail every purpose.
+        if (importMode == ImportMode.LINK && binding.type() instanceof PirType.FunType) return reference;
+        if (importMode == ImportMode.LINK) {
+            requested.remove(request);
+            if (group == null) group = libraries.provider().materialize(List.of(request));
+        }
         // A revision-1 program has no import groups: link a closed copy at the use site.
         return PirLinker.link(new LinkedHashMap<>(group.definitions()), reference);
     }
@@ -794,6 +801,11 @@ public final class Lowering {
     }
 
     private PirTerm codec(Ty type, LibraryRequest.Codec.Direction direction, Token token) {
+        // ScriptContext is represented as Data, so a codec would silently erase it.
+        if (containsContext(type, new HashSet<>()))
+            throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
+                    ? "encoder" : "strict decoder") + " for " + prune(type) + ": ScriptContext has no approved Data"
+                    + " codec; only the ledger supplies a context");
         var representation = pir(type);
         describeLeaves(representation);
         try {
@@ -802,6 +814,24 @@ public final class Lowering {
             throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
                     ? "encoder" : "strict decoder") + " for " + prune(type) + ": " + e.getMessage());
         }
+    }
+
+    /** Whether {@code type} is or contains the ledger context, through Elci records and unions. */
+    private boolean containsContext(Ty type, Set<String> visiting) {
+        var c = (Con) prune(type);
+        if (c.name().equals("ScriptContext") || c.name().equals("org.julclang.ledger.ScriptContext")) return true;
+        if (!visiting.add(c.toString())) return false;
+        for (var argument : c.args()) if (containsContext(argument, visiting)) return true;
+        for (var union : inference.unions.values())
+            if (inference.nominal(union.name()).equals(c.name())) {
+                var variables = new HashMap<String, Ty>();
+                for (int i = 0; i < union.parameters().size(); i++)
+                    variables.put(union.parameters().get(i), c.args().get(i));
+                for (var variant : union.variants())
+                    for (var field : variant.fields())
+                        if (containsContext(inference.annotatedPublic(field, variables), visiting)) return true;
+            }
+        return false;
     }
 
     /** Describe the Elci records and unions a codec's nominal leaves name. */
@@ -993,11 +1023,11 @@ public final class Lowering {
         var record = (Con) prune(type);
         if (inference.importedTypes.containsKey(record.name())) {
             var descriptor = inference.importedTypes.get(record.name());
+            if (!descriptor.supports(LibraryType.Operation.PROJECT))
+                throw new Diagnostic("ELCI2010", token, "The provider of " + descriptor.identity()
+                        + " does not approve field access (PROJECT)");
             if (descriptor.newType()) return base;
             if (importMode == ImportMode.LINK) {
-                if (!descriptor.supports(LibraryType.Operation.PROJECT))
-                    throw new Diagnostic("ELCI2010", token, "The provider of " + descriptor.identity()
-                            + " does not approve field access (PROJECT)");
                 return new PirTerm.App(library(new LibraryRequest.Operation(descriptor.identity(),
                         LibraryType.Operation.PROJECT, field), token), base);
             }

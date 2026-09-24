@@ -251,7 +251,7 @@ public final class ElciCompiler {
             var declaration=declarations.get(matcher.group(1));
             if(declaration!=null)return new Diagnostic("ELCI4002",declaration.token(),"Julc rejected the PIR generated for "+matcher.group(1)+": "+message);
         }
-        for(var entry:declarations.entrySet())
+        for(var entry:new TreeMap<>(declarations).entrySet())
             if(message.contains(entry.getKey()+" ")||message.endsWith(entry.getKey()))
                 return new Diagnostic("ELCI4002",entry.getValue().token(),"Julc rejected "+entry.getKey()+": "+message);
         return new Diagnostic("ELCI4002",fallback,"Julc rejected the program: "+message);

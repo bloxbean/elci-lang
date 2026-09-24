@@ -228,7 +228,8 @@ A named validator writes the same four files beneath `build/validators/<name>/`:
   - `purpose` is `multi` for several handlers. For one handler it is Julc's
     purpose word: `spending`, `minting`, `withdraw`, `certifying`, `voting` or
     `proposing`.
-  - `params` lists `name:type` in application order.
+  - `params` lists `name:type` in application order. Records are shown as
+    `Record`, so the comma-separated list has one entry per parameter.
   - As in Julc, `hash` is empty for a parameterized script, because the hash
     changes when the parameters are applied.
 - **`abi.json`:** `formatVersion` 2. It records the parameters, each handler's

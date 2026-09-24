@@ -46,6 +46,10 @@ final class ParameterApplication {
         var options = new CompilerOptions();
         var build = new ElciCompiler().compileValidator(project.sources(), group.spec(), project.javaModules(), options,
                 project.librarySources());
+        if (group.expectedAbi() != null && !Files.readString(project.root().resolve(group.expectedAbi()))
+                .equals(org.elci.abi.Abi.validatorManifest(build)))
+            throw new IllegalArgumentException("ELCI4001: validator " + validator + ": ABI drift from "
+                    + group.expectedAbi() + "; parameters were not applied");
         var values = new ArrayList<PlutusData>();
         for (var parameter : build.parameters()) {
             var data = parse(project.root(), parameter.name(), arguments.get(parameter.name()));
@@ -62,8 +66,11 @@ final class ParameterApplication {
         byte[] flat = UplcFlatEncoder.encodeProgram(applied);
         var artifact = new ValidatorOutput("PlutusScriptV3", ValidatorOutputs.artifactPurpose(build), build.name(),
                 JulcScriptAdapter.fromProgram(applied).getCborHex(), hash, "", flat.length);
-        Path target = output != null ? output : project.root().resolve("build/validators").resolve(build.name()).resolve(APPLIED);
-        ValidatorOutputs.writeApplied(project.root().resolve("build"), build.name(), target, artifact.toJson(), output == null);
+        Path owned = project.root().resolve("build/validators").resolve(build.name()).resolve(APPLIED).toAbsolutePath().normalize();
+        Path target = output != null ? output.toAbsolutePath().normalize() : owned;
+        // The default location is owned (the next build removes it), however it was named.
+        ValidatorOutputs.writeApplied(project.root().resolve("build"), build.name(), target, artifact.toJson(),
+                target.equals(owned));
         System.out.println("validator " + build.name() + ": applied " + values.size() + " parameter(s); hash " + hash
                 + "; wrote " + target);
         return 0;

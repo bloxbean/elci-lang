@@ -98,6 +98,12 @@ How instantiation works:
   templates.
 - **Evaluation:** calls are strict and curried in declared argument order. Each
   argument is evaluated once, even under partial application.
+- **Equality inside templates:** a scheme's only constraint is `DATA_ENCODABLE`. A
+  template that compares values of its type parameter (such as `contains`) uses
+  Data equality even at a type whose provider withholds EQUALS. Examples are the
+  map-encoded `Value` and types containing it, for which that comparison is
+  order-sensitive. Avoid such instantiations until Julc schemes carry an equality
+  constraint.
 - **Elci types:** Elci's own records, tuples and unions are valid type arguments
   for both Java-source templates and programmatic exports. Elci sends their
   representations with each request as producer-owned types (Julc PR #195), and

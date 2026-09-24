@@ -287,4 +287,60 @@ class NamedValidatorCliTest {
         Files.writeString(project.resolve("elci.toml"), HEADER.replace("[project]", "[project]\nexpected-abi = \"abi.json\"") + VAULT_TABLE);
         assertTrue(run("check", project.toString()).err().contains("set expected-abi in each"));
     }
+
+    @Test
+    void recordParametersAreOneJulcParameter() throws Exception {
+        sources();
+        Files.writeString(project.resolve("src/Config.elm"), """
+                module Config exposing (mint)
+
+                import Julc.Ledger exposing (PubKeyHash, ScriptContext)
+
+
+                mint : { owner : PubKeyHash, limits : { low : Int, high : Int } } -> Int -> ScriptContext -> Bool
+                mint config amount _ =
+                    amount >= config.limits.low
+                """);
+        config("\n[validators.config]\nboundary = \"julc-strict-v1\"\nparameters = [\"config\"]\nmint = \"Config.mint\"\n");
+        assertEquals(0, run("build", project.toString(), "--validator", "config").status());
+        var output = ValidatorOutput.fromJson(Files.readString(out("config", "validator.plutus.json")));
+        assertEquals("config:Record", output.params());
+        assertEquals(1, output.paramList().size());
+    }
+
+    @Test
+    void anUnreplaceableTargetPublishesNothing() throws Exception {
+        sources();
+        config(VAULT_TABLE, TOKEN_TABLE);
+        assertEquals(0, run("build", project.toString()).status());
+        byte[] token = Files.readAllBytes(out("token", "validator.flat"));
+        byte[] vault = Files.readAllBytes(out("vault", "validator.flat"));
+        // Change both scripts, and make one target impossible to replace.
+        Files.writeString(project.resolve("src/Shared.elm"), SHARED.replace("value >= Math.max minimum 0", "value > Math.max minimum 0"));
+        Files.delete(out("vault", "abi.json"));
+        Files.createDirectories(out("vault", "abi.json").resolve("occupied"));
+        var failed = run("build", project.toString());
+        assertEquals(1, failed.status(), failed.out());
+        assertTrue(failed.err().contains("not a regular file"), failed.err());
+        assertTrue(Files.isDirectory(out("vault", "abi.json").resolve("occupied")), "nothing is deleted");
+        assertArrayEquals(token, Files.readAllBytes(out("token", "validator.flat")));
+        assertArrayEquals(vault, Files.readAllBytes(out("vault", "validator.flat")));
+        try (var files = Files.walk(project.resolve("build/validators"))) {
+            assertTrue(files.noneMatch(f -> f.getFileName().toString().endsWith(".tmp")
+                    || f.getFileName().toString().endsWith(".old")), "no staging files remain");
+        }
+    }
+
+    @Test
+    void outputsGetDefaultFilePermissions() throws Exception {
+        if (!java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix")) return;
+        sources();
+        config(TOKEN_TABLE);
+        assertEquals(0, run("build", project.toString()).status());
+        var reference = project.resolve("reference");
+        Files.writeString(reference, "x");
+        var expected = Files.getPosixFilePermissions(reference);
+        assertEquals(expected, Files.getPosixFilePermissions(out("token", "validator.flat")));
+        assertEquals(expected, Files.getPosixFilePermissions(project.resolve("build/validators/elci-outputs.json")));
+    }
 }

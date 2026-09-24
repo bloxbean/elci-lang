@@ -79,7 +79,8 @@ public final class Modules {
      * constructors importable, through {@code T(..)} or a module qualifier.
      */
     public void catalogue(Map<String, org.julclang.compiler.backend.LibraryType> types) {
-        catalogue = Map.copyOf(types);
+        // Sorted, so resolution never depends on hash iteration order.
+        catalogue = Collections.unmodifiableMap(new TreeMap<>(types));
     }
 
     /**
@@ -130,9 +131,23 @@ public final class Modules {
             for (var c : type.constructors())
                 entries.put(c.name(), org.elci.types.Inference.constructorName(type.identity(), c.name()));
         entries.forEach((name, target) -> {
-            names.put(qualifier + "." + name, target);
+            // Two types of one library may share a constructor name: the qualified name is then
+            // ambiguous, and using it is an error rather than a silent choice.
+            var previous = names.putIfAbsent(qualifier + "." + name, target);
+            if (previous != null && !previous.equals(target))
+                names.put(qualifier + "." + name, AMBIGUOUS + qualifier + "." + name);
             if (exposed) put(names, name, target, token);
         });
+    }
+
+    /** Marks a qualified constructor name that more than one imported type defines. */
+    private static final String AMBIGUOUS = "$ambiguous:";
+
+    private static String unambiguous(String resolved, Token token) {
+        if (resolved.startsWith(AMBIGUOUS))
+            throw new Diagnostic("ELCI2102", token, "Ambiguous constructor " + resolved.substring(AMBIGUOUS.length())
+                    + ": more than one imported type defines it; expose the intended type's constructors with (..)");
+        return resolved;
     }
 
     /** Catalogue types whose simple name is visible through a Java library module {@code owner}. */
@@ -178,6 +193,15 @@ public final class Modules {
 
     private Ast.Module resolve(List<String> roots, String root) {
         roots.forEach(this::visit);
+        // The root module's own names are unprefixed. Another module never imports the root
+        // (that would be a cycle), so an unresolved name there must not reach them.
+        var rootNames = new HashSet<String>();
+        if (root != null) {
+            var rootModule = available.get(root);
+            rootModule.declarations().forEach(d -> rootNames.add(d.name()));
+            rootModule.aliases().keySet().forEach(rootNames::add);
+            rootModule.unions().forEach(u -> u.variants().forEach(v -> rootNames.add(v.name())));
+        }
         var definitions = new ArrayList<Decl>();
         var imports = new ArrayList<Import>();
         var aliases = new LinkedHashMap<String, Alias>();
@@ -335,7 +359,8 @@ public final class Modules {
                                 prefix + d.name(),
                                 d.parameters(),
                                 type(d.annotation(), types),
-                                expr(d.body(), names, new HashSet<>(d.parameters()), types),
+                                expr(d.body(), names, new HashSet<>(d.parameters()), types,
+                                        isRoot ? Set.of() : rootNames),
                                 d.token()));
             module.aliases()
                     .forEach(
@@ -448,51 +473,55 @@ public final class Modules {
                         + "'");
     }
 
+    /** @param hidden the root module's names, invisible to the other modules */
     private static Expr expr(
-            Expr e, Map<String, String> names, Set<String> bound, Map<String, String> types) {
+            Expr e, Map<String, String> names, Set<String> bound, Map<String, String> types, Set<String> hidden) {
         return switch (e) {
             case Literal l -> l;
             case Name n -> {
                 // Unresolved qualified names would otherwise alias internal flattened symbols.
-                if (!bound.contains(n.name()) && !resolves(n.name(), names))
+                if (!bound.contains(n.name()) && !resolves(n.name(), names)) {
                     qualified(n.name(), names, n.token());
-                yield new Name(resolve(n.name(), names, bound), n.token());
+                    if (hidden.contains(n.name()))
+                        throw new Diagnostic("ELCI2005", n.token(), "Unknown name '" + n.name() + "'");
+                }
+                yield new Name(unambiguous(resolve(n.name(), names, bound), n.token()), n.token());
             }
             case Apply a ->
                     new Apply(
-                            expr(a.function(), names, bound, types),
-                            expr(a.argument(), names, bound, types),
+                            expr(a.function(), names, bound, types, hidden),
+                            expr(a.argument(), names, bound, types, hidden),
                             a.token());
             case Binary b ->
                     new Binary(
                             b.op(),
-                            expr(b.left(), names, bound, types),
-                            expr(b.right(), names, bound, types),
+                            expr(b.left(), names, bound, types, hidden),
+                            expr(b.right(), names, bound, types, hidden),
                             b.token());
             case If i ->
                     new If(
-                            expr(i.condition(), names, bound, types),
-                            expr(i.yes(), names, bound, types),
-                            expr(i.no(), names, bound, types),
+                            expr(i.condition(), names, bound, types, hidden),
+                            expr(i.yes(), names, bound, types, hidden),
+                            expr(i.no(), names, bound, types, hidden),
                             i.token());
-            case Field f -> new Field(expr(f.record(), names, bound, types), f.name(), f.token());
+            case Field f -> new Field(expr(f.record(), names, bound, types, hidden), f.name(), f.token());
             case RecordValue r -> {
                 var fields = new LinkedHashMap<String, Expr>();
-                r.fields().forEach((n, v) -> fields.put(n, expr(v, names, bound, types)));
+                r.fields().forEach((n, v) -> fields.put(n, expr(v, names, bound, types, hidden)));
                 yield new RecordValue(
-                        r.base() == null ? null : expr(r.base(), names, bound, types),
+                        r.base() == null ? null : expr(r.base(), names, bound, types, hidden),
                         fields,
                         r.token());
             }
             case Items i ->
                     new Items(
-                            i.elements().stream().map(x -> expr(x, names, bound, types)).toList(),
+                            i.elements().stream().map(x -> expr(x, names, bound, types, hidden)).toList(),
                             i.tuple(),
                             i.token());
             case Lambda l -> {
                 var b = new HashSet<>(bound);
                 b.addAll(l.parameters());
-                yield new Lambda(l.parameters(), expr(l.body(), names, b, types), l.token());
+                yield new Lambda(l.parameters(), expr(l.body(), names, b, types, hidden), l.token());
             }
             case Let l -> {
                 var b = new HashSet<>(bound);
@@ -506,24 +535,24 @@ public final class Modules {
                                     d.name(),
                                     d.parameters(),
                                     type(d.annotation(), types),
-                                    expr(d.body(), names, scope, types),
+                                    expr(d.body(), names, scope, types, hidden),
                                     d.token()));
                 }
-                yield new Let(ds, expr(l.body(), names, b, types), l.token());
+                yield new Let(ds, expr(l.body(), names, b, types, hidden), l.token());
             }
             case Case c -> {
                 var branches = new ArrayList<Branch>();
                 for (var branch : c.branches()) {
                     var b = new HashSet<>(bound);
-                    var p = pattern(branch.pattern(), names, b);
-                    branches.add(new Branch(p, expr(branch.body(), names, b, types)));
+                    var p = pattern(branch.pattern(), names, b, hidden);
+                    branches.add(new Branch(p, expr(branch.body(), names, b, types, hidden)));
                 }
-                yield new Case(expr(c.scrutinee(), names, bound, types), branches, c.token());
+                yield new Case(expr(c.scrutinee(), names, bound, types, hidden), branches, c.token());
             }
         };
     }
 
-    private static Pattern pattern(Pattern p, Map<String, String> names, Set<String> bound) {
+    private static Pattern pattern(Pattern p, Map<String, String> names, Set<String> bound, Set<String> hidden) {
         boolean variable =
                 p.token().kind() == Token.Kind.NAME
                         && !p.name().isEmpty()
@@ -533,11 +562,15 @@ public final class Modules {
                 variable || p.name().startsWith("$") || p.token().kind() != Token.Kind.NAME
                         ? p.name()
                         : names.getOrDefault(p.name(), p.name());
-        if (!variable && p.token().kind() == Token.Kind.NAME && !names.containsKey(p.name()))
+        if (!variable && p.token().kind() == Token.Kind.NAME && !names.containsKey(p.name())) {
             qualified(p.name(), names, p.token());
+            if (hidden.contains(p.name()))
+                throw new Diagnostic("ELCI2001", p.token(), "Unsupported constructor pattern " + p.name());
+        }
+        name = unambiguous(name, p.token());
         return new Pattern(
                 name,
-                p.arguments().stream().map(a -> pattern(a, names, bound)).toList(),
+                p.arguments().stream().map(a -> pattern(a, names, bound, hidden)).toList(),
                 p.token());
     }
 }

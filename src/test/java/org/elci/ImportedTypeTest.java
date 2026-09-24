@@ -418,4 +418,116 @@ class ImportedTypeTest {
                     True
                 """), "Main", "mint", FrontendProgram.Purpose.MINT, MODULES, new CompilerOptions(), LIBRARIES));
     }
+
+    static final String TWO = """
+            package demo;
+            import java.math.BigInteger;
+            import org.julclang.stdlib.annotation.OnchainLibrary;
+            @OnchainLibrary
+            public class Two {
+                public sealed interface Action {
+                    record Buy(BigInteger amount) implements Action {}
+                    record Cancel() implements Action {}
+                }
+                public sealed interface Order {
+                    record Open(BigInteger amount) implements Order {}
+                    record Cancel() implements Order {}
+                }
+                public static BigInteger orderAmount(Order order) {
+                    return switch (order) {
+                        case Order.Open o -> o.amount();
+                        case Order.Cancel c -> BigInteger.ZERO;
+                    };
+                }
+                public static BigInteger boom() { return BigInteger.ONE.divide(BigInteger.ZERO); }
+            }
+            """;
+
+    static ElciCompiler.Result two(String body) {
+        return new ElciCompiler().compileProject(Map.of("Main", "module Main exposing (main)\n" + body), "Main", "main",
+                FrontendProgram.Purpose.FUNCTION, Map.of("Demo.Two", "demo.Two"), new CompilerOptions(),
+                Map.of("demo.Two", TWO));
+    }
+
+    @Test
+    void sharedConstructorNamesAreAmbiguousOnlyWhenQualified() {
+        for (int run = 0; run < 3; run++) {
+            var error = assertThrows(Diagnostic.class, () -> two("import Demo.Two as Two\nmain : Int\nmain = Two.orderAmount Two.Cancel\n"));
+            assertEquals("ELCI2102", error.code());
+        }
+        // Exposing one type's constructors selects it.
+        var result = two("import Demo.Two as Two exposing (Order(..))\nmain : Int\nmain = Two.orderAmount (Open 4) + Two.orderAmount Cancel\n");
+        assertEquals(integer(4), assertInstanceOf(EvalResult.Success.class,
+                JulcVm.create().evaluate(result.program(), result.target().ledgerTarget())).resultTerm());
+    }
+
+    @Test
+    void theLedgerContextHasNoDataCodec() {
+        var direct = """
+                module Main exposing (main)
+
+                import Julc.Data as Data
+                import Julc.Ledger exposing (ScriptContext)
+
+
+                main : Data -> Int
+                main raw =
+                    let
+                        fake : ScriptContext
+                        fake =
+                            Data.decode raw
+                    in
+                    fake.txInfo.fee
+                """;
+        assertEquals("ELCI3003", assertThrows(Diagnostic.class, () -> function(direct)).code());
+        var nested = """
+                module Main exposing (main)
+
+                import Julc.Data as Data
+                import Julc.Ledger exposing (ScriptContext)
+
+
+                type Wrapper
+                    = Wrapper ScriptContext Int
+
+
+                main : Data -> Int
+                main raw =
+                    case Data.decode raw of
+                        Wrapper _ n ->
+                            n
+                """;
+        assertEquals("ELCI3003", assertThrows(Diagnostic.class, () -> function(nested)).code());
+    }
+
+    @Test
+    void valueExportsInNamedValidatorsAreEvaluatedAtTheirUse() {
+        var source = """
+                module Main exposing (mint, withdraw)
+
+                import Demo.Two as Two
+                import Julc.Ledger exposing (ScriptContext)
+
+
+                mint : Int -> ScriptContext -> Bool
+                mint r _ =
+                    if r == 99 then
+                        Two.boom == 1
+
+                    else
+                        r > 0
+
+
+                withdraw : Int -> ScriptContext -> Bool
+                withdraw r _ =
+                    r == 2
+                """;
+        var program = new ElciCompiler().compileValidator(Map.of("Main", source),
+                new ValidatorSpec("v", List.of(new HandlerSpec(Purpose.MINT, "Main", "mint"),
+                        new HandlerSpec(Purpose.WITHDRAW, "Main", "withdraw")), List.of(), DatumProfile.REQUIRED),
+                Map.of("Demo.Two", "demo.Two"), new CompilerOptions(), Map.of("demo.Two", TWO)).program();
+        assertTrue(accepts(program, context(Purpose.MINT, PlutusData.integer(1))));
+        assertTrue(accepts(program, context(Purpose.WITHDRAW, PlutusData.integer(2))));
+        assertFalse(accepts(program, context(Purpose.MINT, PlutusData.integer(99))));
+    }
 }
