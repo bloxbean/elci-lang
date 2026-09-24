@@ -43,7 +43,8 @@ signatures of many Java `ListsLib` methods. For example:
 List.map (\value -> value + 1) [ 1, 2, 3 ]
 ```
 
-`not` and `remainderBy` are compiler-provided functions. `Maybe` with `Just` and
+`not` and `remainderBy` are compiler-provided functions. `Julc.Data` provides
+explicit `decode`, `encode`, `fromOptional` and `toOptional` conversions. `Maybe` with `Just` and
 `Nothing` is a built-in type; a complete Elm-style `Maybe` module is not bundled.
 `Julc.Ledger` exposes ledger types and supported fields rather than an ordinary
 Java function library.
@@ -147,16 +148,13 @@ account for that sentinel when using these methods.
 ## Representation and usability limits
 
 - Nominal hashes and newtypes stay distinct from raw bytes or integers.
-- Imported records can use supported field access and exported Java factories;
-  they are not interchangeable with similarly shaped Elci records.
-- Imported sums can pass through Java functions, but cannot yet be constructed or
-  pattern-matched directly in Elci.
-- Java Optional is distinct from Elci Maybe. Compilation of a function returning
-  Optional does not supply a full Elci API for inspecting it.
-- `Data` is opaque, and not every Data subtype has a mapping. Some compile-verified
-  helpers require inputs the current Elci API cannot conveniently construct.
-- Imported records do not automatically become valid datum/redeemer types or gain
-  equality. Map/native-value representations are not interchangeable.
+- Imported records and sums use exactly the operations their provider approves:
+  constructors, patterns, field access, equality, codecs and named-validator
+  boundaries. They are not interchangeable with similarly shaped Elci records.
+- Java Optional is distinct from Elci Maybe. Convert a result such as
+  `ContextsLib.findOwnInput` with `Julc.Data.fromOptional`.
+- `Data` is opaque until converted with `Julc.Data.decode`. Not every Data subtype
+  has a mapping. Map/native-value representations are not interchangeable.
 - Generic Java methods are specialized per use, and `ListsLib`'s programmatic
   `map`, `filter`, `any`, `all`, `find` and `foldl` are available (see
   [Java libraries](JAVA_LIBRARIES.md#generic-methods-and-programmatic-exports)).

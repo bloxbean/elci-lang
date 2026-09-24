@@ -68,10 +68,22 @@ public final class ElciCompiler {
         return compileProject(sources,module,function,purpose,javaModules,options,Map.of());
     }
     public Result compileProject(Map<String,String> sources,String module,String function,FrontendProgram.Purpose purpose,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
-        return compileModule(new org.elci.modules.Modules(sources,javaModules).resolve(module),function,purpose,javaModules,options,librarySources);
+        var modules=new org.elci.modules.Modules(sources,javaModules);
+        var java=javaProvider(modules,List.of(module),options,librarySources);
+        return compileModule(modules.resolve(module),function,purpose,javaModules,options,java);
     }
-    private Result compileModule(Ast.Module module,String function,FrontendProgram.Purpose purpose,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
-        var frontend=frontend(module,javaModules,options,librarySources);
+    /**
+     * The Java-source provider for the libraries reachable from {@code roots}. It is built before
+     * name resolution because its type descriptions decide which imported constructors exist.
+     */
+    private static JavaLibraryProvider javaProvider(org.elci.modules.Modules modules,List<String> roots,CompilerOptions options,Map<String,String> librarySources) {
+        var sources=LibrarySources.resolve(modules.javaLibraries(roots),librarySources,ElciCompiler.class.getClassLoader());
+        var java=new JavaLibraryProvider(sources,StdlibRegistry.defaultRegistry(),options);
+        modules.catalogue(java.types());
+        return java;
+    }
+    private Result compileModule(Ast.Module module,String function,FrontendProgram.Purpose purpose,Map<String,String> javaModules,CompilerOptions options,JavaLibraryProvider java) {
+        var frontend=frontend(module,javaModules,options,java);
         var entry=module.declarations().stream().filter(d->d.name().equals(function)).findFirst().orElseThrow(()->new IllegalArgumentException("Entrypoint not found: "+function));
         if(!module.exposing().contains(function)&&!module.exposing().contains(".."))throw new Diagnostic("ELCI2103",entry.token(),"Entrypoint must be exposed by its module");
         var inference=frontend.inference();inference.check(module.declarations(),frontend.importedTypes());
@@ -114,8 +126,10 @@ public final class ElciCompiler {
                 throw new Diagnostic("ELCI2103",declaration.token(),"Handler "+handler.symbol()+" must be exposed by its module");
             }
         }
-        var module=modules.resolveAll(spec.handlers().stream().map(HandlerSpec::module).toList());
-        var frontend=frontend(module,javaModules,options,librarySources);
+        var roots=spec.handlers().stream().map(HandlerSpec::module).distinct().toList();
+        var java=javaProvider(modules,roots,options,librarySources);
+        var module=modules.resolveAll(roots);
+        var frontend=frontend(module,javaModules,options,java);
         var inference=frontend.inference();inference.check(module.declarations(),frontend.importedTypes());
         var declarations=new HashMap<String,Ast.Decl>();module.declarations().forEach(d->declarations.put(d.name(),d));
 
@@ -137,13 +151,13 @@ public final class ElciCompiler {
             if(hasDatum&&spec.spendDatum()==DatumProfile.OPTIONAL) {
                 var maybe=prune(datum);
                 if(!(maybe instanceof Con c)||!c.name().equals("Elci.Maybe"))throw new Diagnostic("ELCI2014",declaration.token(),"Handler "+handler.symbol()+" uses spend-datum = \"optional\", so its datum must have type Maybe d, not "+maybe);
-                checkBoundary(c.args().getFirst(),inference,new HashSet<>(),declaration.token());
-            } else if(hasDatum)checkBoundary(datum,inference,new HashSet<>(),declaration.token());
-            checkBoundary(redeemer,inference,new HashSet<>(),declaration.token());
+                checkBoundary(c.args().getFirst(),inference,new HashSet<>(),declaration.token(),true);
+            } else if(hasDatum)checkBoundary(datum,inference,new HashSet<>(),declaration.token(),true);
+            checkBoundary(redeemer,inference,new HashSet<>(),declaration.token(),true);
             shapes.add(new Shape(handler,type,datum==null?null:prune(datum),prune(redeemer),declaration));
         }
         var firstToken=shapes.getFirst().declaration().token();
-        for(var parameter:parameterTypes)checkBoundary(parameter,inference,new HashSet<>(),firstToken);
+        for(var parameter:parameterTypes)checkBoundary(parameter,inference,new HashSet<>(),firstToken,true);
 
         var lowering=new Lowering(module.declarations(),inference,frontend.importedSymbols(),frontend.schemes(),frontend.libraries(),Lowering.ImportMode.LINK);
         var handlers=new ArrayList<ValidatorProgram.Handler>();var infos=new ArrayList<HandlerInfo>();
@@ -234,20 +248,16 @@ public final class ElciCompiler {
     }
 
     /** Resolve imports, ledger types and library exports; inference is prepared but not run. */
-    private Frontend frontend(Ast.Module module,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
+    private Frontend frontend(Ast.Module module,Map<String,String> javaModules,CompilerOptions options,JavaLibraryProvider java) {
         var importedTypes=new LinkedHashMap<String,Ty>();var importedSymbols=new LinkedHashMap<String,String>();
         importedTypes.put("not",fn(con("Bool"),con("Bool")));
         importedTypes.put("remainderBy",fn(con("Int"),fn(con("Int"),con("Int"))));
+        intrinsics(importedTypes);
         var ledger=new LedgerTypeProvider();var ledgerAliases=new LinkedHashMap<String,String>();
-        var requestedLibraries=new ArrayList<String>();
         for(var imp:module.imports()) {
             if(imp.module().equals("Julc.Ledger"))continue;
-            String java=javaModules.get(imp.module());
-            if(java==null)throw new Diagnostic("ELCI2101",imp.token(),"Unknown module '"+imp.module()+"'");
-            requestedLibraries.add(java);
+            if(javaModules.get(imp.module())==null)throw new Diagnostic("ELCI2101",imp.token(),"Unknown module '"+imp.module()+"'");
         }
-        var sources=LibrarySources.resolve(requestedLibraries,librarySources,ElciCompiler.class.getClassLoader());
-        var java=new JavaLibraryProvider(sources,StdlibRegistry.defaultRegistry(),options);
         var libraries=new Libraries(java,options);var provider=libraries.provider();
         var unsupportedImports=new LinkedHashMap<String,String>();var schemes=new LinkedHashMap<String,LibraryScheme>();
         for(var imp:module.imports()) {
@@ -256,9 +266,10 @@ public final class ElciCompiler {
                     if(exposed.equals("..")) {
                         ledger.types().keySet().forEach(n->ledgerAliases.put(n.substring(n.lastIndexOf('.')+1),n));
                     } else {
-                        String identity="org.julclang.ledger."+exposed;
-                        if(!ledger.types().containsKey(identity))throw new Diagnostic("ELCI2101",imp.token(),"Unknown ledger record type "+exposed);
-                        ledgerAliases.put(exposed,identity);
+                        String type=exposed.endsWith("(..)")?exposed.substring(0,exposed.length()-4):exposed;
+                        String identity="org.julclang.ledger."+type;
+                        if(!ledger.types().containsKey(identity))throw new Diagnostic("ELCI2101",imp.token(),"Unknown ledger record type "+type);
+                        ledgerAliases.put(type,identity);
                     }
                 }
                 ledgerAliases.put("ScriptContext","ScriptContext");continue;
@@ -298,18 +309,30 @@ public final class ElciCompiler {
         }
         for(var d:module.declarations())if(importedTypes.containsKey(d.name()))throw new Diagnostic("ELCI2102",d.token(),"Declaration conflicts with imported name "+d.name());
         var inference=new Inference();inference.aliases(module.aliases());inference.unions(module.name(),module.unions());inference.ledger(ledger,ledgerAliases);inference.library(java);inference.unsupportedImports.putAll(unsupportedImports);
+        constructors(java.types(),importedTypes,inference);
         return new Frontend(module,inference,importedTypes,importedSymbols,schemes,libraries);
     }
     private static void checkBoundary(Ty type,Inference inference,Set<String> visiting,Token token) {
+        checkBoundary(type,inference,visiting,token,false);
+    }
+    /**
+     * Reject types without a strict Data boundary. Named validators ({@code imported}) also accept
+     * imported types whose provider approves BOUNDARY; Julc's validator compiler checks them again.
+     */
+    private static void checkBoundary(Ty type,Inference inference,Set<String> visiting,Token token,boolean imported) {
         if(visiting.size()>64)throw new Diagnostic("ELCI2013",token,"Expanding recursive boundary type is unsupported");
         var t=(Con)prune(type);
         if(t.name().equals("ScriptContext"))throw new Diagnostic("ELCI2013",token,"ScriptContext is only valid in the ledger context argument, not serialized user data");
-        if(inference.importedRepresentations.containsKey(t.name())&&!inference.byteEquality(t.name()))throw new Diagnostic("ELCI2013",token,"Imported ledger records are currently context views; use an Elci data type for datum/redeemer");
+        if(inference.importedRepresentations.containsKey(t.name())&&!inference.byteEquality(t.name())) {
+            if(imported&&inference.approves(t.name(),LibraryType.Operation.BOUNDARY))return;
+            if(imported)throw new Diagnostic("ELCI2013",token,t.name()+" has no approved strict Data boundary (BOUNDARY); for example records containing the map-encoded Value cannot be checked");
+            throw new Diagnostic("ELCI2013",token,"Imported ledger records are currently context views in [entrypoint] projects; use an Elci data type, or a named validator for imported types that approve BOUNDARY");
+        }
         if(t.name().equals("->"))throw new Diagnostic("ELCI2013",token,"Functions cannot be serialized as datum or redeemer");
-        t.args().forEach(a->checkBoundary(a,inference,visiting,token));
+        t.args().forEach(a->checkBoundary(a,inference,visiting,token,imported));
         for(var union:inference.unions.values())if(inference.nominal(union.name()).equals(t.name())&&visiting.add(t.toString())) {
             var vars=new HashMap<String,Ty>();for(int i=0;i<union.parameters().size();i++)vars.put(union.parameters().get(i),t.args().get(i));
-            for(var variant:union.variants())for(var field:variant.fields())checkBoundary(inference.annotatedPublic(field,vars),inference,visiting,token);
+            for(var variant:union.variants())for(var field:variant.fields())checkBoundary(inference.annotatedPublic(field,vars),inference,visiting,token,imported);
             visiting.remove(t.toString());
         }
     }
@@ -323,6 +346,40 @@ public final class ElciCompiler {
         for(int i=export.parameters().size()-1;i>=0;i--)result=fn(sourceType(export.parameters().get(i)),result);
         return result;
     }
+    /**
+     * Approved constructors of imported types, named by {@link Inference#constructorName} as
+     * module resolution produces them. Constructors usable in expressions need CONSTRUCT;
+     * patterns need MATCH, which inference checks.
+     */
+    private static void constructors(Map<String,LibraryType> types,Map<String,Ty> importedTypes,Inference inference) {
+        for(var type:types.values()) {
+            boolean construct=type.supports(LibraryType.Operation.CONSTRUCT);
+            if(!construct&&!type.supports(LibraryType.Operation.MATCH))continue;
+            Ty result=con(type.identity().equals("org.julclang.ledger.ScriptContext")?"ScriptContext":type.identity());
+            if(type.constructors().isEmpty()) {
+                var entry=new Inference.ImportedConstructor(type,null);
+                inference.importedConstructors.put(entry.name(),entry);
+                if(construct)importedTypes.put(entry.name(),constructorType(type.fields(),result,inference));
+            } else for(var constructor:type.constructors()) {
+                var entry=new Inference.ImportedConstructor(type,constructor);
+                inference.importedConstructors.put(entry.name(),entry);
+                if(construct)importedTypes.put(entry.name(),constructorType(constructor.fields(),result,inference));
+            }
+        }
+    }
+    private static Ty constructorType(List<LibraryType.Field> fields,Ty result,Inference inference) {
+        for(int i=fields.size()-1;i>=0;i--)result=fn(inference.libraryType(fields.get(i).type()),result);
+        return result;
+    }
+    /** {@code Julc.Data}: explicit codecs and the Julc optional / Elci Maybe adapters. */
+    private static void intrinsics(Map<String,Ty> importedTypes) {
+        String prefix=org.elci.modules.Modules.DATA_PREFIX;
+        var a=new Var();importedTypes.put(prefix+"decode",fn(con("Data"),a));
+        var b=new Var();importedTypes.put(prefix+"encode",fn(b,con("Data")));
+        var c=new Var();importedTypes.put(prefix+"fromOptional",fn(con("JulcOptional",c),con("Elci.Maybe",c)));
+        var d=new Var();importedTypes.put(prefix+"toOptional",fn(con("Elci.Maybe",d),con("JulcOptional",d)));
+    }
+
     /**
      * The source type of a generic export: each scheme type parameter becomes one type variable,
      * quantified when the import enters the environment, so every use is instantiated freshly.

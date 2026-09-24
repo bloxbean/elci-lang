@@ -24,6 +24,43 @@ public final class Inference {
     private Map<String, String> importedAliases = Map.of();
     public final Map<String, String> unsupportedImports = new LinkedHashMap<>();
 
+    /**
+     * An approved constructor of an imported type: {@code constructor} is null for a record or
+     * newtype, whose constructor is named by the type itself.
+     */
+    public record ImportedConstructor(
+            org.julclang.compiler.backend.LibraryType type,
+            org.julclang.compiler.backend.LibraryType.Constructor constructor) {
+        public String name() {
+            return constructorName(type.identity(), constructor == null ? null : constructor.name());
+        }
+    }
+
+    /**
+     * The resolved name of an imported constructor. The {@code $} prefix keeps it distinct from
+     * pattern variables and source declarations.
+     */
+    public static String constructorName(String identity, String constructor) {
+        return "$" + identity + (constructor == null ? "" : "." + constructor);
+    }
+
+    /** Imported constructors by resolved name. */
+    public final Map<String, ImportedConstructor> importedConstructors = new LinkedHashMap<>();
+
+    /** Whether an imported type's provider approves {@code operation}. */
+    public boolean approves(String type, org.julclang.compiler.backend.LibraryType.Operation operation) {
+        var description = importedTypes.get(type);
+        return description != null && description.supports(operation);
+    }
+
+    /** The source types of an imported constructor's fields. */
+    public List<Ty> constructorFields(ImportedConstructor constructor) {
+        var fields = constructor.constructor() == null
+                ? constructor.type().fields()
+                : constructor.constructor().fields();
+        return fields.stream().map(f -> libraryType(f.type())).toList();
+    }
+
     public void library(org.julclang.compiler.backend.LibraryProvider provider) {
         importedTypes.putAll(provider.types());
         importedRepresentations.putAll(provider.namedDefinitions());
@@ -264,7 +301,8 @@ public final class Inference {
             return false;
         if (c.name().equals("List") || c.name().equals("Tuple") || c.name().startsWith("Record:"))
             return c.args().stream().allMatch(a -> equalityCapable(a, visiting));
-        if (importedRepresentations.containsKey(c.name())) return false;
+        if (importedRepresentations.containsKey(c.name()))
+            return approves(c.name(), org.julclang.compiler.backend.LibraryType.Operation.EQUALS);
         if (!visiting.add(c.toString())) return true;
         try {
             for (var union : unions.values())
@@ -520,6 +558,13 @@ public final class Inference {
                         if(unsupportedImports.containsKey(n.name()))
                             throw new Diagnostic("ELCI2105",n.token(),unsupportedImports.get(n.name()));
                         var scheme = env.get(n.name());
+                        if (scheme == null && importedConstructors.containsKey(n.name()))
+                            throw new Diagnostic(
+                                    "ELCI2001",
+                                    n.token(),
+                                    "The provider of "
+                                            + importedConstructors.get(n.name()).type().identity()
+                                            + " does not approve construction (CONSTRUCT)");
                         if (scheme == null)
                             throw new Diagnostic(
                                     "ELCI2005", n.token(), "Unknown name '" + n.name() + "'");
@@ -749,6 +794,21 @@ public final class Inference {
             unify(t, ct, p.token());
             return;
         }
+        if (importedConstructors.containsKey(p.name())) {
+            var imported = importedConstructors.get(p.name());
+            String type = imported.type().identity();
+            if (imported.constructor() == null)
+                throw new Diagnostic("ELCI2001", p.token(), type + " is a record; read its fields instead of matching it");
+            if (!imported.type().supports(org.julclang.compiler.backend.LibraryType.Operation.MATCH))
+                throw new Diagnostic("ELCI2001", p.token(), "The provider of " + type + " does not approve pattern matching (MATCH)");
+            var fields = constructorFields(imported);
+            if (fields.size() != p.arguments().size())
+                throw new Diagnostic("ELCI2001", p.token(), imported.constructor().name() + " takes " + fields.size()
+                        + " argument(s), not " + p.arguments().size());
+            unify(t, con(type.equals("org.julclang.ledger.ScriptContext") ? "ScriptContext" : type), p.token());
+            for (int i = 0; i < fields.size(); i++) bindPattern(p.arguments().get(i), fields.get(i), env);
+            return;
+        }
         if (Set.of("True", "False").contains(p.name())) unify(t, con("Bool"), p.token());
         else if (p.token().kind() == Token.Kind.INT
                 || p.name().startsWith("-")
@@ -932,6 +992,16 @@ public final class Inference {
                     new PatternCtor("::", List.of(c.args().getFirst(), type)));
         if (c.name().equals("Tuple")) return List.of(new PatternCtor("Tuple", c.args()));
         if (c.name().equals("Unit")) return List.of(new PatternCtor("$unit", List.of()));
+        var imported = importedTypes.get(c.name());
+        if (imported != null && !imported.constructors().isEmpty()
+                && imported.supports(org.julclang.compiler.backend.LibraryType.Operation.MATCH)) {
+            var result = new ArrayList<PatternCtor>();
+            for (var constructor : imported.constructors()) {
+                var entry = importedConstructors.get(constructorName(imported.identity(), constructor.name()));
+                result.add(new PatternCtor(entry.name(), constructorFields(entry)));
+            }
+            return result;
+        }
         for (var union : unions.values())
             if (nominal(union.name()).equals(c.name())) {
                 var variables = new HashMap<String, Ty>();

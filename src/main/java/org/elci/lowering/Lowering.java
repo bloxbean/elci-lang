@@ -116,14 +116,22 @@ public final class Lowering {
         return List.of(group);
     }
 
-    /** Request a provider implementation and return a term that refers to it. */
-    private PirTerm library(LibraryRequest request) {
+    /**
+     * Request a provider implementation and return a term that refers to it. A provider
+     * rejection becomes a source diagnostic at the use.
+     */
+    private PirTerm library(LibraryRequest request, Token token) {
         if (importMode == ImportMode.INLINE && request instanceof LibraryRequest.Export export)
             return libraries.java().materialize(export.symbol());
         var binding = requested.get(request);
         LibraryImports group = null;
         if (binding == null) {
-            group = libraries.provider().materialize(List.of(request));
+            try {
+                group = libraries.provider().materialize(List.of(request));
+            } catch (org.julclang.compiler.backend.BackendException e) {
+                throw new Diagnostic("ELCI2105", token, "The library provider cannot supply " + request.describe()
+                        + ": " + e.getMessage());
+            }
             binding = group.binding(request);
             if (importMode == ImportMode.LINK) requested.put(request, binding);
         }
@@ -188,7 +196,7 @@ public final class Lowering {
 
     private PirTerm expr(Expr e, Map<String, PirTerm> env, Map<Var, Ty> map) {
         return switch (e) {
-            case Field f -> projection(expr(f.record(), env, map), type(f.record(), map), f.name());
+            case Field f -> projection(expr(f.record(), env, map), type(f.record(), map), f.name(), f.token());
             case RecordValue r -> {
                 var recordType = (Con) prune(type(r, map));
                 var names =
@@ -215,7 +223,7 @@ public final class Lowering {
                     fields.add(
                             values.containsKey(name)
                                     ? values.get(name)
-                                    : projection(base, type(r, map), name));
+                                    : projection(base, type(r, map), name, r.token()));
                 PirTerm record = new PirTerm.DataConstr(0, pir(type(r, map)), fields);
                 var bindings = new ArrayList<>(temporaries.entrySet());
                 for (int i = bindings.size() - 1; i >= 0; i--)
@@ -310,11 +318,19 @@ public final class Lowering {
                         value = new PirTerm.Lam(ids.get(i), pts.get(i), value);
                     yield value;
                 }
+                if (inference.importedConstructors.containsKey(n.name())) {
+                    var imported = inference.importedConstructors.get(n.name());
+                    yield library(new LibraryRequest.Operation(imported.type().identity(),
+                            LibraryType.Operation.CONSTRUCT,
+                            imported.constructor() == null ? null : imported.constructor().name()), n.token());
+                }
+                if (n.name().startsWith(org.elci.modules.Modules.DATA_PREFIX))
+                    yield dataIntrinsic(n.name().substring(org.elci.modules.Modules.DATA_PREFIX.length()), type(n, map), n.token());
                 if (imports.containsKey(n.name())) {
                     String symbol = imports.get(n.name());
                     var scheme = schemes.get(symbol);
-                    if (scheme == null) yield library(new LibraryRequest.Export(symbol));
-                    yield library(instantiate(scheme, type(n, map), n.token()));
+                    if (scheme == null) yield library(new LibraryRequest.Export(symbol), n.token());
+                    yield library(instantiate(scheme, type(n, map), n.token()), n.token());
                 }
                 if (n.name().equals("not")) {
                     String p = fresh("not");
@@ -546,6 +562,17 @@ public final class Lowering {
                             cons);
             return new PirTerm.ListMatch(value, head, tail, failure, cons);
         }
+        if (inference.importedConstructors.containsKey(p.name())) {
+            var imported = inference.importedConstructors.get(p.name());
+            var fields = inference.constructorFields(imported);
+            PirTerm selected = matchDataFields(p.arguments(), fields, value, env, success, failure, mapping);
+            var actualTag = call(DefaultFun.FstPair, call(DefaultFun.UnConstrData, value));
+            return new PirTerm.IfThenElse(
+                    call(DefaultFun.EqualsInteger, actualTag,
+                            new PirTerm.Const(Constant.integer(imported.constructor().tag()))),
+                    selected,
+                    failure);
+        }
         if (inference.constructors.containsKey(p.name())) {
             var source = (Con) type;
             var union = inference.constructors.get(p.name());
@@ -713,6 +740,10 @@ public final class Lowering {
             else if (inference.byteEquality(t.name()))
                 comparison = call(DefaultFun.EqualsByteString, xv, yv);
             else if (t.name().equals("Int")) comparison = call(DefaultFun.EqualsInteger, xv, yv);
+            else if (inference.importedRepresentations.containsKey(t.name()))
+                // The provider's approved equality: Java equals semantics for the representation.
+                comparison = new PirTerm.App(new PirTerm.App(library(new LibraryRequest.Operation(
+                        inference.importedTypes.get(t.name()).identity(), LibraryType.Operation.EQUALS), b.token()), xv), yv);
             else
                 comparison =
                         call(
@@ -738,6 +769,72 @@ public final class Lowering {
         return b.op().equals(">") || b.op().equals(">=")
                 ? new PirTerm.IfThenElse(result, bool(false), bool(true))
                 : result;
+    }
+
+    /**
+     * {@code Julc.Data}. {@code decode} and {@code encode} are Julc's strict decoder and encoder
+     * for the concrete type; {@code fromOptional} and {@code toOptional} re-tag between Julc's
+     * optional ({@code Some} 0, {@code None} 1) and Elci's {@code Maybe} ({@code Nothing} 0,
+     * {@code Just} 1) without decoding the payload.
+     */
+    private PirTerm dataIntrinsic(String function, Ty use, Token token) {
+        var arrow = (Con) prune(use);
+        Ty input = arrow.args().get(0), output = arrow.args().get(1);
+        if (!Types.concrete(use))
+            throw new Diagnostic("ELCI3001", token, "Cannot determine the type converted by Julc.Data." + function
+                    + "; add a type annotation");
+        return switch (function) {
+            case "decode" -> codec(output, LibraryRequest.Codec.Direction.DECODE_STRICT, token);
+            case "encode" -> codec(input, LibraryRequest.Codec.Direction.ENCODE, token);
+            case "fromOptional" -> retag(pir(input), pir(output), 0, 1);
+            case "toOptional" -> retag(pir(input), pir(output), 1, 0);
+            default -> throw new Diagnostic("ELCI2005", token, "Unknown name 'Julc.Data." + function + "'");
+        };
+    }
+
+    private PirTerm codec(Ty type, LibraryRequest.Codec.Direction direction, Token token) {
+        var representation = pir(type);
+        describeLeaves(representation);
+        try {
+            return library(new LibraryRequest.Codec(representation, direction), token);
+        } catch (Diagnostic e) {
+            throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
+                    ? "encoder" : "strict decoder") + " for " + prune(type) + ": " + e.getMessage());
+        }
+    }
+
+    /** Describe the Elci records and unions a codec's nominal leaves name. */
+    private void describeLeaves(PirType type) {
+        switch (type) {
+            case PirType.RecordType _, PirType.SumType _ -> {
+                if (!libraries.java().types().values().stream().anyMatch(t -> t.representation().equals(type)))
+                    libraries.describe(type, namedTypes, libraries.uncheckable());
+            }
+            case PirType.ListType list -> describeLeaves(list.elemType());
+            case PirType.MapType map -> {
+                describeLeaves(map.keyType());
+                describeLeaves(map.valueType());
+            }
+            case PirType.OptionalType optional -> describeLeaves(optional.elemType());
+            default -> {}
+        }
+    }
+
+    /**
+     * {@code \value -> if tag == present then Constr presentOut fields else Constr absentOut []},
+     * reusing the Data-encoded payload. The result is typed by applying a typed identity.
+     */
+    private PirTerm retag(PirType input, PirType output, int present, int presentOut) {
+        String value = fresh("optional"), cast = fresh("retagged");
+        var raw = new PirTerm.Var(value, input);
+        var pair = call(DefaultFun.UnConstrData, raw);
+        PirTerm some = call(DefaultFun.ConstrData, new PirTerm.Const(Constant.integer(presentOut)), call(DefaultFun.SndPair, pair));
+        PirTerm none = call(DefaultFun.ConstrData, new PirTerm.Const(Constant.integer(1 - presentOut)),
+                call(DefaultFun.MkNilData, new PirTerm.Const(Constant.unit())));
+        PirTerm body = new PirTerm.IfThenElse(call(DefaultFun.EqualsInteger, call(DefaultFun.FstPair,
+                call(DefaultFun.UnConstrData, raw)), new PirTerm.Const(Constant.integer(present))), some, none);
+        body = new PirTerm.App(new PirTerm.Lam(cast, output, new PirTerm.Var(cast, output)), body);
+        return new PirTerm.Lam(value, input, body);
     }
 
     /**
@@ -880,11 +977,18 @@ public final class Lowering {
                     "Unit in serialized containers is not yet supported");
     }
 
-    private PirTerm projection(PirTerm base, Ty type, String field) {
+    private PirTerm projection(PirTerm base, Ty type, String field, Token token) {
         var record = (Con) prune(type);
         if (inference.importedTypes.containsKey(record.name())) {
             var descriptor = inference.importedTypes.get(record.name());
             if (descriptor.newType()) return base;
+            if (importMode == ImportMode.LINK) {
+                if (!descriptor.supports(LibraryType.Operation.PROJECT))
+                    throw new Diagnostic("ELCI2010", token, "The provider of " + descriptor.identity()
+                            + " does not approve field access (PROJECT)");
+                return new PirTerm.App(library(new LibraryRequest.Operation(descriptor.identity(),
+                        LibraryType.Operation.PROJECT, field), token), base);
+            }
             int index = 0;
             while (!descriptor.fields().get(index).name().equals(field)) index++;
             var ft = pir(inference.libraryType(descriptor.fields().get(index).type()));

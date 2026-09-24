@@ -1,7 +1,8 @@
 # ADR-003: Generic library interoperability
 
-Status: **Partially implemented** — I1–I3 on Julc revision 2 (see
-[Revision-2 integration](#revision-2-integration-25-september-2026)); I4 in progress.
+Status: **Implemented** for I1–I4 on Julc revision 2 (see
+[Revision-2 integration](#revision-2-integration-25-september-2026)). One gap remains:
+Java-source templates cannot be specialized at Elci-defined types.
 Implementation roadmap and Julc dependencies: [ADR-005](005-remaining-frontend-and-backend-integration.md).
 Date: 19 September 2026
 Baseline: Elci `974bd41`; companion to [ADR-001](elci-language-syntax-compiler-design-adr.md),
@@ -193,8 +194,28 @@ extensions this ADR asked for. Elci now consumes them.
   link each specialization once. `[entrypoint]` projects link a closed copy at
   each use.
 
+**I4** (`ImportedTypeTest`): imported types expose exactly their approved
+operations.
+
+- **CONSTRUCT and MATCH:** constructors are resolved through each module's
+  imports (`T(..)` or a qualifier), and `case` over imported sums is exhaustive.
+- **Other operations:** PROJECT is used in revision-2 programs, and EQUALS,
+  ENCODE/DECODE_STRICT and BOUNDARY are supported. Special layouts stay opaque.
+- **Explicit adapters:** the `Julc.Data` module provides the strict decoder and
+  encoder (`LibraryRequest.Codec`) and the Julc optional/`Maybe` re-tagging
+  adapters. Elci describes its own records and unions to the providers, so their
+  codecs are also Julc-built.
+- **Evidence:**
+  - a Java record and sum agree with the Java library's own `equals`, accessor
+    and `switch`;
+  - `Quote(5, true)` encodes to the pinned `Constr 0 [I 5, Constr 1 []]`;
+  - strict decoding rejects wrong tags, arities and nested kinds;
+  - `List Quote` round-trips;
+  - a one-shot policy takes a `TxOutRef` parameter and a `Credential` redeemer,
+    and reads an inline datum through `findOwnInput`;
+  - unapproved uses are diagnosed: `TxOut` equality, decoding or boundary use,
+    and `Value` constructors.
+
 Open: Java-source templates are not yet specialized at Elci-defined records and
 unions, because Julc's Java provider resolves only Java and ledger type
-arguments. The programmatic provider accepts them through descriptions. I4
-(imported constructors, patterns, equality, boundaries and codecs) is tracked as
-ADR-005 E4.
+arguments. The programmatic provider accepts them through descriptions.

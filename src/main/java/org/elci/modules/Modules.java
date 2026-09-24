@@ -8,8 +8,16 @@ import java.util.*;
 
 /** Resolve a source graph to stable module-qualified symbols before inference. */
 public final class Modules {
+    /** The compiler-provided module of explicit Data codecs and optional adapters. */
+    public static final String DATA_MODULE = "Julc.Data";
+    /** Its functions, resolved to intrinsic names with this prefix. */
+    public static final String DATA_PREFIX = "$julc.data.";
+    public static final List<String> DATA_FUNCTIONS = List.of("decode", "encode", "fromOptional", "toOptional");
+
     private final Map<String, Ast.Module> available = new LinkedHashMap<>();
     private final Map<String, String> javaModules;
+    /** Imported type descriptions (ledger and Java), whose approved constructors are importable. */
+    private Map<String, org.julclang.compiler.backend.LibraryType> catalogue = Map.of();
     private final Set<String> visiting = new LinkedHashSet<>();
     private final LinkedHashMap<String, Ast.Module> ordered = new LinkedHashMap<>();
 
@@ -36,7 +44,7 @@ public final class Modules {
                                         + module.name()
                                         + " does not match source path "
                                         + name);
-                    if (javaModules.containsKey(name) || name.equals("Julc.Ledger"))
+                    if (javaModules.containsKey(name) || name.equals("Julc.Ledger") || name.equals(DATA_MODULE))
                         throw new IllegalArgumentException(
                                 "Duplicate source/library module ownership: " + name);
                     if (!name.equals("List")
@@ -64,6 +72,80 @@ public final class Modules {
 
     public Ast.Module resolve(String root) {
         return resolve(List.of(root), root);
+    }
+
+    /**
+     * Supply imported type descriptions. Types approving construction or matching make their
+     * constructors importable, through {@code T(..)} or a module qualifier.
+     */
+    public void catalogue(Map<String, org.julclang.compiler.backend.LibraryType> types) {
+        catalogue = Map.copyOf(types);
+    }
+
+    /**
+     * The configured Java library classes imported by the modules reachable from {@code roots},
+     * in the order resolution encounters them.
+     */
+    public List<String> javaLibraries(Collection<String> roots) {
+        List.copyOf(new TreeSet<>(roots)).forEach(this::visit);
+        var result = new ArrayList<String>();
+        var reachable = new HashSet<String>();
+        var queue = new ArrayDeque<>(roots);
+        while (!queue.isEmpty()) {
+            String name = queue.removeFirst();
+            if (!reachable.add(name)) continue;
+            for (var imp : available.get(name).imports())
+                if (!javaModules.containsKey(imp.module()) && !intrinsic(imp.module())) queue.add(imp.module());
+        }
+        for (var module : ordered.values())
+            if (reachable.contains(module.name()))
+                for (var imp : module.imports())
+                    if (javaModules.containsKey(imp.module())) result.add(javaModules.get(imp.module()));
+        return result;
+    }
+
+    private static boolean intrinsic(String module) {
+        return module.equals("Julc.Ledger") || module.equals(DATA_MODULE);
+    }
+
+    /**
+     * Register the constructors of an imported type, resolved as {@link
+     * org.elci.types.Inference#constructorName}. A record's or newtype's constructor is named
+     * after the type. They are qualified by the import alias and, when {@code exposed}, also
+     * unqualified.
+     */
+    private void constructors(Map<String, String> names, String qualifier, String local,
+                              org.julclang.compiler.backend.LibraryType type, boolean exposed, Token token) {
+        if (!type.supports(org.julclang.compiler.backend.LibraryType.Operation.CONSTRUCT)
+                && !type.supports(org.julclang.compiler.backend.LibraryType.Operation.MATCH)) {
+            if (exposed)
+                throw new Diagnostic("ELCI2104", token, local + " has no approved constructors or patterns; its"
+                        + " values come from library functions");
+            return;
+        }
+        var entries = new LinkedHashMap<String, String>();
+        if (type.constructors().isEmpty())
+            entries.put(local, org.elci.types.Inference.constructorName(type.identity(), null));
+        else
+            for (var c : type.constructors())
+                entries.put(c.name(), org.elci.types.Inference.constructorName(type.identity(), c.name()));
+        entries.forEach((name, target) -> {
+            names.put(qualifier + "." + name, target);
+            if (exposed) put(names, name, target, token);
+        });
+    }
+
+    /** Catalogue types whose simple name is visible through a Java library module {@code owner}. */
+    private Map<String, org.julclang.compiler.backend.LibraryType> libraryTypes(String owner) {
+        var result = new LinkedHashMap<String, org.julclang.compiler.backend.LibraryType>();
+        String packageName = owner.contains(".") ? owner.substring(0, owner.lastIndexOf('.') + 1) : "";
+        for (var type : catalogue.values()) {
+            String id = type.identity();
+            String local = id.startsWith(owner + ".") ? id.substring(owner.length() + 1)
+                    : id.startsWith(packageName) ? id.substring(packageName.length()) : null;
+            if (local != null && !local.contains(".")) result.put(local, type);
+        }
+        return result;
     }
 
     /**
@@ -116,20 +198,44 @@ public final class Modules {
                 for (var v : u.variants()) names.put(v.name(), prefix + v.name());
             }
             for (var imp : module.imports()) {
+                if (imp.module().equals(DATA_MODULE)) {
+                    for (String function : DATA_FUNCTIONS) names.put(imp.alias() + "." + function, DATA_PREFIX + function);
+                    for (String exposed : imp.exposing()) {
+                        if (exposed.equals(".."))
+                            for (String function : DATA_FUNCTIONS) put(names, function, DATA_PREFIX + function, imp.token());
+                        else if (DATA_FUNCTIONS.contains(exposed)) put(names, exposed, DATA_PREFIX + exposed, imp.token());
+                        else
+                            throw new Diagnostic("ELCI2104", imp.token(), DATA_MODULE + " does not expose '" + exposed
+                                    + "'; it provides " + String.join(", ", DATA_FUNCTIONS));
+                    }
+                    continue;
+                }
                 if (imp.module().equals("Julc.Ledger")) {
                     imports.add(imp);
                     types.put(imp.alias() + ".", "org.julclang.ledger.");
+                    var exposedConstructors = new HashSet<String>();
                     for (String exposed : imp.exposing()) {
                         if (exposed.equals("..")) types.put("$ledgerAll", "true");
-                        else
+                        else {
+                            String type = exposed.endsWith("(..)") ? exposed.substring(0, exposed.length() - 4) : exposed;
+                            if (!type.equals(exposed)) exposedConstructors.add(type);
                             put(
                                     types,
-                                    exposed,
-                                    exposed.equals("ScriptContext")
+                                    type,
+                                    type.equals("ScriptContext")
                                             ? "ScriptContext"
-                                            : "org.julclang.ledger." + exposed,
+                                            : "org.julclang.ledger." + type,
                                     imp.token());
+                        }
                     }
+                    for (var type : catalogue.values()) {
+                        String id = type.identity();
+                        if (!id.startsWith("org.julclang.ledger.") || id.substring(20).contains(".")) continue;
+                        String local = id.substring(20);
+                        constructors(names, imp.alias(), local, type, exposedConstructors.remove(local), imp.token());
+                    }
+                    if (!exposedConstructors.isEmpty())
+                        throw new Diagnostic("ELCI2101", imp.token(), "Unknown ledger type " + exposedConstructors.iterator().next());
                     continue;
                 }
                 if (javaModules.containsKey(imp.module())) {
@@ -145,12 +251,21 @@ public final class Modules {
                                 imp.token(),
                                 "Use explicit names when exposing Java exports in multi-module"
                                         + " projects");
+                    var libraryTypes = libraryTypes(javaModules.get(imp.module()));
+                    var exposedConstructors = new HashSet<String>();
                     for (String n : imp.exposing()) {
                         if (Character.isUpperCase(n.charAt(0))) {
-                            if(n.endsWith("(..)"))throw new Diagnostic("ELCI2104",imp.token(),"Imported Java constructors must be called through library factory functions");
-                            put(types,n,alias+"."+n,imp.token());
+                            String type = n.endsWith("(..)") ? n.substring(0, n.length() - 4) : n;
+                            if (!type.equals(n)) {
+                                if (!libraryTypes.containsKey(type))
+                                    throw new Diagnostic("ELCI2101", imp.token(), "No library type '" + type + "' in " + imp.module());
+                                exposedConstructors.add(type);
+                            }
+                            put(types, type, alias + "." + type, imp.token());
                         } else put(names, n, alias + "." + n, imp.token());
                     }
+                    libraryTypes.forEach((local, type) ->
+                            constructors(names, imp.alias(), local, type, exposedConstructors.contains(local), imp.token()));
                     continue;
                 }
                 var dependency = available.get(imp.module());
@@ -267,7 +382,7 @@ public final class Modules {
         var module = available.get(name);
         if (module == null) throw new IllegalArgumentException("Missing source module: " + name);
         for (var imp : module.imports())
-            if (!javaModules.containsKey(imp.module()) && !imp.module().equals("Julc.Ledger"))
+            if (!javaModules.containsKey(imp.module()) && !intrinsic(imp.module()))
                 visit(imp.module());
         visiting.remove(name);
         ordered.put(name, module);

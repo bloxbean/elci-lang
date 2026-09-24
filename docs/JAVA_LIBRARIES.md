@@ -152,16 +152,42 @@ amount quote =
 ```
 
 Same-name type exports are rejected as ambiguous. Use separate module mappings
-for types in different Java packages. Create values through exported Java factory
-functions. Supported record and newtype fields can be read; special or opaque
-layouts do not acquire record projection merely because Java declares a record.
-Sealed sums can be passed to and returned from library functions; direct Elci
-construction and pattern matching of imported sums are not enabled by this change.
-Imported types do not automatically gain structural equality or datum/redeemer
-serialization.
+for types in different Java packages.
+
+Julc lists the operations it has verified for each imported type, and Elci
+enables exactly those:
+
+| Operation | Elci surface |
+| --- | --- |
+| CONSTRUCT | `Pricing.Quote 5 True`; sum constructors such as `Pricing.Buy 5`, qualified or exposed with `Action(..)` |
+| MATCH | Exhaustive `case` over a sum's constructors |
+| PROJECT | `quote.amount` |
+| EQUALS | `==` / `/=`, with Java `equals` semantics |
+| ENCODE, DECODE_STRICT | `Julc.Data.encode` / `Julc.Data.decode` |
+| BOUNDARY | Datum, redeemer or parameter type of a named validator |
+
+```elm
+import Custom.Pricing as Pricing exposing (Action(..))
+
+amount : Action -> Int
+amount action =
+    case action of
+        Buy value ->
+            value
+
+        Cancel ->
+            0
+```
+
+Record constructors take fields in the Java record's declaration order, which is
+also its encoding order. Julc approves operations only for representations it
+has verified. Special layouts, such as records with custom codecs or the ledger
+`Value`, stay opaque, and so do types that contain them. Java factory functions
+remain available for such types.
 
 Concrete lists, maps and Java Optional retain their own representations. Java
-Optional is not implicitly interchangeable with Elci Maybe. Raw containers and
+Optional is not implicitly interchangeable with Elci Maybe; convert it with
+`Julc.Data.fromOptional` (see the [language guide](LANGUAGE.md#explicit-data-conversions)). Raw containers and
 wildcards have no implicit Data fallback. Unsupported public signatures are
 reported when referenced. The provider checks that the source signature's
 representation matches the compiled PIR signature.

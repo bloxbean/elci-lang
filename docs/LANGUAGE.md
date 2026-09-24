@@ -22,7 +22,8 @@ separate milestones.
 | Patterns | Nested constructors/lists/tuples/records, aliases, unit and Bool/Int/String literals |
 | Pattern coverage | Nested exhaustiveness and usefulness analysis; duplicate/unreachable branches rejected |
 | Equality | Structural equality for eligible primitives, lists, tuples, records and unions |
-| Ledger access | Typed record views, transaction fields, nominal hash types |
+| Ledger access | Typed record views, transaction fields, nominal hash types, approved constructors/patterns/equality of ledger sums and records |
+| Data conversions | `Julc.Data.decode`/`encode` strict codecs and Julc optional ↔ `Maybe` adapters |
 | Java libraries | Concrete exports, generic Java templates specialized per use, and Julc's programmatic list exports |
 | Validators | `[entrypoint]` spend/mint/function, or named `[validators.<name>]` groups with spend, mint, withdraw, certify, vote and propose handlers, deployment parameters and required/optional/absent spending datums |
 | CLI | Check/build/function evaluation; `--validator` selection; pinned target/version; ABI comparison |
@@ -213,11 +214,81 @@ The `.hash` accessor explicitly exposes the underlying bytes where available.
 Ledger hash lengths follow Julc's existing model; no new length invariant is
 invented by Elci.
 
-Ledger records are currently context views. Datum/redeemer schemas accept Elci
-records/unions/lists/tuples and supported primitive or nominal hash types; imported
-ledger records and ScriptContext are rejected as user-data schemas until their
-full adapter/codec surface is verified. Complex ledger sums, maps, Value APIs and
-all transaction-wide contract patterns are not yet a complete supported surface.
+### Imported types
+
+What Elci may do with an imported type (ledger or Java) is decided by the
+operations its provider approves, never by its shape.
+
+- **Constructors and patterns.** A sum's constructors are available qualified,
+  such as `Ledger.PubKeyCredential`, or unqualified after `exposing (Credential(..))`.
+  They can build values (CONSTRUCT) and appear in exhaustive `case` patterns
+  (MATCH). A record or newtype constructor is named after the type:
+  `Ledger.TxOutRef txId 0`, `Ledger.ScriptHash key.hash`, or `Pricing.Quote 5 True`
+  for Java records, whose fields are in declaration order.
+  `import Julc.Ledger exposing (..)` exposes types only; expose constructors
+  explicitly.
+- **Fields.** Approved record fields (PROJECT) are read with `.field`.
+- **Equality.** `==` uses the provider's approved equality (EQUALS), with Java
+  `equals` semantics.
+- **Boundaries.** Named validators accept imported datum, redeemer and parameter
+  types that approve BOUNDARY, such as `TxOutRef`, `Credential` or `PubKeyHash`.
+  `[entrypoint]` projects keep the older Elci-data-only rule.
+
+```elm
+import Julc.Ledger as Ledger exposing (Credential(..), ScriptContext, TxOutRef)
+
+
+{-| A one-shot minting policy parameterized by the output it must spend. -}
+mint : TxOutRef -> Credential -> ScriptContext -> Bool
+mint seed credential ctx =
+    List.any (\input -> input.outRef == seed) ctx.txInfo.inputs
+        && (case credential of
+                PubKeyCredential _ ->
+                    True
+
+                ScriptCredential _ ->
+                    False
+           )
+```
+
+Special layouts get fewer operations. The map-encoded `Value` has none. Types that
+contain it (`TxOut`, `TxInfo`, `TxInInfo`, `ScriptContext`) keep field access and
+matching, but have no equality, strict decoding or boundary use. Complex
+ledger-wide contract patterns and `Value` arithmetic are not yet a complete
+supported surface.
+
+### Explicit Data conversions
+
+`Julc.Data` is a compiler-provided module of explicit conversions:
+
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `decode` | `Data -> a` | Julc's strict decoder for `a`; malformed Data fails the script |
+| `encode` | `a -> Data` | The Data encoding of `a` |
+| `fromOptional` | `JulcOptional a -> Maybe a` | Re-tags a Julc optional (such as a library result) as `Maybe` |
+| `toOptional` | `Maybe a -> JulcOptional a` | The reverse adapter |
+
+```elm
+import Julc.Data as Data
+import Julc.Ledger exposing (OutputDatum(..))
+
+
+inlineAmount : OutputDatum -> Maybe Int
+inlineAmount datum =
+    case datum of
+        OutputDatumInline raw ->
+            Just (Data.decode raw)
+
+        _ ->
+            Nothing
+```
+
+The converted type must be concrete where the conversion is used: annotate it
+when inference cannot tell. `decode` and `encode` work for primitives, Elci
+records and unions, lists, maps and optionals of these, and imported types
+approving DECODE_STRICT or ENCODE. Types without a checkable layout, such as
+`Value` or `TxOut`, are rejected with `ELCI3003`. Decoding never becomes a
+`Maybe` on malformed input; a failed decode fails the transaction.
 
 Strict boundary checks validate nested datum/redeemer kinds, constructor tags,
 arity and fields, even when the handler ignores those values. The ledger context
