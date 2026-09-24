@@ -235,7 +235,21 @@ A named validator writes the same four files beneath `build/validators/<name>/`:
   purpose, ledger tag, datum profile and datum/redeemer schemas, and the shared
   type definitions.
 
-Apply parameters in the listed order:
+Apply deployment parameters with `elci apply`. Each value is Plutus Data in
+cardano-cli's detailed JSON schema, given inline or as `@file`:
+
+```sh
+elci apply examples/treasury --validator badge \
+  --param 'admin={"bytes": "01000000000000000000000000000000000000000000000000000000"}'
+```
+
+Before applying them, `apply` checks every value off-chain against the
+parameter's type. It uses Julc's strict boundary program, so wrong kinds,
+constructor tags and arities are rejected. The script itself only decodes
+parameters. The result is a Julc artifact with the applied script's hash, written
+to `build/validators/<name>/applied.plutus.json`, or to `--output <file>`. The next
+build of that group removes an applied file under `build/`, because it came from
+the previous script. The same application from Java, in the listed order:
 
 ```java
 var output = ValidatorOutput.fromJson(Files.readString(

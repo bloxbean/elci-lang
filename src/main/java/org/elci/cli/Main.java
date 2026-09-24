@@ -19,6 +19,7 @@ public final class Main {
                 System.out.println("Elci "+org.elci.driver.BuildInfo.VERSION+" — Elm-syntax compiler powered by Julc\n"
                         +"Usage: elci <check|build> [project-directory] [--validator <name>]...\n"
                         +"       elci eval [project-directory]\n"
+                        +"       elci apply [project-directory] --validator <name> --param <name>=<plutus-data-json|@file> [--output <file>]\n"
                         +"       elci init <project-directory> [--purpose spend|mint|function]\n"
                         +"       elci --version\n"
                         +"An [entrypoint] build writes build/validator.flat, validator.plutus, validator.plutus.json (Julc format) and abi.json (Elci schema).\n"
@@ -26,10 +27,18 @@ public final class Main {
             }
             if(args[0].equals("--version")){System.out.println("elci "+org.elci.driver.BuildInfo.VERSION+" / julc "+ElciCompiler.JULC_VERSION);return 0;}
             if(args[0].equals("init"))return ProjectInitializer.run(Arrays.copyOfRange(args,1,args.length));
-            if(!Set.of("check","build","eval").contains(args[0]))throw new IllegalArgumentException("Expected init, check, build or eval; see --help");
-            String directory=null;var selected=new LinkedHashSet<String>();
+            if(!Set.of("check","build","eval","apply").contains(args[0]))throw new IllegalArgumentException("Expected init, check, build, eval or apply; see --help");
+            String directory=null;var selected=new LinkedHashSet<String>();var parameters=new LinkedHashMap<String,String>();Path appliedOutput=null;
             for(int i=1;i<args.length;i++) {
-                if(args[i].equals("--validator")) {
+                if(args[0].equals("apply")&&args[i].equals("--param")) {
+                    if(++i==args.length)throw new IllegalArgumentException("ELCI4001: --param requires <name>=<plutus-data-json>");
+                    int equal=args[i].indexOf('=');
+                    if(equal<1)throw new IllegalArgumentException("ELCI4001: --param requires <name>=<plutus-data-json>");
+                    if(parameters.putIfAbsent(args[i].substring(0,equal),args[i].substring(equal+1))!=null)throw new IllegalArgumentException("ELCI4001: parameter "+args[i].substring(0,equal)+" is given more than once");
+                } else if(args[0].equals("apply")&&args[i].equals("--output")) {
+                    if(++i==args.length||appliedOutput!=null)throw new IllegalArgumentException("ELCI4001: --output requires one file path");
+                    appliedOutput=Path.of(args[i]);
+                } else if(args[i].equals("--validator")) {
                     if(args[0].equals("eval"))throw new IllegalArgumentException("ELCI4001: eval does not select validators; it runs [entrypoint] purpose = \"function\" projects");
                     if(++i==args.length)throw new IllegalArgumentException("ELCI4001: --validator requires a validator name");
                     if(!selected.add(args[i]))throw new IllegalArgumentException("ELCI4001: validator "+args[i]+" is selected more than once");
@@ -38,6 +47,10 @@ public final class Main {
                 else throw new IllegalArgumentException("Expected at most one project directory; see --help");
             }
             var project=Project.read(Path.of(directory==null?".":directory));
+            if(args[0].equals("apply")) {
+                if(selected.size()>1)throw new IllegalArgumentException("ELCI4001: apply takes exactly one --validator");
+                return ParameterApplication.run(project,selected.isEmpty()?null:selected.iterator().next(),parameters,appliedOutput);
+            }
             if(project.named())return named(args[0],project,selected);
             if(!selected.isEmpty())throw new IllegalArgumentException("ELCI4001: --validator requires [validators.<name>] configuration; this project uses [entrypoint]");
             source=project.source().toString();

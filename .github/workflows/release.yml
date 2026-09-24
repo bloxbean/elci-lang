@@ -89,6 +89,9 @@ jobs:
           test -s examples/treasury/build/validators/treasury/validator.plutus.json
           test -s examples/treasury/build/validators/badge/abi.json
           build/native/elci check examples/treasury --validator badge
+          build/native/elci apply examples/treasury --validator badge \
+            --param 'admin={"bytes": "01000000000000000000000000000000000000000000000000000000"}'
+          test -s examples/treasury/build/validators/badge/applied.plutus.json
           build/native/elci init build/init-named --validator rewards --purpose withdraw
           build/native/elci build build/init-named
           test -s build/init-named/build/validators/rewards/validator.plutus.json

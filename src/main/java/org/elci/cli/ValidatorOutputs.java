@@ -21,6 +21,9 @@ import java.util.*;
 final class ValidatorOutputs {
     static final String MANIFEST = "elci-outputs.json";
     private static final List<String> FILES = List.of("validator.flat", "validator.plutus", "validator.plutus.json", "abi.json");
+    /** Files Elci may own in a group directory: the build outputs and an applied script. */
+    private static final List<String> OWNABLE = List.of("validator.flat", "validator.plutus", "validator.plutus.json",
+            "abi.json", ParameterApplication.APPLIED);
 
     /** The complete artifact set of one group, rendered in memory. */
     record Rendered(String name, Map<String, byte[]> files, int size, String hash) {}
@@ -82,7 +85,12 @@ final class ValidatorOutputs {
             throw e;
         }
         for (var pair : staged) move(pair[0], pair[1]);
-        for (var group : groups) owned.put(group.name(), FILES);
+        for (var group : groups) {
+            // Other owned files (an applied script) derive from the previous build: remove them.
+            for (String file : owned.getOrDefault(group.name(), List.of()))
+                if (!FILES.contains(file)) Files.deleteIfExists(root.resolve(group.name()).resolve(file));
+            owned.put(group.name(), FILES);
+        }
         if (all) {
             var configured = new HashSet<String>();
             groups.forEach(g -> configured.add(g.name()));
@@ -98,6 +106,25 @@ final class ValidatorOutputs {
             }
         }
         writeManifest(root, owned);
+    }
+
+    /**
+     * Write an applied script. Inside the group's output directory it is owned, so the next build
+     * of the group, which changes the unapplied script, removes it.
+     */
+    static void writeApplied(Path build, String group, Path target, String json, boolean owned) throws IOException {
+        Path parent = target.toAbsolutePath().getParent();
+        Files.createDirectories(parent);
+        Path temporary = Files.createTempFile(parent, "." + target.getFileName() + ".", ".tmp");
+        Files.writeString(temporary, json);
+        move(temporary, target);
+        if (!owned) return;
+        Path root = build.resolve("validators");
+        var manifest = readManifest(root);
+        var files = new ArrayList<>(manifest.getOrDefault(group, List.of()));
+        if (!files.contains(ParameterApplication.APPLIED)) files.add(ParameterApplication.APPLIED);
+        manifest.put(group, List.copyOf(files));
+        writeManifest(root, manifest);
     }
 
     private static void move(Path from, Path to) throws IOException {
@@ -122,7 +149,7 @@ final class ValidatorOutputs {
             var files = new ArrayList<String>();
             for (String part : matcher.group(2).split(",")) {
                 String file = part.strip().replace("\"", "");
-                if (FILES.contains(file)) files.add(file);
+                if (OWNABLE.contains(file)) files.add(file);
             }
             result.put(name, List.copyOf(files));
         }
