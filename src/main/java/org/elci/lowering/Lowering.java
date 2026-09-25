@@ -1009,7 +1009,7 @@ public final class Lowering {
         var c = (Con) prune(type);
         return switch (c.name()) {
             case "Int", "Bool", "String", "Bytes", "Data", "Unit" -> new LibraryType.Reference(c.name(), List.of());
-            case "List", "Map", "JulcOptional" ->
+            case "List", "Map", "JulcOptional", "Array" ->
                     new LibraryType.Reference(c.name(), c.args().stream().map(a -> reference(a, producerTypes)).toList());
             case "->" -> new LibraryType.Reference("Function",
                     c.args().stream().map(a -> reference(a, producerTypes)).toList());
@@ -1088,7 +1088,19 @@ public final class Lowering {
         return switch (c.name()) {
             case "Bytes" -> new PirType.ByteStringType();
             case "Data" -> new PirType.DataType();
-            case "Map" -> new PirType.MapType(pir(c.args().get(0)), pir(c.args().get(1)));
+            case "Map" -> {
+                var key = pir(c.args().get(0));
+                var value = pir(c.args().get(1));
+                requireEncodable(key);
+                requireEncodable(value);
+                yield new PirType.MapType(key, value);
+            }
+            // A PV11 array of Data-encoded elements (Julc's JulcArray); not Data itself.
+            case "Array" -> {
+                var element = pir(c.args().getFirst());
+                requireData(element);
+                yield new PirType.ArrayType(element);
+            }
             case "JulcOptional" -> new PirType.OptionalType(pir(c.args().getFirst()));
             case "Int" -> new PirType.IntegerType();
             case "Bool" -> new PirType.BoolType();
@@ -1116,11 +1128,20 @@ public final class Lowering {
         };
     }
 
-    private static void requireData(PirType type) {
+    /** Functions and arrays have no Data encoding, so no Data-encoded container can hold one. */
+    private static void requireEncodable(PirType type) {
         if (type instanceof PirType.FunType)
             throw new IllegalArgumentException(
                     "Function-valued data fields require a representation not supported by this"
                             + " profile");
+        if (type instanceof PirType.ArrayType)
+            throw new IllegalArgumentException(
+                    "Arrays have no Data encoding and cannot be stored in data; keep a List and convert it"
+                            + " with Array.fromList");
+    }
+
+    private static void requireData(PirType type) {
+        requireEncodable(type);
         if (type instanceof PirType.UnitType)
             throw new IllegalArgumentException(
                     "Unit in serialized containers is not yet supported");

@@ -7,7 +7,7 @@ package ecosystem.
 This inventory was first checked on 20 September 2026 using Julc's
 source-description boundary at `d6e716e2` and Elci `c7552e9`, with target
 `plutus-v3-pv11-uplc-1.1.0`. It was regenerated on 25 September 2026 against Julc
-`f8e9cb87`. It is a snapshot of the current implementation.
+`5a3378ba`. It is a snapshot of the current implementation.
 
 ## What “available” means here
 
@@ -19,16 +19,19 @@ Julc has its own stdlib tests. Ledger decoding, imported-type capabilities and
 function preconditions still apply.
 
 The scan found **151 compile-verified exports**, **41 unsupported signatures**
-and **9 generic templates** (`TypedMapLib`, instantiated at each use). No library is
+and **12 generic templates** (`TypedMapLib` and `TypedArrayLib`, instantiated at
+each use). No library is
 blocked at import. `ByteStringLib`, previously blocked by an overload, now
 contributes 24 exports. The six programmatic `ListsLib` exports (`map`, `filter`,
 `any`, `all`, `find`, `foldl`) are generic schemes outside this Java-source catalogue.
 
 ## Bundled Elci library
 
-`Map` (`import Map`) provides typed association maps in the style of Elm's
-`Dict`; see the [language guide](LANGUAGE.md#compiler-provided-modules). It is Elci
-source over Julc's `TypedMapLib`, which needs no `[java-modules]` entry.
+`Map` (`import Map`) provides typed association maps in the style of Elm's `Dict`.
+`Array` (`import Array`) provides constant-time indexed arrays in the style of Elm's
+`Array`. Both are described in the
+[language guide](LANGUAGE.md#compiler-provided-modules). They are Elci source over
+Julc's `TypedMapLib` and `TypedArrayLib`, which need no `[java-modules]` entry.
 
 `List` is available as a qualified module without configuration:
 
@@ -77,6 +80,7 @@ Each Java class below is under `org.julclang.stdlib.lib`. Module aliases such as
 | `OutputLib` | 14 | No rejected source exports in this scan |
 | `ValuesLib` | 24 | 11 exports use unmapped Data subtypes or `AssetEntry` |
 | `TypedMapLib` | 9 generic | Templates over typed maps; used by the core `Map` module |
+| `TypedArrayLib` | 3 generic | `fromList`, `get`, `length` over PV11 arrays; used by the core `Array` module |
 
 “Zero rejected source exports” is scoped to this compilation scan, not a claim
 that every runtime case or every Julc intrinsic is supported.

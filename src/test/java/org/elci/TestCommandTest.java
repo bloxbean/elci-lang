@@ -188,6 +188,15 @@ class TestCommandTest {
                 """);
         var polymorphic = run("test", project.toString());
         assertTrue(polymorphic.err().contains("needs concrete parameter types"), polymorphic.err());
+        Files.writeString(test, original.replace("import Bytes\n", "import Array\nimport Bytes\n") + """
+
+
+                indexes : Array Int -> Property
+                indexes values =
+                    Property.holds (Array.length values >= 0)
+                """);
+        var arrays = run("test", project.toString());
+        assertTrue(arrays.err().contains("arrays and ScriptContext cannot be generated"), arrays.err());
     }
 
     @Test

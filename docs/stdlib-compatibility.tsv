@@ -155,6 +155,9 @@ OutputLib	txOutDatum	COMPILES	Ledger.TxOut -> Ledger.OutputDatum
 OutputLib	txOutValue	COMPILES	Ledger.TxOut -> Ledger.Value
 OutputLib	uniqueOutputAt	COMPILES	(List Ledger.TxOut) -> Ledger.Address -> Ledger.TxOut
 OutputLib	valueHasToken	COMPILES	Ledger.Value -> Bytes -> Bytes -> Bool
+TypedArrayLib	fromList	GENERIC	<T>(List['T])Array['T]
+TypedArrayLib	get	GENERIC	<T>(Array['T],Int)'T
+TypedArrayLib	length	GENERIC	<T>(Array['T])Int
 TypedMapLib	empty	GENERIC	<K,V>()Map['K,'V]
 TypedMapLib	insert	GENERIC	<K,V>(Map['K,'V],'K,'V)Map['K,'V]
 TypedMapLib	isEmpty	GENERIC	<K,V>(Map['K,'V])Bool

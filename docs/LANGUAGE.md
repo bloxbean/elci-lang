@@ -25,6 +25,7 @@ separate milestones.
 | Ledger access | Typed record views, transaction fields, nominal hash types, approved constructors/patterns/equality of ledger sums and records |
 | Data conversions | `Julc.Data.decode`/`encode` strict codecs and Julc optional ↔ `Maybe` adapters |
 | Maps and bytes | Typed `Map k v` (Elm `Dict`-style) and complete byte-string builtins in `Bytes` |
+| Arrays | `Array a` with O(1) `get` and `length` (PV11 arrays, Elm `Array`-style) |
 | Java libraries | Concrete exports, generic Java templates specialized per use, and Julc's programmatic list exports |
 | Validators | Named `[validators.<name>]` groups with spend, mint, withdraw, certify, vote and propose handlers, deployment parameters and required/optional/absent spending datums; `[entrypoint]` functions for `eval` |
 | CLI | Check/build/function evaluation; `--validator` selection; `apply` parameters; `test`; pinned target/version; ABI comparison |
@@ -264,6 +265,7 @@ supported surface.
 | Module | Functions |
 | --- | --- |
 | `Map` | `empty`, `singleton`, `get`, `member`, `insert`, `remove`, `update`, `size`, `isEmpty`, `keys`, `values`, `toList`, `fromList`, `foldl`, `filter`, `map` |
+| `Array` | `empty`, `fromList`, `toList`, `toIndexedList`, `length`, `isEmpty`, `get`, `initialize`, `repeat`, `map`, `indexedMap`, `foldl`, `foldr`, `filter`, `slice` |
 | `Julc.Data` | `decode`, `encode`, `fromOptional`, `toOptional` (below) |
 | `Bytes` | see the table below |
 | `Debug` | `trace : String -> a -> a`, which emits a Plutus trace and returns its second argument |
@@ -275,6 +277,20 @@ lookups are O(n). Keys and values can be any Data-encodable type, including Elci
 records and ledger types, and `keys`, `values` and `toList` follow map order. The
 module is Elci source over Julc's `TypedMapLib` templates, so it shares the
 `JulcMap` lowering that Java validators use.
+
+**`Array a`** works like Elm's `Array`: `Array.get index array : Maybe a` is
+`Nothing` outside the array, and `slice` counts negative indexes from the end. An
+array is a Plutus V3 array (CIP-138). `fromList` builds it in O(n), and `get` and
+`length` are O(1).
+
+- **Operations:** the whole-array operations (`map`, `filter`, `foldl` and the
+  others) are O(n). There is no `set` or `push`: build a list and convert it once.
+- **Data:** an array has no Data encoding. It cannot be a datum, redeemer,
+  parameter or property argument, nor a field of a record, union, tuple, list or
+  map. Keep a `List` in data and call `Array.fromList` where many indexed reads
+  follow.
+- **Implementation:** the module is Elci source over Julc's `TypedArrayLib`, so it
+  shares the `JulcArray` lowering that Java validators use.
 
 **`Bytes`** functions are single Plutus builtins, with the byte string last so they
 compose in pipelines:

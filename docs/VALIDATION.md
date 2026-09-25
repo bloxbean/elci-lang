@@ -102,6 +102,27 @@ Rebuilding every example with the current tree and with the previous commit
 (`ba53190` on `f8e9cb8`) gives identical script bytes, results and budgets.
 ABI manifests differ only in `julcVersion`.
 
+It then moved to `5a3378ba` (`0.1.0-gb-5a3378b`, PR #198), which adds `JulcArray`
+to library signatures and the `TypedArrayLib` templates. Rebuilding every example
+against the previous branch head (`854a995` on `f97f804`) again gives identical
+script bytes, results and budgets. ABI manifests differ only in `julcVersion`.
+
+## Arrays evidence
+
+- **`ArrayTest`:**
+  - `get` with in-range, out-of-range and negative indexes;
+  - `length`, `isEmpty`, `toList`, `map`, `filter`, `foldl`, `foldr`, `slice`
+    with a negative end, `initialize`, `repeat`, `indexedMap` and
+    `toIndexedList`;
+  - record elements decoded at their type;
+  - a named validator indexing its datum list by the redeemer's tier;
+  - rejection of arrays in record fields, lists, `Julc.Data.encode` and `==`.
+- **`TestCommandTest`:** a property over an `Array` parameter is an ELCI2009 error.
+- **Stdlib inventory:** 151 compiling, 41 unsupported and 12 generic (the 3
+  `TypedArrayLib` rows are new).
+- **Native smoke test:** the native binary evaluates an array program
+  (`get`, `length`, `slice`, `foldl`) with the JVM's result.
+
 ## Maps and bytes evidence
 
 - **`MapTest`:**

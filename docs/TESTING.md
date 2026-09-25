@@ -295,9 +295,9 @@ Shrinking works toward simpler values. Integers move toward 0, lists and maps ge
 shorter, and unions move toward their earlier constructors. A recursive union
 tries its own subterms.
 
-A property's parameters must be concrete, Data-encodable types. Functions and
-`ScriptContext` cannot be generated, so a property over them is a compile error
-(ELCI2009).
+A property's parameters must be concrete, Data-encodable types. Functions, arrays
+and `ScriptContext` cannot be generated, so a property over them is a compile error
+(ELCI2009). To test arrays, take a `List` and convert it with `Array.fromList`.
 
 Generation and shrinking come from julc-testkit's `DataGenerators` and
 `PropertyCheck`. They are seeded and use no reflection, so the native `elci`

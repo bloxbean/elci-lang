@@ -9,12 +9,13 @@ import java.util.*;
 /** Resolve a source graph to stable module-qualified symbols before inference. */
 public final class Modules {
     /** Core modules written in Elci and bundled with the compiler. */
-    public static final List<String> CORE_MODULES = List.of("List", "Map");
+    public static final List<String> CORE_MODULES = List.of("List", "Map", "Array");
     /**
      * Library modules the core modules import, mapped without project configuration: Julc's
      * typed map templates back {@code Map}.
      */
-    public static final Map<String, String> CORE_LIBRARIES = Map.of("Julc.TypedMap", "org.julclang.stdlib.lib.TypedMapLib");
+    public static final Map<String, String> CORE_LIBRARIES = Map.of("Julc.TypedMap", "org.julclang.stdlib.lib.TypedMapLib",
+            "Julc.TypedArray", "org.julclang.stdlib.lib.TypedArrayLib");
 
     /** Project library mappings plus the core ones; a project may not remap a core alias. */
     public static Map<String, String> withCoreLibraries(Map<String, String> javaModules) {
@@ -468,7 +469,7 @@ public final class Modules {
                     name = entry.getValue() + t.name().substring(entry.getKey().length());
         if (name == null) {
             if (t.name().startsWith("Record:")
-                    || Set.of("Int", "Bool", "String", "Unit", "Bytes", "Data", "Map", "JulcOptional", "List", "Maybe", "Tuple", "->")
+                    || Set.of("Int", "Bool", "String", "Unit", "Bytes", "Data", "Map", "Array", "JulcOptional", "List", "Maybe", "Tuple", "->")
                             .contains(t.name())
                     || !t.name().contains(".") && Character.isLowerCase(t.name().charAt(0)))
                 name = t.name();

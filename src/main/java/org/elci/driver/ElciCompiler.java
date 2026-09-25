@@ -160,7 +160,7 @@ public final class ElciCompiler {
             if(!Types.concrete(type))
                 throw new Diagnostic("ELCI2009",declaration.token(),"Property "+declaration.name()+" needs concrete parameter types; add a type annotation");
             if(!parameters.stream().allMatch(ElciCompiler::generatable))
-                throw new Diagnostic("ELCI2009",declaration.token(),"Property "+declaration.name()+" needs Data-encodable parameters to generate; functions and ScriptContext cannot be generated");
+                throw new Diagnostic("ELCI2009",declaration.token(),"Property "+declaration.name()+" needs Data-encodable parameters to generate; functions, arrays and ScriptContext cannot be generated (take a List and use Array.fromList)");
             var lowering=new Lowering(resolved.declarations(),inference,frontend.importedSymbols(),frontend.schemes(),frontend.libraries(),Lowering.ImportMode.INLINE);
             PirTerm pir;
             PirType programType=lowering.pir(result);
@@ -182,7 +182,7 @@ public final class ElciCompiler {
     /** Whether values of {@code type} can be generated as Data: no functions and no ledger context. */
     private static boolean generatable(Ty type) {
         var c=(Con)prune(type);
-        if(c.name().equals("->")||c.name().equals("ScriptContext")||c.name().equals("org.julclang.ledger.ScriptContext"))return false;
+        if(Set.of("->","Array","ScriptContext","org.julclang.ledger.ScriptContext").contains(c.name()))return false;
         return c.args().stream().allMatch(ElciCompiler::generatable);
     }
 

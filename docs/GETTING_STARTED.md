@@ -6,12 +6,13 @@ Use Java 25 and the checked-in Gradle wrapper. Building a native executable also
 requires GraalVM Native Image and the platform C toolchain.
 
 This development build depends on the Julc revision named by `julcVersion` and
-`julcRevision` in `gradle.properties`. It is currently **`0.1.0-gb-f97f804`**, Julc
-commit `f97f8042`, which contains:
+`julcRevision` in `gradle.properties`. It is currently **`0.1.0-gb-5a3378b`**, Julc
+commit `5a3378ba`, which contains:
 
 - the generic-backend revision-2 stack with PR #195;
 - the typed-map and byte-string follow-up (#196);
-- the testkit's property generators (#197).
+- the testkit's property generators (#197);
+- `JulcArray` in library signatures and typed array templates (#198).
 
 Publish it locally from a Julc checkout at that commit. Maven Central's existing Julc release does not contain
 this experimental frontend boundary.
@@ -99,7 +100,7 @@ Elm source:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-f97f804"
+julc-version = "0.1.0-gb-5a3378b"
 
 [validators.threshold]
 boundary = "julc-strict-v1"
@@ -139,7 +140,7 @@ and the ledger purpose selects the handler to run:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-f97f804"
+julc-version = "0.1.0-gb-5a3378b"
 
 # One script: spends payouts and withdraws the address's staking rewards.
 [validators.treasury]
