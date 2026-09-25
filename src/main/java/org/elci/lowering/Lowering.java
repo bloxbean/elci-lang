@@ -83,6 +83,24 @@ public final class Lowering {
     }
 
     /**
+     * A closed property entry (ADR-006): {@code \d1 .. dn -> entry (decode d1) .. (decode dn)}.
+     * Each argument arrives as Data and is decoded by Julc's strict decoder for its parameter
+     * type, so generated values reach the property exactly as the ledger's would.
+     */
+    public PirTerm lowerProperty(String entry, Ty type, List<Ty> parameters, Token token) {
+        PirTerm body = reference(entry, type);
+        var names = new ArrayList<String>();
+        for (var parameter : parameters) {
+            String name = fresh("argument");
+            names.add(name);
+            var decode = codec(parameter, LibraryRequest.Codec.Direction.DECODE_STRICT, token);
+            body = new PirTerm.App(body, new PirTerm.App(decode, new PirTerm.Var(name, new PirType.DataType())));
+        }
+        for (int i = names.size() - 1; i >= 0; i--) body = new PirTerm.Lam(names.get(i), new PirType.DataType(), body);
+        return PirLinker.link(specialized, body);
+    }
+
+    /**
      * Specialize {@code entry} at {@code type} as a program-level definition and return a
      * reference to it. The definition and its dependencies are available from
      * {@link #definitions()}.
@@ -357,7 +375,9 @@ public final class Lowering {
                                     bool(false),
                                     bool(true)));
                 }
-                if (n.name().equals("remainderBy")) {
+                if (n.name().equals("remainderBy") || n.name().equals("modBy")) {
+                    // remainderBy takes the dividend's sign, modBy the divisor's (as in Elm).
+                    var fun = n.name().equals("modBy") ? DefaultFun.ModInteger : DefaultFun.RemainderInteger;
                     String a = fresh("divisor"), b = fresh("value");
                     yield new PirTerm.Lam(
                             a,
@@ -366,7 +386,7 @@ public final class Lowering {
                                     b,
                                     new PirType.IntegerType(),
                                     call(
-                                            DefaultFun.RemainderInteger,
+                                            fun,
                                             new PirTerm.Var(b, new PirType.IntegerType()),
                                             new PirTerm.Var(a, new PirType.IntegerType()))));
                 }

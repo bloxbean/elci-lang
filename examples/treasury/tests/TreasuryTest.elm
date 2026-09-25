@@ -4,6 +4,7 @@ import Bytes
 import Expect exposing (Expectation)
 import Julc.Data as Data
 import Julc.Ledger exposing (PubKeyHash)
+import Property exposing (Property)
 import Scenario exposing (Scenario)
 import Treasury exposing (Action(..), Payout)
 
@@ -92,3 +93,33 @@ keysAreDistinct =
 payoutsRoundTripThroughData : Expectation
 payoutsRoundTripThroughData =
     Expect.equal payout (Data.decode (Data.encode payout))
+
+
+{-| Properties run with generated arguments; a failure shrinks to a small counterexample.
+-}
+payoutsAlwaysRoundTrip : Payout -> Property
+payoutsAlwaysRoundTrip generated =
+    Property.expect (Expect.equal generated (Data.decode (Data.encode generated)))
+
+
+onlyTheBeneficiaryReleases : PubKeyHash -> Property
+onlyTheBeneficiaryReleases signer =
+    let
+        release =
+            claim Release
+                |> Scenario.signedBy signer
+    in
+    if signer == beneficiary then
+        Property.scenario release
+
+    else
+        Property.scenario (Scenario.expectFailure release)
+
+
+badgesNeedAPositiveQuantity : Int -> Property
+badgesNeedAPositiveQuantity quantity =
+    if quantity > 0 then
+        Property.scenario (badge quantity)
+
+    else
+        Property.scenario (Scenario.expectFailure (badge quantity))

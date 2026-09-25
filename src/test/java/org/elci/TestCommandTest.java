@@ -43,14 +43,18 @@ class TestCommandTest {
         assertTrue(result.out().contains("PASS TreasuryTest.beneficiaryReleases (cpu "), result.out());
         assertTrue(result.out().contains("PASS TreasuryTest.zeroBadgesAreRejected"), result.out());
         assertTrue(result.out().contains("PASS TreasuryTest.payoutsRoundTripThroughData"), result.out());
-        assertTrue(result.out().contains("9 passed, 0 failed"), result.out());
-        // Helpers and imported library declarations are not tests.
+        assertTrue(result.out().contains("PASS TreasuryTest.onlyTheBeneficiaryReleases (100 runs, max cpu "), result.out());
+        assertTrue(result.out().contains("PASS TreasuryTest.payoutsAlwaysRoundTrip (100 runs"), result.out());
+        assertTrue(result.out().contains("12 passed, 0 failed (seed "), result.out());
+        // Helpers, including functions returning test types, and library declarations are not tests.
         assertFalse(result.out().contains("TreasuryTest.admin "), result.out());
+        assertFalse(result.out().contains("TreasuryTest.claim "), result.out());
+        assertFalse(result.out().contains("TreasuryTest.badge "), result.out());
         assertFalse(result.out().contains("Expect."), result.out());
         // Tests never touch build artifacts.
         assertFalse(Files.exists(project.resolve("build")));
         var selected = run("test", project.toString(), "--match", "BADGE");
-        assertTrue(selected.out().contains("2 passed, 0 failed"), selected.out());
+        assertTrue(selected.out().contains("3 passed, 0 failed"), selected.out());
     }
 
     @Test
@@ -95,7 +99,7 @@ class TestCommandTest {
         assertTrue(out.contains("FAIL TreasuryTest.tooExpensive") && out.contains("Budget exceeded"), out);
         assertTrue(out.contains("trace: checking the impossible"), out);
         assertTrue(out.contains("FAIL TreasuryTest.crashes") && out.contains("evaluation failed"), out);
-        assertTrue(out.contains("9 passed, 5 failed"), out);
+        assertTrue(out.contains("12 passed, 5 failed"), out);
     }
 
     @Test
@@ -103,7 +107,87 @@ class TestCommandTest {
         copy("vesting");
         var result = run("test", project.toString());
         assertEquals(0, result.status(), result.out() + result.err());
-        assertTrue(result.out().contains("4 passed, 0 failed"), result.out());
+        assertTrue(result.out().contains("5 passed, 0 failed"), result.out());
+    }
+
+    @Test
+    void propertiesShrinkToCounterexamplesAndReproduceFromTheSeed() throws Exception {
+        copy("treasury");
+        var test = project.resolve("tests/TreasuryTest.elm");
+        Files.writeString(test, Files.readString(test) + """
+
+
+                amountsStaySmall : Int -> Property
+                amountsStaySmall amount =
+                    Property.holds (amount < 100)
+
+
+                debtsStaySmall : Int -> Property
+                debtsStaySmall debt =
+                    Property.holds (debt > -5)
+
+
+                payoutsStaySmall : Payout -> Maybe Int -> Property
+                payoutsStaySmall generated extra =
+                    Property.holds (generated.amount < 50 || extra == Nothing)
+
+
+                totalsStaySmall : List Int -> Property
+                totalsStaySmall amounts =
+                    Property.expect (Expect.atMost 10 (List.foldl (\\a total -> a + total) 0 amounts))
+
+
+                strangersRelease : PubKeyHash -> Property
+                strangersRelease signer =
+                    Property.scenario (claim Release |> Scenario.signedBy signer)
+                """);
+        var first = run("test", project.toString(), "--seed", "3", "--match", "Small");
+        assertEquals(1, first.status());
+        String out = first.out();
+        // Each failure is shrunk to the smallest value that still fails, shown in Elci syntax.
+        assertTrue(out.contains("FAIL TreasuryTest.amountsStaySmall ("), out);
+        assertTrue(out.contains("        amountsStaySmall 100\n    the property does not hold"), out);
+        assertTrue(out.contains("        debtsStaySmall (-5)\n"), out);
+        assertTrue(out.contains("        payoutsStaySmall { amount = 50, beneficiary = #(empty) } (Just 0)\n"), out);
+        assertTrue(out.contains("counterexample after ") && out.contains(", shrunk "), out);
+        assertTrue(out.contains("Expect.atMost"), out);
+        assertTrue(out.contains("0 passed, 4 failed (seed 3)"), out);
+        // The seed reproduces the run exactly.
+        assertEquals(out, run("test", project.toString(), "--seed", "3", "--match", "Small").out());
+        // Scenario properties report the validator's rejection.
+        var strangers = run("test", project.toString(), "--seed", "3", "--match", "strangers", "--fuzz", "7");
+        assertTrue(strangers.out().contains("FAIL TreasuryTest.strangersRelease (1 run, cpu "), strangers.out());
+        assertTrue(strangers.out().contains("rejected the transaction"), strangers.out());
+        var runs = run("test", project.toString(), "--match", "roundTrip", "--fuzz", "7");
+        assertTrue(runs.out().contains("PASS TreasuryTest.payoutsAlwaysRoundTrip (7 runs"), runs.out());
+        assertEquals(1, run("test", project.toString(), "--fuzz", "0").status());
+        assertTrue(run("test", project.toString(), "--seed", "x").err().contains("--seed expects an integer"));
+    }
+
+    @Test
+    void propertiesNeedGeneratableConcreteParameters() throws Exception {
+        copy("treasury");
+        var test = project.resolve("tests/TreasuryTest.elm");
+        var original = Files.readString(test);
+        Files.writeString(test, original + """
+
+
+                applies : (Int -> Int) -> Property
+                applies f =
+                    Property.holds (f 1 == 1)
+                """);
+        var functions = run("test", project.toString());
+        assertEquals(1, functions.status());
+        assertTrue(functions.err().contains("ELCI2009") && functions.err().contains("Data-encodable parameters"), functions.err());
+        Files.writeString(test, original + """
+
+
+                anything : a -> Property
+                anything _ =
+                    Property.holds True
+                """);
+        var polymorphic = run("test", project.toString());
+        assertTrue(polymorphic.err().contains("needs concrete parameter types"), polymorphic.err());
     }
 
     @Test
@@ -136,7 +220,7 @@ class TestCommandTest {
         var missing = run("test", project.toString());
         assertEquals(1, missing.status());
         assertTrue(missing.out().contains("no [validators.nothing]"), missing.out());
-        assertTrue(missing.out().contains("9 passed, 1 failed"), missing.out());
+        assertTrue(missing.out().contains("12 passed, 1 failed"), missing.out());
     }
 
     @Test

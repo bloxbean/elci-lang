@@ -14,6 +14,9 @@ dependencies {
     implementation 'com.bloxbean.cardano:cardano-client-lib:0.7.2'
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    // JVM property tests over Elci validators (ADR-006): jqwik with Julc's schema-driven arbitraries.
+    testImplementation "org.julclang:julc-testkit-jqwik:${julcVersion}"
+    testImplementation 'net.jqwik:jqwik:1.9.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 application { mainClass = 'org.elci.cli.Main'; applicationName = 'elci' }

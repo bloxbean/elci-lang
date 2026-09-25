@@ -3,6 +3,7 @@ package org.elci.testkit;
 import org.elci.cli.Project;
 import org.elci.driver.ElciCompiler;
 import org.julclang.compiler.CompilerOptions;
+import org.julclang.compiler.backend.ValidatorAbi;
 import org.julclang.core.PlutusData;
 import org.julclang.core.Program;
 
@@ -27,15 +28,35 @@ public final class ElciTestkit {
 
     /** A project's named validator with its deployment parameters applied, in declared order. */
     public static Program validator(Path project, String name, PlutusData... parameters) throws IOException {
+        var build = build(project, name);
+        if (build.parameters().size() != parameters.length)
+            throw new IllegalArgumentException("Validator " + name + " takes " + build.parameters().size()
+                    + " parameter(s) " + build.parameters().stream().map(ElciCompiler.ParameterInfo::name).toList()
+                    + ", not " + parameters.length);
+        return parameters.length == 0 ? build.program() : build.program().applyParams(parameters);
+    }
+
+    /**
+     * A named validator's ABI: its parameter, datum and redeemer types. With julc-testkit-jqwik's
+     * {@code SchemaArbitraries} it generates valid datums, redeemers and parameters for JVM
+     * property tests:
+     * <pre>{@code
+     * @Provide
+     * Arbitrary<PlutusData> payouts() throws IOException {
+     *     return SchemaArbitraries.datum(ElciTestkit.abi(Path.of("examples/treasury"), "treasury"));
+     * }
+     * }</pre>
+     */
+    public static ValidatorAbi abi(Path project, String name) throws IOException {
+        return build(project, name).result().abi();
+    }
+
+    private static ElciCompiler.ValidatorBuild build(Path project, String name) throws IOException {
         var configuration = Project.read(project);
         var group = configuration.validators().stream().filter(v -> v.name().equals(name)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("No [validators." + name + "] in " + project));
-        if (group.parameters().size() != parameters.length)
-            throw new IllegalArgumentException("Validator " + name + " takes " + group.parameters().size()
-                    + " parameter(s) " + group.parameters() + ", not " + parameters.length);
-        var program = new ElciCompiler().compileValidator(configuration.sources(), group.spec(),
-                configuration.javaModules(), new CompilerOptions(), configuration.librarySources()).program();
-        return parameters.length == 0 ? program : program.applyParams(parameters);
+        return new ElciCompiler().compileValidator(configuration.sources(), group.spec(),
+                configuration.javaModules(), new CompilerOptions(), configuration.librarySources());
     }
 
     /** A project's {@code [entrypoint]} function, as {@code elci eval} runs it. */

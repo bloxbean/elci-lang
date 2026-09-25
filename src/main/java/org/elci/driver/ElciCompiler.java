@@ -110,16 +110,36 @@ public final class ElciCompiler {
         return new Result(backend.program(),module.name(),function,entryType,options.getTarget(),frontendProgram.type(),frontendProgram.namedTypes());
     }
 
-    /** A zero-argument exposed declaration of a module, with its inferred type. */
-    public record Value(String name,Ty type,Token token) {}
+    /**
+     * An exposed test declaration and its inferred type: a value, or a property over
+     * {@code parameters} whose generated arguments have the Data representations {@code arguments}.
+     */
+    public record Value(String name,Ty type,Token token,List<Ty> parameters,List<PirType> arguments) {
+        public Value {parameters=List.copyOf(parameters);arguments=List.copyOf(arguments);}
+        public Value(String name,Ty type,Token token) {this(name,type,token,List.of(),List.of());}
+        public boolean property() {return !parameters.isEmpty();}
+    }
 
     /**
      * Type-check {@code module} once and compile each exposed, zero-argument declaration that
      * {@code select} accepts into its own function program, as an {@code [entrypoint]} with
-     * {@code purpose = "function"} would be compiled. Used by {@code elci test}, where every test
-     * must run in isolation.
+     * {@code purpose = "function"} would be compiled.
      */
     public Map<Value,Result> compileValues(Map<String,String> sources,String module,java.util.function.Predicate<Ty> select,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
+        return compileExposed(sources,module,select,null,javaModules,options,librarySources);
+    }
+
+    /**
+     * {@link #compileValues}, plus properties (ADR-006): exposed functions whose result
+     * {@code properties} accepts and whose parameters are Data-encodable. Each compiles to a
+     * program taking every argument as Data, decoded strictly; its {@link Result} describes the
+     * result. Used by {@code elci test}, where every test must run in isolation.
+     */
+    public Map<Value,Result> compileTests(Map<String,String> sources,String module,java.util.function.Predicate<Ty> values,java.util.function.Predicate<Ty> properties,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
+        return compileExposed(sources,module,values,Objects.requireNonNull(properties),javaModules,options,librarySources);
+    }
+
+    private Map<Value,Result> compileExposed(Map<String,String> sources,String module,java.util.function.Predicate<Ty> select,java.util.function.Predicate<Ty> properties,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
         javaModules=org.elci.modules.Modules.withCoreLibraries(javaModules);
         var modules=new org.elci.modules.Modules(sources,javaModules);
         var java=javaProvider(modules,List.of(module),options,librarySources);
@@ -129,19 +149,41 @@ public final class ElciCompiler {
         var results=new LinkedHashMap<Value,Result>();
         for(var declaration:resolved.declarations()) {
             // Only the root module's own declarations; imported ones are module-qualified.
-            if(!declaration.parameters().isEmpty()||declaration.name().contains("."))continue;
+            if(declaration.name().contains(".")||properties==null&&!declaration.parameters().isEmpty())continue;
             if(!resolved.exposing().contains(declaration.name())&&!resolved.exposing().contains(".."))continue;
             Ty type=prune(inference.globals.get(declaration.name()).body());
-            if(!Types.concrete(type)||!select.test(type))continue;
+            var parameters=new ArrayList<Ty>();
+            Ty result=type;
+            if(properties!=null)
+                while(result instanceof Con arrow&&arrow.name().equals("->")) {parameters.add(prune(arrow.args().get(0)));result=prune(arrow.args().get(1));}
+            if(parameters.isEmpty()?!Types.concrete(type)||!select.test(result):!properties.test(result))continue;
+            if(!Types.concrete(type))
+                throw new Diagnostic("ELCI2009",declaration.token(),"Property "+declaration.name()+" needs concrete parameter types; add a type annotation");
+            if(!parameters.stream().allMatch(ElciCompiler::generatable))
+                throw new Diagnostic("ELCI2009",declaration.token(),"Property "+declaration.name()+" needs Data-encodable parameters to generate; functions and ScriptContext cannot be generated");
             var lowering=new Lowering(resolved.declarations(),inference,frontend.importedSymbols(),frontend.schemes(),frontend.libraries(),Lowering.ImportMode.INLINE);
-            var pir=lowering.lower(declaration.name(),type);
-            var program=new FrontendProgram(pir,lowering.pir(type),options.getTarget(),new FrontendProgram.Entrypoint(module+"."+declaration.name(),FrontendProgram.Purpose.FUNCTION,"julc-strict-v1"),lowering.namedTypes());
+            PirTerm pir;
+            PirType programType=lowering.pir(result);
+            var arguments=new ArrayList<PirType>();
+            if(parameters.isEmpty())pir=lowering.lower(declaration.name(),type);
+            else {
+                pir=lowering.lowerProperty(declaration.name(),type,parameters,declaration.token());
+                for(var parameter:parameters) {arguments.add(lowering.pir(parameter));programType=new PirType.FunType(new PirType.DataType(),programType);}
+            }
+            var program=new FrontendProgram(pir,programType,options.getTarget(),new FrontendProgram.Entrypoint(module+"."+declaration.name(),FrontendProgram.Purpose.FUNCTION,"julc-strict-v1"),lowering.namedTypes());
             PirBackend.Result backend;
             try {backend=new CompilerBackend().compile(program,options);}
             catch(BackendException e){var byName=new HashMap<String,Ast.Decl>();resolved.declarations().forEach(d->byName.put(d.name(),d));throw located(e,byName,declaration.token());}
-            results.put(new Value(declaration.name(),type,declaration.token()),new Result(backend.program(),module,declaration.name(),type,options.getTarget(),program.type(),program.namedTypes()));
+            results.put(new Value(declaration.name(),type,declaration.token(),parameters,arguments),new Result(backend.program(),module,declaration.name(),result,options.getTarget(),lowering.pir(result),program.namedTypes()));
         }
         return results;
+    }
+
+    /** Whether values of {@code type} can be generated as Data: no functions and no ledger context. */
+    private static boolean generatable(Ty type) {
+        var c=(Con)prune(type);
+        if(c.name().equals("->")||c.name().equals("ScriptContext")||c.name().equals("org.julclang.ledger.ScriptContext"))return false;
+        return c.args().stream().allMatch(ElciCompiler::generatable);
     }
 
     /**
@@ -334,6 +376,7 @@ public final class ElciCompiler {
         var importedTypes=new LinkedHashMap<String,Ty>();var importedSymbols=new LinkedHashMap<String,String>();
         importedTypes.put("not",fn(con("Bool"),con("Bool")));
         importedTypes.put("remainderBy",fn(con("Int"),fn(con("Int"),con("Int"))));
+        importedTypes.put("modBy",fn(con("Int"),fn(con("Int"),con("Int"))));
         intrinsics(importedTypes);
         var ledger=new LedgerTypeProvider();var ledgerAliases=new LinkedHashMap<String,String>();
         for(var imp:module.imports()) {

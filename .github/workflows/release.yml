@@ -72,7 +72,7 @@ jobs:
             :julc-ledger-api:publishToMavenLocal :julc-compiler:publishToMavenLocal \
             :julc-stdlib:publishToMavenLocal :julc-bls:publishToMavenLocal \
             :julc-vm-java:publishToMavenLocal :julc-cardano-client-lib:publishToMavenLocal \
-            :julc-testkit:publishToMavenLocal
+            :julc-testkit:publishToMavenLocal :julc-testkit-jqwik:publishToMavenLocal
       - name: Test and build native CLI
         run: ./gradlew --no-daemon test nativeCompile
       - name: Smoke test native CLI

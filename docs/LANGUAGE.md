@@ -28,7 +28,7 @@ separate milestones.
 | Java libraries | Concrete exports, generic Java templates specialized per use, and Julc's programmatic list exports |
 | Validators | Named `[validators.<name>]` groups with spend, mint, withdraw, certify, vote and propose handlers, deployment parameters and required/optional/absent spending datums; `[entrypoint]` functions for `eval` |
 | CLI | Check/build/function evaluation; `--validator` selection; `apply` parameters; `test`; pinned target/version; ABI comparison |
-| Testing | `elci test`: `Bool`/`Expect` unit tests and transaction scenarios on the deployed scripts ([Testing](TESTING.md)) |
+| Testing | `elci test`: `Bool`/`Expect` unit tests, transaction scenarios on the deployed scripts and property tests with shrinking ([Testing](TESTING.md)) |
 | Native image | GraalVM executable with bundled source and reflection resources |
 
 Intentionally outside this profile: row polymorphism and extensible records,
@@ -75,8 +75,8 @@ use; Elci adds no constraint syntax.
 ## Arithmetic and control flow
 
 `Int` is arbitrary precision. `+`, `-`, and `*` are exact; `//` truncates toward
-zero. `remainderBy divisor value` uses the dividend's sign. Division/remainder by
-zero fail evaluation. `/` and Float literals are rejected.
+zero. `remainderBy divisor value` uses the dividend's sign and `modBy divisor value`
+the divisor's, as in Elm. Division, remainder and modulus by zero fail evaluation. `/` and Float literals are rejected.
 
 `if`, `&&`, `||`, and `case` evaluate only the selected branch. Local values are
 strict even when unused: a failing or diverging unused binding cannot be removed.

@@ -18,6 +18,8 @@ build/native/elci check examples/threshold
 build/native/elci build examples/threshold
 build/native/elci eval examples/functional
 build/native/elci eval examples/core-completion
+build/native/elci test examples/treasury --seed 42
+build/native/elci test examples/vesting --fuzz 300
 ```
 
 The Java test suite covers parsing and diagnostics, inference, generic
@@ -87,13 +89,42 @@ The pin then moved to Julc `97e168c6` (`0.1.0-gb-97e168c`), which adds PR #195
 (producer-owned generic type arguments) on top of #192. Every example keeps
 identical script bytes; ABI manifests differ only in `julcVersion`.
 
+It then moved to Julc `f8e9cb87` (`0.1.0-gb-f8e9cb8`, PR #196), which adds the
+following:
+
+- typed map templates (`TypedMapLib`);
+- identical library overloads, which make `ByteStringLib` importable;
+- an order-preserving `JulcMap.keys()`/`values()`.
+
+It then moved to `f97f8042` (`0.1.0-gb-f97f804`, PR #197), which adds julc-testkit's
+schema-driven generators and property checks. PR #197 changes only the testkit.
+Rebuilding every example with the current tree and with the previous commit
+(`ba53190` on `f8e9cb8`) gives identical script bytes, results and budgets.
+ABI manifests differ only in `julcVersion`.
+
+## Maps and bytes evidence
+
+- **`MapTest`:**
+  - dictionary operations;
+  - keys, values and `toList` in insertion order without duplicates;
+  - record values and `PubKeyHash` keys inside a named validator;
+  - the rejected remap of the core `Julc.TypedMap` alias;
+  - `Julc.ByteString` imports.
+- **`IntrinsicsTest.byteStringCompleteness`:** every added `Bytes` function
+  evaluates to its builtin's result.
+- **`ImportedTypeTest.libraryValuesAreEvaluatedAtScriptStartLikeTopLevelValues`:**
+  records the linking semantics of library values in validators.
+- **Stdlib inventory:** 151 compiling, 41 unsupported, 9 generic (`TypedMapLib`)
+  and 0 blocked.
+
 ## Source-level testing evidence (ADR-006)
 
 `elci test` is exercised by `TestCommandTest`, `IntrinsicsTest` and `InitTest`:
 
-- The treasury example has 9 tests: scenarios for both validators across all their
-  roles, and `Bool` and `Expectation` unit tests. The vesting example's 4
-  scenarios check validity ranges and signatures.
+- The treasury example has 9 unit and scenario tests: scenarios for both validators
+  across all their roles, and `Bool` and `Expectation` unit tests. The vesting
+  example's 4 scenarios check validity ranges and signatures. Property tests, added
+  later, are listed below.
 - Failures show `Expect.equal` values, a rejected transaction, a budget ceiling
   broken through julc-testkit's `BudgetAssertions`, `Debug.trace` output and
   runtime errors, each without aborting other tests.
@@ -103,6 +134,31 @@ identical script bytes; ABI manifests differ only in `julcVersion`.
   applied hashes equal those of the published artifacts.
 - `elci init --validator` projects pass their generated scenarios for all six
   purposes.
+
+## Property test evidence (ADR-006 amendment)
+
+- **`TestCommandTest.propertiesShrinkToCounterexamplesAndReproduceFromTheSeed`:**
+  - false properties shrink to their minimal counterexamples, shown in Elci syntax:
+    `amountsStaySmall 100`, `debtsStaySmall (-5)` and
+    `payoutsStaySmall { amount = 50, beneficiary = #(empty) } (Just 0)`;
+  - an `Expectation` property reports its `Expect.atMost` values;
+  - a scenario property reports the validator's rejection;
+  - `--seed` reproduces identical output and `--fuzz` sets the run count;
+  - invalid option values are rejected.
+- **`TestCommandTest.propertiesNeedGeneratableConcreteParameters`:** function and
+  polymorphic parameters are ELCI2009 errors.
+- **`TestCommandTest.runsScenariosExpectationsAndBooleansWithBudgets`:** the helper
+  functions `claim` and `badge`, which return `Scenario`, are not run as properties.
+- **`JvmPropertyTest`:** jqwik with Julc's `SchemaArbitraries` over the treasury ABI,
+  checking that unsigned spends are always rejected and that the beneficiary
+  releases exactly the positive payouts.
+- **`IntrinsicsTest.modByTakesTheDivisorsSignAndRemainderByTheDividends`:** covers
+  `modBy`.
+- **Examples:** the treasury example has 12 tests, including 3 properties. The
+  vesting example has 5, including a validity-range property.
+- **Native smoke test:** the native binary runs both example suites and a failing
+  property with the same counterexample as the JVM. The treasury suite, with 300
+  scenario runs, completes in under a second.
 
 ## Review gates
 

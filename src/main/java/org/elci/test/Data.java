@@ -26,6 +26,68 @@ final class Data {
         };
     }
 
+    /**
+     * A value in Elci syntax, read through its Data representation: {@code True},
+     * {@code Just 5}, {@code { amount = 5, owner = #ab }}, {@code ( 1, "a" )} and
+     * {@code Map.fromList [ ( k, v ) ]}. Byte strings are {@code #hex}. {@code nested} wraps an
+     * application or a negative number in parentheses, as an argument needs.
+     */
+    static String show(PlutusData data, PirType type, Map<String, PirType> namedTypes, boolean nested) {
+        try {
+            return render(data, type, namedTypes, nested);
+        } catch (RuntimeException e) {
+            return show(data);
+        }
+    }
+
+    private static String render(PlutusData data, PirType type, Map<String, PirType> named, boolean nested) {
+        return switch (type) {
+            case PirType.IntegerType _ -> {
+                var value = integer(data);
+                yield nested && value.signum() < 0 ? "(" + value + ")" : value.toString();
+            }
+            case PirType.ByteStringType _ -> bytes(data).length == 0 ? "#(empty)" : show(data);
+            case PirType.StringType _ -> "\"" + string(data).replace("\\", "\\\\").replace("\"", "\\\"")
+                    .replace("\n", "\\n") + "\"";
+            case PirType.BoolType _ -> constr(data, -1).tag() == 1 ? "True" : "False";
+            case PirType.UnitType _ -> "()";
+            case PirType.ListType list -> "[" + String.join(", ", list(data).stream()
+                    .map(item -> render(item, list.elemType(), named, false)).toList()) + "]";
+            case PirType.MapType map -> parenthesize(nested, "Map.fromList [" + String.join(", ",
+                    ((PlutusData.MapData) data).entries().stream().map(entry -> "( " + render(entry.key(), map.keyType(), named, false)
+                            + ", " + render(entry.value(), map.valueType(), named, false) + " )").toList()) + "]");
+            case PirType.OptionalType optional -> {
+                var c = constr(data, -1);
+                yield c.tag() == 1 ? "None" : parenthesize(nested, "Some " + render(c.fields().getFirst(), optional.elemType(), named, true));
+            }
+            case PirType.RecordType record -> {
+                var fields = constr(data, 0).fields();
+                var shown = new java.util.ArrayList<String>();
+                boolean tuple = record.name().startsWith("elci.Tuple");
+                for (int i = 0; i < record.fields().size(); i++) {
+                    String value = render(fields.get(i), record.fields().get(i).type(), named, false);
+                    shown.add(tuple ? value : record.fields().get(i).name() + " = " + value);
+                }
+                yield shown.isEmpty() ? (tuple ? "()" : "{}")
+                        : tuple ? "( " + String.join(", ", shown) + " )" : "{ " + String.join(", ", shown) + " }";
+            }
+            case PirType.SumType sum -> {
+                var c = constr(data, -1);
+                var constructor = sum.constructors().stream().filter(k -> k.tag() == c.tag()).findFirst().orElseThrow();
+                var text = new StringBuilder(constructor.name());
+                for (int i = 0; i < constructor.fields().size(); i++)
+                    text.append(' ').append(render(c.fields().get(i), constructor.fields().get(i).type(), named, true));
+                yield constructor.fields().isEmpty() ? text.toString() : parenthesize(nested, text.toString());
+            }
+            case PirType.NamedTypeRef ref -> render(data, named.get(ref.stableId()), named, nested);
+            default -> show(data);
+        };
+    }
+
+    private static String parenthesize(boolean nested, String text) {
+        return nested ? "(" + text + ")" : text;
+    }
+
     /** The fields of an Elci record by name; records encode fields in name order. */
     static Map<String, PlutusData> record(PlutusData data, PirType type) {
         if (!(type instanceof PirType.RecordType record))

@@ -51,7 +51,7 @@ blueprint generation is not implemented yet.
 
 - [Release workflow](docs/RELEASING.md): versioning, native binaries and GitHub Releases.
 - [Getting started](docs/GETTING_STARTED.md): build, first project, JVM/native CLI.
-- [Testing](docs/TESTING.md): `elci test`, expectations, transaction scenarios and JUnit.
+- [Testing](docs/TESTING.md): `elci test`, expectations, transaction scenarios, property tests and JUnit.
 - [Standard library guide](docs/STDLIB.md): verified Java exports, limitations and writing Elci libraries.
 - [Language guide](docs/LANGUAGE.md): syntax, semantics, types, libraries and limits.
 - [Compiler architecture](docs/ARCHITECTURE.md): frontend/backend API and invariants.

@@ -6,10 +6,14 @@ Use Java 25 and the checked-in Gradle wrapper. Building a native executable also
 requires GraalVM Native Image and the platform C toolchain.
 
 This development build depends on the Julc revision named by `julcVersion` and
-`julcRevision` in `gradle.properties` (currently **`0.1.0-gb-f8e9cb8`**, Julc commit
-`f8e9cb87`: the generic-backend revision-2 stack with PR #195 and the typed-map and
-byte-string follow-up). Publish it locally from a Julc
-checkout at that commit. Maven Central's existing Julc release does not contain
+`julcRevision` in `gradle.properties`. It is currently **`0.1.0-gb-f97f804`**, Julc
+commit `f97f8042`, which contains:
+
+- the generic-backend revision-2 stack with PR #195;
+- the typed-map and byte-string follow-up (#196);
+- the testkit's property generators (#197).
+
+Publish it locally from a Julc checkout at that commit. Maven Central's existing Julc release does not contain
 this experimental frontend boundary.
 
 Set these paths for your development machine:
@@ -36,7 +40,8 @@ git checkout "$(sed -n 's/^julcRevision=//p' /path/to/elci-lang/gradle.propertie
   :julc-bls:publishToMavenLocal \
   :julc-vm-java:publishToMavenLocal \
   :julc-cardano-client-lib:publishToMavenLocal \
-  :julc-testkit:publishToMavenLocal -PskipSigning=true
+  :julc-testkit:publishToMavenLocal \
+  :julc-testkit-jqwik:publishToMavenLocal -PskipSigning=true
 ```
 
 Return to the Elci project:
@@ -94,7 +99,7 @@ Elm source:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-f8e9cb8"
+julc-version = "0.1.0-gb-f97f804"
 
 [validators.threshold]
 boundary = "julc-strict-v1"
@@ -134,7 +139,7 @@ and the ledger purpose selects the handler to run:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-f8e9cb8"
+julc-version = "0.1.0-gb-f97f804"
 
 # One script: spends payouts and withdraws the address's staking rewards.
 [validators.treasury]

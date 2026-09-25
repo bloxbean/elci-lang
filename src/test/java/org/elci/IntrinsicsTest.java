@@ -47,6 +47,15 @@ class IntrinsicsTest {
     }
 
     @Test
+    void modByTakesTheDivisorsSignAndRemainderByTheDividends() {
+        assertEquals(new Term.Const(Constant.integer(2)), value("main : Int\nmain = modBy 3 (-7)\n"));
+        assertEquals(new Term.Const(Constant.integer(-1)), value("main : Int\nmain = remainderBy 3 (-7)\n"));
+        assertEquals(new Term.Const(Constant.integer(-2)), value("main : Int\nmain = modBy (-3) 7\n"));
+        assertEquals(new Term.Const(Constant.integer(900)), value("main : Int\nmain = 28900 |> modBy 2000\n"));
+        assertInstanceOf(EvalResult.Failure.class, evaluate("main : Int\nmain = modBy 0 7\n"));
+    }
+
+    @Test
     void byteStringCompleteness() {
         java.util.function.Function<String, Term> v = body -> value(body);
         String gold = "(Bytes.fromString \"GOLD\")";

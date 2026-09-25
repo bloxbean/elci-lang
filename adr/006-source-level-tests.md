@@ -2,6 +2,7 @@
 
 Status: **Accepted and implemented** (see Implementation evidence).
 Date: 25 September 2026
+Amended: 25 September 2026, adding [property tests](#property-tests) (Julc `f97f8042`).
 Baseline: Elci `a2edc8d`, Julc `97e168c6`. Follows
 [ADR-005](005-remaining-frontend-and-backend-integration.md), which deferred a test
 command "until an actual test command and test format are defined".
@@ -37,8 +38,11 @@ users who embed Elci in JUnit suites should not need a second test framework.
   test module whose inferred type is one of:
   - `Bool`, which passes when it evaluates to `True`;
   - `Expect.Expectation`, which passes when it evaluates to `Expect.Pass`;
-  - `Scenario.Scenario`, a transaction against a validator of this project (below).
-  Other declarations are helpers. Test names are `Module.declaration`.
+  - `Scenario.Scenario`, a transaction against a validator of this project (below);
+  - `Property.Property`, evaluated once.
+
+  An **exposed function whose result is `Property.Property`** is a property test
+  (below). Other declarations are helpers. Test names are `Module.declaration`.
 - **Isolation:** each test compiles to its own program and runs on Julc's VM through
   `ValidatorTest`. A failure or runtime error in one test never masks another.
 - **Reporting:** each test reports pass or fail, CPU and memory, and on failure the
@@ -87,6 +91,47 @@ The runner (JVM) builds the scenario:
 Scenarios name `[validators.<name>]` groups
 ([ADR-007](007-named-validators-only.md)).
 
+### Property tests
+
+A property should hold for every argument. It is an exposed function of a test
+module whose result is `Property`:
+
+```elm
+payoutsAlwaysRoundTrip : Payout -> Property
+payoutsAlwaysRoundTrip generated =
+    Property.expect (Expect.equal generated (Data.decode (Data.encode generated)))
+```
+
+- **Marking.** The bundled `Property` module wraps an outcome: `holds` for a
+  `Bool`, `expect` for an `Expectation` and `scenario` for a `Scenario`. The
+  `Property` result type is what makes a function a property. Helpers that return
+  an `Expectation` or a `Scenario` (`claim : Action -> Scenario`) stay helpers.
+- **Compilation.** `ElciCompiler.compileTests` compiles each property to one
+  program, `\d1 .. dn -> property (decode d1) .. (decode dn)`. Each argument
+  arrives as Data and is decoded by Julc's strict decoder for its parameter type.
+  Generated values therefore reach the property exactly as the ledger's would.
+- **Generation.** julc-testkit's `DataGenerators.forType` derives a generator for
+  each parameter's Data representation. Every value passes the strict boundary
+  check. Recursive unions stay finite, and map keys are distinct. Top-level
+  parameters typed as ledger hashes get their exact lengths.
+- **Runs.** julc-testkit's `PropertyCheck` runs each property `--fuzz` times
+  (default 100), with sizes growing from 0.
+  - All runs come from one seed. `--seed` sets it, and each property derives its
+    own from the seed and its name.
+  - The first failure is shrunk greedily, one argument at a time.
+  - The report shows the counterexample in Elci syntax, the number of runs and
+    shrinks, and the seed.
+  - A `scenario` property runs the deployed validator on every run.
+- **Parameters.** A property's parameters must be concrete and Data-encodable.
+  Functions, the ledger context and unresolved type variables are compile errors
+  (ELCI2009), not silent skips.
+- **Native image.** The engine uses no reflection and no test engine, so the
+  native `elci` binary runs properties too.
+
+For JVM suites, `ElciTestkit.abi` exposes a validator's ABI. julc-testkit-jqwik's
+`SchemaArbitraries` then generates its datums, redeemers and parameters for jqwik
+`@Property` methods.
+
 ### Debugging aid
 
 `Debug.trace : String -> a -> a` emits a Plutus trace and returns its second
@@ -103,7 +148,7 @@ julc-testkit directly (`ScriptContextTestBuilder`, `ValidatorTest`,
 ### CLI
 
 ```sh
-elci test [project-directory] [--match <substring>]
+elci test [project-directory] [--match <substring>] [--seed <n>] [--fuzz <runs>]
 ```
 
 The exit status is 1 when any test fails or none match. Traces and failure details
@@ -118,7 +163,10 @@ go to standard output with the summary.
 - **No second implementation.** Contexts come from Julc's builders, evaluation from
   Julc's VM, and budget checks from julc-testkit. Elci adds only the translation
   from scenario data.
-- **Test isolation:** each test is a separate program; results are deterministic.
+- **Test isolation:** each test is a separate program; results are deterministic,
+  and a property run is reproduced exactly by its seed.
+- **Generated values are valid:** every generated argument passes the same strict
+  decoding a validator applies to its datum and redeemer.
 
 ## Alternatives
 
@@ -130,6 +178,20 @@ go to standard output with the summary.
   runner translates a small scenario description instead.
 - **JUnit only.** Contract authors would have to write Java. The facade still gives
   JUnit users the same scripts.
+- **jqwik inside `elci test`.** The jqwik engine is reflection-heavy and runs within
+  the JUnit Platform lifecycle; its composite arbitraries fail outside it. The
+  native `elci` binary could not use it. jqwik remains the JVM path, through
+  `SchemaArbitraries`.
+- **elm-test style fuzzers** (`Fuzz.int`, `fuzz fuzzer "name" (\x -> ..)`). A test
+  would have to be a value holding both a fuzzer and a function, but Elci values in
+  unions are Data and cannot hold functions. Type-directed generation needs no
+  fuzzer values. A value can be narrowed in code instead (`modBy 2000 raw`), and
+  its shrinking is kept.
+- **Treating every exposed function returning a test type as a property.** Helpers
+  such as `claim : Action -> Scenario` would run as failing properties. The
+  `Property` result type is an explicit, type-checked marker.
+- **Coverage-guided fuzzing (Jazzer).** It suits hardening Julc's decoders and VM,
+  not contract-level properties. It is a separate later track.
 
 ## Consequences
 
@@ -153,6 +215,23 @@ governance details beyond the purpose itself need the JVM facade for now.
 - **Examples:** `examples/treasury/tests` covers named validators across spending,
   withdrawal and minting. `examples/vesting/tests` covers
   validity ranges.
+- **Property tests (amendment):**
+  - `Property.elm`;
+  - `ElciCompiler.compileTests` and `Lowering.lowerProperty`;
+  - the property runner in `TestRunner`, with counterexamples rendered by
+    `Data.show`;
+  - `--seed` and `--fuzz`;
+  - `ElciTestkit.abi`;
+  - Elm's `modBy`, for narrowing generated integers.
+
+  They are backed by julc-testkit's `DataGenerators` and `PropertyCheck` and
+  julc-testkit-jqwik's `SchemaArbitraries`.
+  - `TestCommandTest` covers shrinking to minimal counterexamples (`100`, `(-5)`,
+    and a record with a `Just`) and seed reproduction. It also covers `--fuzz`,
+    scenario properties, helpers that are not properties, and the ELCI2009
+    parameter errors.
+  - `JvmPropertyTest` runs jqwik over the treasury ABI.
+  - The treasury and vesting examples gained properties.
 - **Pre-existing defect fixed:** the pattern-usefulness check expanded a wildcard
   into every constructor, even when the column did not name them all. For a union
   with a `List` field it recursed without end, which `Expect.every` exposed. It

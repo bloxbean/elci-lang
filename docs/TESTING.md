@@ -15,7 +15,9 @@ elci test examples/treasury --match badge    # case-insensitive substring of the
 PASS TreasuryTest.beneficiaryReleases (cpu 11746810, mem 46979)
 PASS TreasuryTest.strangerCannotRelease (cpu 12125243, mem 48911)
 ...
-9 passed, 0 failed
+PASS TreasuryTest.onlyTheBeneficiaryReleases (100 runs, max cpu 12125243, mem 48911)
+PASS TreasuryTest.badgesNeedAPositiveQuantity (100 runs, max cpu 5468168, mem 21200)
+12 passed, 0 failed (seed 42)
 ```
 
 The exit status is 1 when a test fails or no test matches, so the command can
@@ -31,14 +33,18 @@ source-directories = ["tests", "spec"]
 ```
 
 - **Imports:** test modules can import the project's modules, its `[java-modules]`
-  and the test library (`Expect`, `Scenario`). They never become part of `check`,
-  `build` or published artifacts.
-- **Naming:** a test module may not share a name with a source module, `Expect` or
-  `Scenario`.
+  and the test library (`Expect`, `Scenario`, `Property`). They never become part of
+  `check`, `build` or published artifacts.
+- **Naming:** a test module may not share a name with a source module or with
+  `Expect`, `Scenario` or `Property`.
 - **Discovery:** a test is an **exposed, zero-argument, top-level declaration**
-  whose type is `Bool`, `Expect.Expectation` or `Scenario.Scenario`. Anything else
-  is a helper. Expose only the tests to keep helpers private; with `exposing (..)`,
-  helpers of other types are skipped.
+  whose type is `Bool`, `Expect.Expectation`, `Scenario.Scenario` or
+  `Property.Property`.
+  - An **exposed function whose result is a `Property`** is a
+    [property test](#property-tests).
+  - Anything else is a helper, including functions that return an `Expectation`
+    or a `Scenario`, such as `claim` below. Expose only the tests to keep helpers
+    private; with `exposing (..)`, helpers of other types are skipped.
 
 ## Unit tests
 
@@ -191,6 +197,112 @@ every purpose. The following need the JVM facade below:
 - other staking credentials and additional withdrawals;
 - more than one script in a transaction.
 
+## Property tests
+
+A property is a check that should hold for **every** argument. Write it as an
+exposed function whose result is a `Property`. `elci test` then does the following:
+
+1. It generates arguments from the parameter types.
+2. It runs the property 100 times, with small values first.
+3. On a failure, it shrinks the arguments to a small counterexample.
+
+```elm
+import Property exposing (Property)
+
+
+payoutsAlwaysRoundTrip : Payout -> Property
+payoutsAlwaysRoundTrip generated =
+    Property.expect (Expect.equal generated (Data.decode (Data.encode generated)))
+
+
+badgesNeedAPositiveQuantity : Int -> Property
+badgesNeedAPositiveQuantity quantity =
+    if quantity > 0 then
+        Property.scenario (badge quantity)
+
+    else
+        Property.scenario (Scenario.expectFailure (badge quantity))
+```
+
+| `Property` function | The property holds when |
+| --- | --- |
+| `holds condition` | the `Bool` is `True` |
+| `expect expectation` | the `Expectation` passes |
+| `scenario transaction` | the `Scenario` has its expected outcome, so a property can run the deployed validator |
+
+A failure reports the shrunk arguments in Elci syntax, and the summary reports the
+seed. For example, this property is false:
+
+```elm
+payoutsStaySmall : Payout -> Maybe Int -> Property
+payoutsStaySmall generated extra =
+    Property.holds (generated.amount < 50 || extra == Nothing)
+```
+
+```text
+$ elci test --seed 11 --match payouts
+PASS TreasuryTest.payoutsRoundTripThroughData (cpu 6436315, mem 23234)
+PASS TreasuryTest.payoutsAlwaysRoundTrip (100 runs, max cpu 9087645, mem 36791)
+FAIL TreasuryTest.payoutsStaySmall (7 runs, cpu 9356197, mem 37825)
+    counterexample after 7 runs, shrunk 5 times:
+        payoutsStaySmall { amount = 50, beneficiary = #(empty) } (Just 0)
+    the property does not hold
+2 passed, 1 failed (seed 11)
+```
+
+Two options control the runs:
+
+- `--seed <n>` reproduces a run exactly. Each property derives its own seed from
+  it and its name.
+- `--fuzz <runs>` changes the number of runs (default 100).
+
+```sh
+elci test --seed 11 --match payouts
+elci test --fuzz 1000
+```
+
+### Generated values
+
+Each argument is a valid value of its parameter type. It is decoded by the same
+strict decoder a validator uses for its datum and redeemer, so a property sees
+exactly what the ledger could send.
+
+- **`Int`:** mostly small values around 0, plus edge cases (0, 1 and -1) and some
+  values up to 64 bits.
+- **`Bytes` and `String`:** up to 64 bytes. Byte strings are sometimes 28 or 32
+  bytes long, the size of a hash. A parameter typed `PubKeyHash`, `ScriptHash`,
+  `ValidatorHash` or `PolicyId` is exactly 28 bytes; `TxId` and `DatumHash` are 32.
+- **Lists and `Map`s:** grow with the run. Map keys are distinct.
+- **Records, unions, `Maybe` and tuples:** built from their fields, with every
+  constructor used.
+- **Recursive unions:** stay finite, and their first runs use the shallowest
+  constructors.
+
+To narrow a value, transform it in the property. Arguments shrink before the
+transformation, so the counterexample stays small:
+
+```elm
+claimsSucceedFromTheDeadline : Int -> Property
+claimsSucceedFromTheDeadline raw =
+    let
+        time =
+            modBy 2000 raw
+    in
+    ...
+```
+
+Shrinking works toward simpler values. Integers move toward 0, lists and maps get
+shorter, and unions move toward their earlier constructors. A recursive union
+tries its own subterms.
+
+A property's parameters must be concrete, Data-encodable types. Functions and
+`ScriptContext` cannot be generated, so a property over them is a compile error
+(ELCI2009).
+
+Generation and shrinking come from julc-testkit's `DataGenerators` and
+`PropertyCheck`. They are seeded and use no reflection, so the native `elci`
+binary runs properties too.
+
 ## Debugging
 
 `Debug.trace message value` returns `value` and emits `message` as a Plutus trace:
@@ -224,12 +336,47 @@ var ctx = ScriptContextTestBuilder.rewarding(credential)
 ValidatorTest.assertValidates(treasury, ctx);
 ```
 
-The facade has three entry points:
+The facade has four entry points:
 
 - `ElciTestkit.validator(project, name, parameters...)`: a named validator with its
   parameters applied;
+- `ElciTestkit.abi(project, name)`: the validator's ABI, with its parameter, datum
+  and redeemer types;
 - `ElciTestkit.entrypoint(project)`: the `[entrypoint]` function;
 - `ElciTestkit.value(project, module, name)`: any exposed zero-argument declaration,
   including those in test modules.
 
 The scripts are the ones `elci build` publishes.
+
+### Properties with jqwik
+
+For property tests in JUnit, add `org.julclang:julc-testkit-jqwik` and
+`net.jqwik:jqwik`. Julc's `SchemaArbitraries` reads the ABI and generates valid
+datums, redeemers and parameters. jqwik then shrinks failures with its own
+strategies:
+
+```java
+class TreasuryProperties {
+    static final ValidatorAbi ABI = ElciTestkit.abi(TREASURY, "treasury");
+    static final Program SCRIPT = ElciTestkit.validator(TREASURY, "treasury", ADMIN.toPlutusData());
+
+    @Provide
+    Arbitrary<PlutusData> payouts() {
+        return SchemaArbitraries.datum(ABI);
+    }
+
+    @Provide
+    Arbitrary<PlutusData> actions() {
+        return SchemaArbitraries.redeemer(ABI, ContractSchema.Purpose.SPEND);
+    }
+
+    @Property
+    void unsignedSpendsAreAlwaysRejected(@ForAll("payouts") PlutusData payout,
+                                         @ForAll("actions") PlutusData action) {
+        var ctx = ScriptContextTestBuilder.spending(ref, payout).redeemer(action).buildPlutusData();
+        assertFalse(ValidatorTest.evaluate(SCRIPT, ctx).isSuccess());
+    }
+}
+```
+
+`src/test/java/org/elci/JvmPropertyTest.java` is a complete example.

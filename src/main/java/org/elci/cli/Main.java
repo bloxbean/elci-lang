@@ -19,7 +19,7 @@ public final class Main {
                 System.out.println("Elci "+org.elci.driver.BuildInfo.VERSION+" — Elm-syntax compiler powered by Julc\n"
                         +"Usage: elci <check|build> [project-directory] [--validator <name>]...\n"
                         +"       elci eval [project-directory]\n"
-                        +"       elci test [project-directory] [--match <substring>]\n"
+                        +"       elci test [project-directory] [--match <substring>] [--seed <n>] [--fuzz <runs>]\n"
                         +"       elci apply [project-directory] --validator <name> --param <name>=<plutus-data-json|@file> [--output <file>]\n"
                         +"       elci init <project-directory> [--validator <name>] [--purpose spend|mint|withdraw|certify|vote|propose|function]\n"
                         +"       elci --version\n"
@@ -114,24 +114,37 @@ public final class Main {
         return 0;
     }
 
-    /** {@code elci test}: run source-level tests (ADR-006) and report each with its budget. */
+    /**
+     * {@code elci test}: run source-level tests (ADR-006) and report each with its budget.
+     * Properties run {@code --fuzz} times (100) from {@code --seed} (random, and printed).
+     */
     private static int test(String... args) throws Exception {
         String directory=null,match=null;
+        Long seed=null;Integer runs=null;
         for(int i=0;i<args.length;i++) {
             if(args[i].equals("--match")){if(++i==args.length||match!=null)throw new IllegalArgumentException("ELCI4001: --match requires one substring");match=args[i];}
+            else if(args[i].equals("--seed")){if(++i==args.length||seed!=null)throw new IllegalArgumentException("ELCI4001: --seed requires one integer");seed=number(args[i],"--seed");}
+            else if(args[i].equals("--fuzz")){if(++i==args.length||runs!=null)throw new IllegalArgumentException("ELCI4001: --fuzz requires one positive number of runs");runs=(int)number(args[i],"--fuzz");if(runs<1)throw new IllegalArgumentException("ELCI4001: --fuzz requires a positive number of runs");}
             else if(args[i].startsWith("--"))throw new IllegalArgumentException("Unknown option: "+args[i]);
             else if(directory==null)directory=args[i];
             else throw new IllegalArgumentException("Expected at most one project directory; see --help");
         }
         var project=Project.read(Path.of(directory==null?".":directory));
+        var settings=seed==null?org.julclang.testkit.property.PropertyCheck.Settings.defaults():org.julclang.testkit.property.PropertyCheck.Settings.seeded(seed);
+        if(runs!=null)settings=settings.withTries(runs);
         java.util.function.Function<String,String> files=module->{try{return project.source(module).toString();}catch(RuntimeException x){return null;}};
+        var runner=new org.elci.test.TestRunner(project,settings);
         java.util.List<org.elci.test.TestRunner.Outcome> outcomes;
-        try {outcomes=new org.elci.test.TestRunner(project).run(match);}
+        try {outcomes=runner.run(match);}
         catch(Diagnostic e){System.err.println(e.render(files,"<tests>"));return 1;}
         int failed=0;
+        boolean properties=false;
         for(var outcome:outcomes) {
-            String budget=outcome.budget()==null?"":" (cpu "+outcome.budget().cpuSteps()+", mem "+outcome.budget().memoryUnits()+")";
-            System.out.println((outcome.passed()?"PASS ":"FAIL ")+outcome.name()+budget);
+            properties|=outcome.runs()>0;
+            var details=new java.util.ArrayList<String>();
+            if(outcome.runs()>0)details.add(outcome.runs()+(outcome.runs()==1?" run":" runs"));
+            if(outcome.budget()!=null)details.add((outcome.runs()>0&&outcome.passed()?"max cpu ":"cpu ")+outcome.budget().cpuSteps()+", mem "+outcome.budget().memoryUnits());
+            System.out.println((outcome.passed()?"PASS ":"FAIL ")+outcome.name()+(details.isEmpty()?"":" ("+String.join(", ",details)+")"));
             if(!outcome.passed()) {
                 failed++;
                 for(String line:outcome.detail().split("\n"))System.out.println("    "+line);
@@ -142,8 +155,13 @@ public final class Main {
             System.out.println(match==null?"No tests found in "+project.testDirectories():"No tests match '"+match+"'");
             return 1;
         }
-        System.out.println((outcomes.size()-failed)+" passed, "+failed+" failed");
+        System.out.println((outcomes.size()-failed)+" passed, "+failed+" failed"+(properties?" (seed "+runner.seed()+")":""));
         return failed==0?0:1;
+    }
+
+    private static long number(String text,String option) {
+        try {return Long.parseLong(text);}
+        catch(NumberFormatException e){throw new IllegalArgumentException("ELCI4001: "+option+" expects an integer, not '"+text+"'");}
     }
 
     private static String where(Project project,Project.Validator group) {

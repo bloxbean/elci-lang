@@ -1,7 +1,7 @@
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-f8e9cb8"
+julc-version = "0.1.0-gb-f97f804"
 
 [validators.threshold]
 boundary = "julc-strict-v1"
