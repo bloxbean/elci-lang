@@ -26,7 +26,13 @@ class StdlibInventory {
                         row(library, method, "COMPILES", signature(export));
                     } catch (Exception error) { row(library, method, "BLOCKED", error.getMessage()); }
                 }
+                // Generic templates are instantiated at each use; list their schemes.
+                var generic = new TreeMap<String, String>();
+                for (var scheme : provider.schemes(owner)) generic.put(scheme.symbol(), scheme.identity());
+                generic.forEach((symbol, identity) -> row(library, symbol.substring(owner.length() + 1), "GENERIC",
+                        identity.substring(identity.indexOf('<'))));
                 provider.unsupportedExports().entrySet().stream().filter(e -> e.getKey().startsWith(owner + "."))
+                        .filter(e -> !generic.containsKey(e.getKey()))
                         .sorted(Map.Entry.comparingByKey()).forEach(e -> row(library,
                                 e.getKey().substring(owner.length() + 1), "UNSUPPORTED", e.getValue()));
             } catch (Exception error) { row(library, "*", "BLOCKED", error.getMessage()); }

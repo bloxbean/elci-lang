@@ -137,14 +137,10 @@ public final class Lowering {
             if (importMode == ImportMode.LINK) requested.put(request, binding);
         }
         var reference = new PirTerm.Var(binding.name(), binding.type());
-        // Linked imports are evaluated when the script starts. Functions are safe to share that
-        // way; a value export (a zero-argument method) is evaluated at its use instead, as in
-        // function programs, so an unused failing value cannot fail every purpose.
-        if (importMode == ImportMode.LINK && binding.type() instanceof PirType.FunType) return reference;
-        if (importMode == ImportMode.LINK) {
-            requested.remove(request);
-            if (group == null) group = libraries.provider().materialize(List.of(request));
-        }
+        // Validators link every import once, evaluated when the script starts, exactly like
+        // their top-level definitions (ADR-059). A closed copy cannot be placed inside
+        // verified producer PIR: its provider binding names are reserved there.
+        if (importMode == ImportMode.LINK) return reference;
         // A revision-1 program has no import groups: link a closed copy at the use site.
         return PirLinker.link(new LinkedHashMap<>(group.definitions()), reference);
     }
@@ -811,10 +807,44 @@ public final class Lowering {
         };
     }
 
-    /** {@code Bytes}: each function is one Plutus builtin, curried in source argument order. */
+    /**
+     * {@code Bytes}: each function is one Plutus builtin, curried with the byte string last so
+     * that it composes in pipelines. Arguments are evaluated once, strictly, in source order.
+     */
     private PirTerm bytesIntrinsic(String function) {
         PirType bytes = new PirType.ByteStringType(), integer = new PirType.IntegerType(), string = new PirType.StringType();
         return switch (function) {
+            // take n = slice 0 n; drop n = slice n (length) — slicing clamps to the string.
+            case "take" -> positional(List.of(integer, bytes), a -> call(DefaultFun.SliceByteString,
+                    new PirTerm.Const(Constant.integer(0)), a.get(0), a.get(1)));
+            case "drop" -> positional(List.of(integer, bytes), a -> call(DefaultFun.SliceByteString, a.get(0),
+                    call(DefaultFun.LengthOfByteString, a.get(1)), a.get(1)));
+            case "at" -> positional(List.of(integer, bytes), a -> call(DefaultFun.IndexByteString, a.get(1), a.get(0)));
+            case "cons" -> builtin(DefaultFun.ConsByteString, List.of(integer, bytes));
+            // replicate count byte
+            case "replicate" -> builtin(DefaultFun.ReplicateByte, List.of(integer, integer));
+            case "lessThan" -> builtin(DefaultFun.LessThanByteString, List.of(bytes, bytes));
+            case "lessThanOrEqual" -> builtin(DefaultFun.LessThanEqualsByteString, List.of(bytes, bytes));
+            // fromInt… width value: width 0 means as short as possible.
+            case "fromIntBigEndian", "fromIntLittleEndian" -> positional(List.of(integer, integer), a ->
+                    call(DefaultFun.IntegerToByteString, bool(function.equals("fromIntBigEndian")), a.get(0), a.get(1)));
+            case "toIntBigEndian", "toIntLittleEndian" -> positional(List.of(bytes), a ->
+                    call(DefaultFun.ByteStringToInteger, bool(function.equals("toIntBigEndian")), a.get(0)));
+            // Bitwise operations truncate to the shorter operand (no padding).
+            case "and", "or", "xor" -> positional(List.of(bytes, bytes), a -> call(switch (function) {
+                case "and" -> DefaultFun.AndByteString;
+                case "or" -> DefaultFun.OrByteString;
+                default -> DefaultFun.XorByteString;
+            }, bool(false), a.get(0), a.get(1)));
+            case "complement" -> builtin(DefaultFun.ComplementByteString, List.of(bytes));
+            case "shift", "rotate" -> positional(List.of(integer, bytes), a -> call(
+                    function.equals("shift") ? DefaultFun.ShiftByteString : DefaultFun.RotateByteString, a.get(1), a.get(0)));
+            case "testBit" -> positional(List.of(integer, bytes), a -> call(DefaultFun.ReadBit, a.get(1), a.get(0)));
+            case "countSetBits" -> builtin(DefaultFun.CountSetBits, List.of(bytes));
+            case "findFirstSetBit" -> builtin(DefaultFun.FindFirstSetBit, List.of(bytes));
+            case "sha3_256" -> builtin(DefaultFun.Sha3_256, List.of(bytes));
+            case "keccak256" -> builtin(DefaultFun.Keccak_256, List.of(bytes));
+            case "ripemd160" -> builtin(DefaultFun.Ripemd_160, List.of(bytes));
             case "empty" -> new PirTerm.Const(Constant.byteString(new byte[0]));
             case "fromString" -> builtin(DefaultFun.EncodeUtf8, List.of(string));
             case "toString" -> builtin(DefaultFun.DecodeUtf8, List.of(bytes));
@@ -827,6 +857,20 @@ public final class Lowering {
             case "sha256" -> builtin(DefaultFun.Sha2_256, List.of(bytes));
             default -> throw new IllegalArgumentException("Unknown Bytes function " + function);
         };
+    }
+
+    /** A curried lambda over {@code parameters} whose body the builder makes from the variables. */
+    private PirTerm positional(List<PirType> parameters, java.util.function.Function<List<PirTerm>, PirTerm> body) {
+        var names = new ArrayList<String>();
+        var variables = new ArrayList<PirTerm>();
+        for (var parameter : parameters) {
+            String name = fresh("argument");
+            names.add(name);
+            variables.add(new PirTerm.Var(name, parameter));
+        }
+        PirTerm term = body.apply(variables);
+        for (int i = parameters.size() - 1; i >= 0; i--) term = new PirTerm.Lam(names.get(i), parameters.get(i), term);
+        return term;
     }
 
     /** {@code \a -> \b -> ... -> fun a b ...}: a strict, curried builtin application. */

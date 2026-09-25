@@ -490,7 +490,10 @@ class ImportedTypeTest {
     }
 
     @Test
-    void valueExportsInNamedValidatorsAreEvaluatedAtTheirUse() {
+    void libraryValuesAreEvaluatedAtScriptStartLikeTopLevelValues() {
+        // In a validator, imports and top-level definitions are evaluated once when the script
+        // starts, before dispatch. A failing library value therefore fails every purpose, the
+        // same as a failing top-level value; keep purpose-specific work in functions.
         var source = """
                 module Main exposing (mint, withdraw)
 
@@ -515,8 +518,7 @@ class ImportedTypeTest {
                 new ValidatorSpec("v", List.of(new HandlerSpec(Purpose.MINT, "Main", "mint"),
                         new HandlerSpec(Purpose.WITHDRAW, "Main", "withdraw")), List.of(), DatumProfile.REQUIRED),
                 Map.of("Demo.Two", "demo.Two"), new CompilerOptions(), Map.of("demo.Two", TWO)).program();
-        assertTrue(accepts(program, context(Purpose.MINT, PlutusData.integer(1))));
-        assertTrue(accepts(program, context(Purpose.WITHDRAW, PlutusData.integer(2))));
-        assertFalse(accepts(program, context(Purpose.MINT, PlutusData.integer(99))));
+        assertFalse(accepts(program, context(Purpose.MINT, PlutusData.integer(1))));
+        assertFalse(accepts(program, context(Purpose.WITHDRAW, PlutusData.integer(2))));
     }
 }

@@ -47,6 +47,37 @@ class IntrinsicsTest {
     }
 
     @Test
+    void byteStringCompleteness() {
+        java.util.function.Function<String, Term> v = body -> value(body);
+        String gold = "(Bytes.fromString \"GOLD\")";
+        assertEquals(new Term.Const(Constant.string("GO")), v.apply("main : String\nmain = Bytes.toString (Bytes.take 2 " + gold + ")\n"));
+        assertEquals(new Term.Const(Constant.string("LD")), v.apply("main : String\nmain = Bytes.toString (Bytes.drop 2 " + gold + ")\n"));
+        assertEquals(new Term.Const(Constant.string("")), v.apply("main : String\nmain = Bytes.toString (Bytes.drop 9 " + gold + ")\n"));
+        assertEquals(new Term.Const(Constant.integer('O')), v.apply("main : Int\nmain = Bytes.at 1 " + gold + "\n"));
+        assertEquals(new Term.Const(Constant.string("XGOLD")), v.apply("main : String\nmain = Bytes.toString (Bytes.cons 88 " + gold + ")\n"));
+        assertEquals(new Term.Const(Constant.byteString(new byte[] {7, 7, 7})), v.apply("main : Bytes\nmain = Bytes.replicate 3 7\n"));
+        assertEquals(new Term.Const(Constant.bool(true)), v.apply("main : Bool\nmain = Bytes.lessThan (Bytes.fromString \"a\") (Bytes.fromString \"b\") && Bytes.lessThanOrEqual (Bytes.fromString \"b\") (Bytes.fromString \"b\")\n"));
+        // Integer conversions: 258 = 0x0102.
+        assertEquals(new Term.Const(Constant.byteString(new byte[] {0, 0, 1, 2})), v.apply("main : Bytes\nmain = Bytes.fromIntBigEndian 4 258\n"));
+        assertEquals(new Term.Const(Constant.byteString(new byte[] {2, 1})), v.apply("main : Bytes\nmain = Bytes.fromIntLittleEndian 0 258\n"));
+        assertEquals(new Term.Const(Constant.integer(258)), v.apply("main : Int\nmain = Bytes.toIntBigEndian (Bytes.fromIntBigEndian 4 258)\n"));
+        assertEquals(new Term.Const(Constant.integer(258)), v.apply("main : Int\nmain = Bytes.toIntLittleEndian (Bytes.fromIntLittleEndian 0 258)\n"));
+        // Bitwise operations, bits and hashes.
+        assertEquals(new Term.Const(Constant.byteString(new byte[] {0x0c})), v.apply("main : Bytes\nmain = Bytes.and (Bytes.fromIntBigEndian 1 12) (Bytes.fromIntBigEndian 1 14)\n"));
+        assertEquals(new Term.Const(Constant.byteString(new byte[] {0x0e})), v.apply("main : Bytes\nmain = Bytes.or (Bytes.fromIntBigEndian 1 12) (Bytes.fromIntBigEndian 1 10)\n"));
+        assertEquals(new Term.Const(Constant.byteString(new byte[] {0x06})), v.apply("main : Bytes\nmain = Bytes.xor (Bytes.fromIntBigEndian 1 12) (Bytes.fromIntBigEndian 1 10)\n"));
+        assertEquals(new Term.Const(Constant.byteString(new byte[] {(byte) 0xf3})), v.apply("main : Bytes\nmain = Bytes.complement (Bytes.fromIntBigEndian 1 12)\n"));
+        assertEquals(new Term.Const(Constant.byteString(new byte[] {0x18})), v.apply("main : Bytes\nmain = Bytes.shift 1 (Bytes.fromIntBigEndian 1 12)\n"));
+        assertEquals(new Term.Const(Constant.byteString(new byte[] {(byte) 0x81})), v.apply("main : Bytes\nmain = Bytes.rotate 1 (Bytes.fromIntBigEndian 1 192)\n"));
+        assertEquals(new Term.Const(Constant.bool(true)), v.apply("main : Bool\nmain = Bytes.testBit 2 (Bytes.fromIntBigEndian 1 12) && not (Bytes.testBit 0 (Bytes.fromIntBigEndian 1 12))\n"));
+        assertEquals(new Term.Const(Constant.integer(2)), v.apply("main : Int\nmain = Bytes.countSetBits (Bytes.fromIntBigEndian 1 12)\n"));
+        assertEquals(new Term.Const(Constant.integer(2)), v.apply("main : Int\nmain = Bytes.findFirstSetBit (Bytes.fromIntBigEndian 1 12)\n"));
+        for (String hash : new String[] {"sha3_256", "keccak256"})
+            assertEquals(new Term.Const(Constant.integer(32)), v.apply("main : Int\nmain = Bytes.length (Bytes." + hash + " Bytes.empty)\n"));
+        assertEquals(new Term.Const(Constant.integer(20)), v.apply("main : Int\nmain = Bytes.length (Bytes.ripemd160 Bytes.empty)\n"));
+    }
+
+    @Test
     void debugTraceEmitsAndReturnsItsValue() {
         var result = assertInstanceOf(EvalResult.Success.class,
                 evaluate("main : Int\nmain = Debug.trace \"first\" (Debug.trace \"second\" 1) + 1\n"));

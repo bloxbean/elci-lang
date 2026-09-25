@@ -4,11 +4,10 @@ Elci has a small bundled library written in Elci and can import supported Julc
 on-chain Java libraries. It does not provide the complete Elm core/browser
 package ecosystem.
 
-This inventory was checked on 20 September 2026 using Julc's source-description
-boundary at `d6e716e2` and Elci `c7552e9`, with target
-`plutus-v3-pv11-uplc-1.1.0`. It was regenerated unchanged on 25 September 2026
-against Julc `17da92bb` (generic backend revision 2). It is a snapshot of the
-current implementation.
+This inventory was first checked on 20 September 2026 using Julc's
+source-description boundary at `d6e716e2` and Elci `c7552e9`, with target
+`plutus-v3-pv11-uplc-1.1.0`. It was regenerated on 25 September 2026 against Julc
+`f8e9cb87`. It is a snapshot of the current implementation.
 
 ## What “available” means here
 
@@ -19,13 +18,17 @@ through Elci. Existing Elci evaluation fixtures cover Math, Interval and Context
 Julc has its own stdlib tests. Ledger decoding, imported-type capabilities and
 function preconditions still apply.
 
-The scan found **127 compile-verified exports**, **41 unsupported signatures**,
-and **one entire library blocked at import**. The blocked library's methods are
-not counted in either export total. The six programmatic `ListsLib` exports
-(`map`, `filter`, `any`, `all`, `find`, `foldl`) are generic schemes outside this
-concrete Java-source catalogue.
+The scan found **151 compile-verified exports**, **41 unsupported signatures**
+and **9 generic templates** (`TypedMapLib`, instantiated at each use). No library is
+blocked at import. `ByteStringLib`, previously blocked by an overload, now
+contributes 24 exports. The six programmatic `ListsLib` exports (`map`, `filter`,
+`any`, `all`, `find`, `foldl`) are generic schemes outside this Java-source catalogue.
 
 ## Bundled Elci library
+
+`Map` (`import Map`) provides typed association maps in the style of Elm's
+`Dict`; see the [language guide](LANGUAGE.md#compiler-provided-modules). It is Elci
+source over Julc's `TypedMapLib`, which needs no `[java-modules]` entry.
 
 `List` is available as a qualified module without configuration:
 
@@ -63,7 +66,7 @@ Each Java class below is under `org.julclang.stdlib.lib`. Module aliases such as
 | `AddressLib` | 4 | No rejected source exports in this scan |
 | `BitwiseLib` | 9 | `writeBits`: `PlutusData.ListData` mapping |
 | `BlsLib` | 0 | All 19 exports require unsupported BLS/native-list types |
-| `ByteStringLib` | 0 | Entire import blocked by overloaded `integerToByteString` |
+| `ByteStringLib` | 24 | No rejected source exports; its identical `integerToByteString` overloads are exported once |
 | `ContextsLib` | 23 | `listIndex`: `PlutusData.ListData` mapping |
 | `CryptoLib` | 9 | No rejected source exports in this scan |
 | `IntervalLib` | 9 | No rejected source exports in this scan |
@@ -73,6 +76,7 @@ Each Java class below is under `org.julclang.stdlib.lib`. Module aliases such as
 | `NativeValueLib` | 0 | All 7 exports require unsupported `JulcValue` |
 | `OutputLib` | 14 | No rejected source exports in this scan |
 | `ValuesLib` | 24 | 11 exports use unmapped Data subtypes or `AssetEntry` |
+| `TypedMapLib` | 9 generic | Templates over typed maps; used by the core `Map` module |
 
 “Zero rejected source exports” is scoped to this compilation scan, not a claim
 that every runtime case or every Julc intrinsic is supported.

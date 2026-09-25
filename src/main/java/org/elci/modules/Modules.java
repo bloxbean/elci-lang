@@ -8,6 +8,26 @@ import java.util.*;
 
 /** Resolve a source graph to stable module-qualified symbols before inference. */
 public final class Modules {
+    /** Core modules written in Elci and bundled with the compiler. */
+    public static final List<String> CORE_MODULES = List.of("List", "Map");
+    /**
+     * Library modules the core modules import, mapped without project configuration: Julc's
+     * typed map templates back {@code Map}.
+     */
+    public static final Map<String, String> CORE_LIBRARIES = Map.of("Julc.TypedMap", "org.julclang.stdlib.lib.TypedMapLib");
+
+    /** Project library mappings plus the core ones; a project may not remap a core alias. */
+    public static Map<String, String> withCoreLibraries(Map<String, String> javaModules) {
+        var result = new LinkedHashMap<>(javaModules);
+        CORE_LIBRARIES.forEach((alias, owner) -> {
+            var previous = result.putIfAbsent(alias, owner);
+            if (previous != null && !previous.equals(owner))
+                throw new IllegalArgumentException("ELCI4001: [java-modules] may not remap " + alias
+                        + ", which the Elci core library uses for " + owner);
+        });
+        return result;
+    }
+
     /** The compiler-provided module of explicit Data codecs and optional adapters. */
     public static final String DATA_MODULE = "Julc.Data";
     /** Its functions, resolved to intrinsic names with this prefix. */
@@ -21,7 +41,10 @@ public final class Modules {
     public static final String BYTES_MODULE = "Bytes";
     public static final String BYTES_PREFIX = "$bytes.";
     public static final List<String> BYTES_FUNCTIONS = List.of("empty", "fromString", "toString", "length", "append",
-            "slice", "blake2b224", "blake2b256", "sha256");
+            "slice", "take", "drop", "at", "cons", "replicate", "lessThan", "lessThanOrEqual",
+            "fromIntBigEndian", "fromIntLittleEndian", "toIntBigEndian", "toIntLittleEndian",
+            "and", "or", "xor", "complement", "shift", "rotate", "testBit", "countSetBits", "findFirstSetBit",
+            "blake2b224", "blake2b256", "sha256", "sha3_256", "keccak256", "ripemd160");
     /** Intrinsic modules without source: their functions and resolved-name prefixes. */
     private static final Map<String, Map.Entry<String, List<String>>> INTRINSICS = Map.of(
             DATA_MODULE, Map.entry(DATA_PREFIX, DATA_FUNCTIONS),
@@ -38,17 +61,19 @@ public final class Modules {
     public Modules(Map<String, String> sources, Map<String, String> javaModules) {
         this.javaModules = javaModules;
         var allSources = new LinkedHashMap<>(sources);
-        try (var input = Modules.class.getResourceAsStream("/elci/core/List.elm")) {
-            if (input == null) throw new IllegalStateException("Bundled List module is missing");
-            if (allSources.putIfAbsent(
-                            "List",
-                            new String(
-                                    input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8))
-                    != null)
-                throw new IllegalArgumentException("List is owned by the Elci core library");
-        } catch (java.io.IOException e) {
-            throw new java.io.UncheckedIOException(e);
-        }
+        // Core modules written in Elci: List is imported everywhere, Map on request.
+        for (String core : CORE_MODULES)
+            try (var input = Modules.class.getResourceAsStream("/elci/core/" + core + ".elm")) {
+                if (input == null) throw new IllegalStateException("Bundled " + core + " module is missing");
+                if (allSources.putIfAbsent(
+                                core,
+                                new String(
+                                        input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8))
+                        != null)
+                    throw new IllegalArgumentException(core + " is owned by the Elci core library");
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
         allSources.forEach(
                 (name, source) -> {
                     var module = new Parser(source, name).parse();

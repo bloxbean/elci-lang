@@ -31,7 +31,30 @@ BlsLib	g2ScalarMul	UNSUPPORTED	Unsupported on-chain source type: JulcG2
 BlsLib	g2Uncompress	UNSUPPORTED	Unsupported on-chain source type: JulcG2
 BlsLib	millerLoop	UNSUPPORTED	Unsupported on-chain source type: JulcG1
 BlsLib	mulMlResult	UNSUPPORTED	Unsupported on-chain source type: JulcMlResult
-ByteStringLib	*	BLOCKED	Ambiguous overloaded library export: org.julclang.stdlib.lib.ByteStringLib.integerToByteString
+ByteStringLib	append	COMPILES	Bytes -> Bytes -> Bytes
+ByteStringLib	at	COMPILES	Bytes -> Int -> Int
+ByteStringLib	byteStringToInteger	COMPILES	Bool -> Bytes -> Int
+ByteStringLib	cons	COMPILES	Int -> Bytes -> Bytes
+ByteStringLib	decodeUtf8	COMPILES	Bytes -> Data
+ByteStringLib	drop	COMPILES	Bytes -> Int -> Bytes
+ByteStringLib	empty	COMPILES	Bytes
+ByteStringLib	encodeUtf8	COMPILES	Data -> Bytes
+ByteStringLib	equals	COMPILES	Bytes -> Bytes -> Bool
+ByteStringLib	hexNibble	COMPILES	Int -> Int
+ByteStringLib	intToDecimalStep	COMPILES	Int -> Bytes -> Bytes
+ByteStringLib	intToDecimalString	COMPILES	Int -> Bytes
+ByteStringLib	integerToByteString	COMPILES	Bool -> Int -> Int -> Bytes
+ByteStringLib	length	COMPILES	Bytes -> Int
+ByteStringLib	lessThan	COMPILES	Bytes -> Bytes -> Bool
+ByteStringLib	lessThanEquals	COMPILES	Bytes -> Bytes -> Bool
+ByteStringLib	serialiseData	COMPILES	Data -> Bytes
+ByteStringLib	slice	COMPILES	Bytes -> Int -> Int -> Bytes
+ByteStringLib	take	COMPILES	Bytes -> Int -> Bytes
+ByteStringLib	toHex	COMPILES	Bytes -> Bytes
+ByteStringLib	toHexStep	COMPILES	Bytes -> Int -> Bytes -> Bytes
+ByteStringLib	utf8ToInteger	COMPILES	Bytes -> Int
+ByteStringLib	utf8ToIntegerStep	COMPILES	Bytes -> Int -> Int -> Int -> Int
+ByteStringLib	zeros	COMPILES	Int -> Bytes
 ContextsLib	findDatum	COMPILES	Ledger.TxInfo -> Data -> (JulcOptional Data)
 ContextsLib	findOwnInput	COMPILES	Ledger.ScriptContext -> (JulcOptional Ledger.TxInInfo)
 ContextsLib	getContinuingOutputs	COMPILES	Ledger.ScriptContext -> (List Ledger.TxOut)
@@ -132,6 +155,15 @@ OutputLib	txOutDatum	COMPILES	Ledger.TxOut -> Ledger.OutputDatum
 OutputLib	txOutValue	COMPILES	Ledger.TxOut -> Ledger.Value
 OutputLib	uniqueOutputAt	COMPILES	(List Ledger.TxOut) -> Ledger.Address -> Ledger.TxOut
 OutputLib	valueHasToken	COMPILES	Ledger.Value -> Bytes -> Bytes -> Bool
+TypedMapLib	empty	GENERIC	<K,V>()Map['K,'V]
+TypedMapLib	insert	GENERIC	<K,V>(Map['K,'V],'K,'V)Map['K,'V]
+TypedMapLib	isEmpty	GENERIC	<K,V>(Map['K,'V])Bool
+TypedMapLib	keys	GENERIC	<K,V>(Map['K,'V])List['K]
+TypedMapLib	lookup	GENERIC	<K,V>(Map['K,'V],'K)JulcOptional['V]
+TypedMapLib	member	GENERIC	<K,V>(Map['K,'V],'K)Bool
+TypedMapLib	remove	GENERIC	<K,V>(Map['K,'V],'K)Map['K,'V]
+TypedMapLib	size	GENERIC	<K,V>(Map['K,'V])Int
+TypedMapLib	values	GENERIC	<K,V>(Map['K,'V])List['V]
 ValuesLib	_containsPolicy	COMPILES	Ledger.Value -> Data -> Bool
 ValuesLib	_countTokensWithQty	COMPILES	Ledger.Value -> Data -> Int -> Int
 ValuesLib	_findTokenName	COMPILES	Ledger.Value -> Data -> Int -> Bytes

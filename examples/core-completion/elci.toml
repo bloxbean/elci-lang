@@ -1,7 +1,7 @@
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-97e168c"
+julc-version = "0.1.0-gb-f8e9cb8"
 
 [entrypoint]
 module = "Main"

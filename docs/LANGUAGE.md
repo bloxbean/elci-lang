@@ -24,6 +24,7 @@ separate milestones.
 | Equality | Structural equality for eligible primitives, lists, tuples, records and unions |
 | Ledger access | Typed record views, transaction fields, nominal hash types, approved constructors/patterns/equality of ledger sums and records |
 | Data conversions | `Julc.Data.decode`/`encode` strict codecs and Julc optional ↔ `Maybe` adapters |
+| Maps and bytes | Typed `Map k v` (Elm `Dict`-style) and complete byte-string builtins in `Bytes` |
 | Java libraries | Concrete exports, generic Java templates specialized per use, and Julc's programmatic list exports |
 | Validators | Named `[validators.<name>]` groups with spend, mint, withdraw, certify, vote and propose handlers, deployment parameters and required/optional/absent spending datums; `[entrypoint]` functions for `eval` |
 | CLI | Check/build/function evaluation; `--validator` selection; `apply` parameters; `test`; pinned target/version; ABI comparison |
@@ -258,18 +259,40 @@ supported surface.
 
 ### Compiler-provided modules
 
-Besides `List`, which every module sees, these modules have no source and are
-imported explicitly:
+`List` is visible in every module. These modules are imported explicitly:
 
 | Module | Functions |
 | --- | --- |
+| `Map` | `empty`, `singleton`, `get`, `member`, `insert`, `remove`, `update`, `size`, `isEmpty`, `keys`, `values`, `toList`, `fromList`, `foldl`, `filter`, `map` |
 | `Julc.Data` | `decode`, `encode`, `fromOptional`, `toOptional` (below) |
-| `Bytes` | `empty`, `fromString`, `toString`, `length`, `append`, `slice start length`, `blake2b224`, `blake2b256`, `sha256` |
+| `Bytes` | see the table below |
 | `Debug` | `trace : String -> a -> a`, which emits a Plutus trace and returns its second argument |
 
-Each `Bytes` function is one Plutus builtin. For example, `Bytes.fromString` is
-UTF-8 encoding, so token names can be written as `Bytes.fromString "GOLD"`.
-`Bytes.toString` fails on invalid UTF-8. `Debug.trace` costs budget like any trace.
+**`Map k v`** works like Elm's `Dict`: `Map.get key map : Maybe v`, and
+`Map.insert key value map` replaces an existing binding. A map is the ledger's
+representation: an association list compared by the keys' Data encoding, so
+lookups are O(n). Keys and values can be any Data-encodable type, including Elci
+records and ledger types, and `keys`, `values` and `toList` follow map order. The
+module is Elci source over Julc's `TypedMapLib` templates, so it shares the
+`JulcMap` lowering that Java validators use.
+
+**`Bytes`** functions are single Plutus builtins, with the byte string last so they
+compose in pipelines:
+
+| Group | Functions |
+| --- | --- |
+| Building | `empty`, `fromString` (UTF-8), `toString`, `cons byte`, `replicate count byte`, `append` |
+| Reading | `length`, `at index`, `slice start length`, `take n`, `drop n` |
+| Comparing | `lessThan`, `lessThanOrEqual` (and `==`) |
+| Integers | `fromIntBigEndian width n`, `fromIntLittleEndian width n` (width `0` is minimal), `toIntBigEndian`, `toIntLittleEndian` |
+| Bits | `and`, `or`, `xor` (truncating to the shorter operand), `complement`, `shift n`, `rotate n`, `testBit i`, `countSetBits`, `findFirstSetBit` |
+| Hashes | `blake2b224`, `blake2b256`, `sha256`, `sha3_256`, `keccak256`, `ripemd160` |
+
+Token names can be written as `Bytes.fromString "GOLD"`. `Bytes.toString` fails on
+invalid UTF-8. Composite helpers such as `toHex`, `intToDecimalString` and
+`utf8ToInteger` come from Julc's `ByteStringLib`: map
+`"Julc.ByteString" = "org.julclang.stdlib.lib.ByteStringLib"` and
+`import Julc.ByteString as ByteString`. `Debug.trace` costs budget like any trace.
 
 ### Explicit Data conversions
 
@@ -339,8 +362,9 @@ Only the selected handler's datum and redeemer are decoded, so handlers may use
 different redeemer types. Top-level values reachable from any handler are
 program-level definitions. They are evaluated once per script execution, before
 dispatch. A failing top-level value therefore fails every purpose; keep
-purpose-specific work inside the handler. Library functions are linked once per
-script. A zero-argument library value is evaluated where it is used.
+purpose-specific work inside the handler. Library imports are linked the same way:
+functions once per script, and zero-argument library values, such as `Map.empty`,
+evaluated once at script start like top-level values.
 
 Adding, removing or changing a handler changes the group's script hash. Validators
 always check the purpose before calling a handler, even with one handler, so a

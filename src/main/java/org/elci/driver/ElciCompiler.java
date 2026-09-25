@@ -77,6 +77,7 @@ public final class ElciCompiler {
         return compileProject(sources,module,function,purpose,javaModules,options,Map.of());
     }
     public Result compileProject(Map<String,String> sources,String module,String function,FrontendProgram.Purpose purpose,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
+        javaModules=org.elci.modules.Modules.withCoreLibraries(javaModules);
         var modules=new org.elci.modules.Modules(sources,javaModules);
         var java=javaProvider(modules,List.of(module),options,librarySources);
         return compileModule(modules.resolve(module),function,purpose,javaModules,options,java);
@@ -119,6 +120,7 @@ public final class ElciCompiler {
      * must run in isolation.
      */
     public Map<Value,Result> compileValues(Map<String,String> sources,String module,java.util.function.Predicate<Ty> select,Map<String,String> javaModules,CompilerOptions options,Map<String,String> librarySources) {
+        javaModules=org.elci.modules.Modules.withCoreLibraries(javaModules);
         var modules=new org.elci.modules.Modules(sources,javaModules);
         var java=javaProvider(modules,List.of(module),options,librarySources);
         var resolved=modules.resolve(module);
@@ -154,6 +156,7 @@ public final class ElciCompiler {
         if(spec.spendDatum()!=DatumProfile.REQUIRED&&!purposes.contains(ContractSchema.Purpose.SPEND))throw new IllegalArgumentException("Validator "+spec.name()+" sets a spending datum profile without a spend handler");
         var available=capabilities.apply(options);
         requireRoles(available,spec);
+        javaModules=org.elci.modules.Modules.withCoreLibraries(javaModules);
         var modules=new org.elci.modules.Modules(sources,javaModules);
         for(var handler:spec.handlers()) {
             if(!sources.containsKey(handler.module()))throw new IllegalArgumentException("Handler "+handler.symbol()+" for "+purpose(handler.purpose())+": no source module "+handler.module());
@@ -461,7 +464,20 @@ public final class ElciCompiler {
         importedTypes.put(bytes+"length",fn(con("Bytes"),con("Int")));
         importedTypes.put(bytes+"append",fn(con("Bytes"),fn(con("Bytes"),con("Bytes"))));
         importedTypes.put(bytes+"slice",fn(con("Int"),fn(con("Int"),fn(con("Bytes"),con("Bytes")))));
-        for(String hash:List.of("blake2b224","blake2b256","sha256"))importedTypes.put(bytes+hash,fn(con("Bytes"),con("Bytes")));
+        importedTypes.put(bytes+"take",fn(con("Int"),fn(con("Bytes"),con("Bytes"))));
+        importedTypes.put(bytes+"drop",fn(con("Int"),fn(con("Bytes"),con("Bytes"))));
+        importedTypes.put(bytes+"at",fn(con("Int"),fn(con("Bytes"),con("Int"))));
+        importedTypes.put(bytes+"cons",fn(con("Int"),fn(con("Bytes"),con("Bytes"))));
+        importedTypes.put(bytes+"replicate",fn(con("Int"),fn(con("Int"),con("Bytes"))));
+        for(String compare:List.of("lessThan","lessThanOrEqual"))importedTypes.put(bytes+compare,fn(con("Bytes"),fn(con("Bytes"),con("Bool"))));
+        for(String from:List.of("fromIntBigEndian","fromIntLittleEndian"))importedTypes.put(bytes+from,fn(con("Int"),fn(con("Int"),con("Bytes"))));
+        for(String to:List.of("toIntBigEndian","toIntLittleEndian"))importedTypes.put(bytes+to,fn(con("Bytes"),con("Int")));
+        for(String logic:List.of("and","or","xor"))importedTypes.put(bytes+logic,fn(con("Bytes"),fn(con("Bytes"),con("Bytes"))));
+        for(String move:List.of("shift","rotate"))importedTypes.put(bytes+move,fn(con("Int"),fn(con("Bytes"),con("Bytes"))));
+        importedTypes.put(bytes+"testBit",fn(con("Int"),fn(con("Bytes"),con("Bool"))));
+        for(String count:List.of("countSetBits","findFirstSetBit"))importedTypes.put(bytes+count,fn(con("Bytes"),con("Int")));
+        importedTypes.put(bytes+"complement",fn(con("Bytes"),con("Bytes")));
+        for(String hash:List.of("blake2b224","blake2b256","sha256","sha3_256","keccak256","ripemd160"))importedTypes.put(bytes+hash,fn(con("Bytes"),con("Bytes")));
     }
 
     /**
