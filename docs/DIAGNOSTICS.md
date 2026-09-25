@@ -15,7 +15,7 @@ renders them as `path:line:column: code: message`.
 | `ELCI2006` | Duplicate binder or unreachable pattern |
 | `ELCI2007` | Non-exhaustive case expression |
 | `ELCI2008` | Eager recursive value cycle |
-| `ELCI2009` | Non-concrete deployed entrypoint |
+| `ELCI2009` | Non-concrete handler or entrypoint |
 | `ELCI2010` | Unknown or unconstrained record field |
 | `ELCI2011` | Duplicate type or constructor |
 | `ELCI2012` | Invalid type, alias, arity or alias cycle |

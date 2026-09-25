@@ -84,7 +84,8 @@ The runner (JVM) builds the scenario:
    decoding, through `ValidatorTest.evaluate`.
 5. It checks the outcome, and the budget with `BudgetAssertions.assertBudgetUnder`.
 
-`[entrypoint]` spending and minting validators are addressed as `entrypoint`.
+Scenarios name `[validators.<name>]` groups
+([ADR-007](007-named-validators-only.md)).
 
 ### Debugging aid
 
@@ -95,7 +96,7 @@ in contracts as well as tests. The runner prints traces of failing tests.
 ### JVM facade
 
 `org.elci.testkit.ElciTestkit` compiles a project's named validator, its
-`[entrypoint]` or a single function to a Julc `Program`. JUnit suites can then use
+`[entrypoint]` function or any exposed value to a Julc `Program`. JUnit suites can then use
 julc-testkit directly (`ScriptContextTestBuilder`, `ValidatorTest`,
 `BudgetAssertions`) against the same scripts `elci build` publishes.
 
@@ -150,8 +151,8 @@ governance details beyond the purpose itself need the JVM facade for now.
 - **Tests:** `TestCommandTest`, `IntrinsicsTest` and the extended `InitTest`. See
   [Validation](../docs/VALIDATION.md#source-level-testing-evidence-adr-006).
 - **Examples:** `examples/treasury/tests` covers named validators across spending,
-  withdrawal and minting. `examples/vesting/tests` covers an `[entrypoint]`
-  validator with validity ranges.
+  withdrawal and minting. `examples/vesting/tests` covers
+  validity ranges.
 - **Pre-existing defect fixed:** the pattern-usefulness check expanded a wildcard
   into every constructor, even when the column did not name them all. For a union
   with a `List` field it recursed without end, which `Expect.every` exposed. It

@@ -36,4 +36,11 @@ After building the native CLI, the equivalent command is:
 build/native/elci build examples/vesting
 ```
 
-The generated Plutus program is written under `examples/vesting/build/`.
+The generated artifacts are written under `examples/vesting/build/validators/vesting/`.
+
+`tests/VestingTest.elm` holds transaction scenarios for claims at, after and before
+the deadline, with and without the beneficiary's signature:
+
+```shell
+build/install/elci/bin/elci test examples/vesting
+```

@@ -12,20 +12,19 @@ import static org.junit.jupiter.api.Assertions.*;
 class InitTest {
     @TempDir Path directory;
 
-    @Test void createsBuildableSpendingProjectByDefault() throws Exception {
+    @Test void createsANamedSpendingValidatorByDefault() throws Exception {
         var project = directory.resolve("vesting");
         assertEquals(0, Main.run("init", project.toString()));
-        assertTrue(Files.readString(project.resolve("elci.toml")).contains("purpose = \"spend\""));
+        String config = Files.readString(project.resolve("elci.toml"));
+        assertTrue(config.contains("[validators.main]") && config.contains("spend = \"Main.spend\""), config);
         assertEquals(0, Main.run("check", project.toString()));
         assertEquals("build/\n", Files.readString(project.resolve(".gitignore")));
     }
 
-    @Test void createsBuildableMintingAndFunctionTemplates() throws Exception {
-        var mint = directory.resolve("token");
+    @Test void createsAFunctionProjectForEval() throws Exception {
         var function = directory.resolve("calculator");
-        assertEquals(0, Main.run("init", "--purpose", "mint", mint.toString()));
-        assertEquals(0, Main.run("check", mint.toString()));
         assertEquals(0, Main.run("init", function.toString(), "--purpose", "function"));
+        assertTrue(Files.readString(function.resolve("elci.toml")).contains("purpose = \"function\""));
         assertEquals(0, Main.run("eval", function.toString()));
     }
 
@@ -48,9 +47,10 @@ class InitTest {
         assertTrue(Files.readString(directory.resolve("default-named/elci.toml")).contains("spend = \"Main.spend\""));
     }
 
-    @Test void namedOnlyPurposesRequireAValidator() throws Exception {
-        assertEquals(1, Main.run("init", directory.resolve("withdraw").toString(), "--purpose", "withdraw"));
-        assertFalse(Files.exists(directory.resolve("withdraw")));
+    @Test void everyHandlerPurposeDefaultsToValidatorMain() throws Exception {
+        var project = directory.resolve("withdraw");
+        assertEquals(0, Main.run("init", project.toString(), "--purpose", "withdraw"));
+        assertTrue(Files.readString(project.resolve("elci.toml")).contains("[validators.main]"));
         assertEquals(1, Main.run("init", directory.resolve("fn").toString(), "--validator", "v", "--purpose", "function"));
         assertEquals(1, Main.run("init", directory.resolve("bad-name").toString(), "--validator", "../x"));
         assertFalse(Files.exists(directory.resolve("bad-name")));

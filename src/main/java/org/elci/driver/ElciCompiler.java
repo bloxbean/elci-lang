@@ -92,22 +92,14 @@ public final class ElciCompiler {
         return java;
     }
     private Result compileModule(Ast.Module module,String function,FrontendProgram.Purpose purpose,Map<String,String> javaModules,CompilerOptions options,JavaLibraryProvider java) {
+        // Validators are named and compiled with compileValidator (ADR-007).
+        if(purpose!=FrontendProgram.Purpose.FUNCTION)throw new IllegalArgumentException("Only function entrypoints compile here; validators are [validators.<name>] groups compiled with compileValidator");
         var frontend=frontend(module,javaModules,options,java);
         var entry=module.declarations().stream().filter(d->d.name().equals(function)).findFirst().orElseThrow(()->new IllegalArgumentException("Entrypoint not found: "+function));
         if(!module.exposing().contains(function)&&!module.exposing().contains(".."))throw new Diagnostic("ELCI2103",entry.token(),"Entrypoint must be exposed by its module");
         var inference=frontend.inference();inference.check(module.declarations(),frontend.importedTypes());
         Ty entryType=inference.globals.get(function).body();
-        if(!Types.concrete(entryType))throw new Diagnostic("ELCI2009",entry.token(),"Deployed entrypoints require concrete types");
-        if(purpose!=FrontendProgram.Purpose.FUNCTION) {
-            var expected=purpose==FrontendProgram.Purpose.SPEND?fn(new Var(),fn(new Var(),fn(con("ScriptContext"),con("Bool")))):fn(new Var(),fn(con("ScriptContext"),con("Bool")));
-            unify(entryType,expected,entry.token());
-            Ty boundaryType=entryType;
-            int boundaryCount=purpose==FrontendProgram.Purpose.SPEND?2:1;
-            for(int i=0;i<boundaryCount;i++) {
-                var arrow=(Con)prune(boundaryType);checkBoundary(arrow.args().get(0),inference,new HashSet<>(),entry.token());boundaryType=arrow.args().get(1);
-            }
-            if(module.imports().stream().noneMatch(i->i.module().equals("Julc.Ledger")&&(i.exposing().contains("ScriptContext")||i.exposing().contains(".."))))throw new Diagnostic("ELCI2101",entry.token(),"Import Julc.Ledger exposing (ScriptContext)");
-        }
+        if(!Types.concrete(entryType))throw new Diagnostic("ELCI2009",entry.token(),"Entrypoints require concrete types");
         var lowering=new Lowering(module.declarations(),inference,frontend.importedSymbols(),frontend.schemes(),frontend.libraries(),Lowering.ImportMode.INLINE);
         var pir=lowering.lower(function,entryType);
         var frontendProgram=new FrontendProgram(pir,lowering.pir(entryType),options.getTarget(),new FrontendProgram.Entrypoint(module.name()+"."+function,purpose,"julc-strict-v1"),lowering.namedTypes());
@@ -197,13 +189,13 @@ public final class ElciCompiler {
             if(hasDatum&&spec.spendDatum()==DatumProfile.OPTIONAL) {
                 var maybe=prune(datum);
                 if(!(maybe instanceof Con c)||!c.name().equals("Elci.Maybe"))throw new Diagnostic("ELCI2014",declaration.token(),"Handler "+handler.symbol()+" uses spend-datum = \"optional\", so its datum must have type Maybe d, not "+maybe);
-                checkBoundary(c.args().getFirst(),inference,new HashSet<>(),declaration.token(),true);
-            } else if(hasDatum)checkBoundary(datum,inference,new HashSet<>(),declaration.token(),true);
-            checkBoundary(redeemer,inference,new HashSet<>(),declaration.token(),true);
+                checkBoundary(c.args().getFirst(),inference,new HashSet<>(),declaration.token());
+            } else if(hasDatum)checkBoundary(datum,inference,new HashSet<>(),declaration.token());
+            checkBoundary(redeemer,inference,new HashSet<>(),declaration.token());
             shapes.add(new Shape(handler,type,datum==null?null:prune(datum),prune(redeemer),declaration));
         }
         var firstToken=shapes.getFirst().declaration().token();
-        for(var parameter:parameterTypes)checkBoundary(parameter,inference,new HashSet<>(),firstToken,true);
+        for(var parameter:parameterTypes)checkBoundary(parameter,inference,new HashSet<>(),firstToken);
 
         var lowering=new Lowering(module.declarations(),inference,frontend.importedSymbols(),frontend.schemes(),frontend.libraries(),Lowering.ImportMode.LINK);
         var handlers=new ArrayList<ValidatorProgram.Handler>();var infos=new ArrayList<HandlerInfo>();
@@ -399,27 +391,23 @@ public final class ElciCompiler {
         constructors(java.types(),importedTypes,inference);
         return new Frontend(module,inference,importedTypes,importedSymbols,schemes,libraries);
     }
-    private static void checkBoundary(Ty type,Inference inference,Set<String> visiting,Token token) {
-        checkBoundary(type,inference,visiting,token,false);
-    }
     /**
-     * Reject types without a strict Data boundary. Named validators ({@code imported}) also accept
-     * imported types whose provider approves BOUNDARY; Julc's validator compiler checks them again.
+     * Reject types without a strict Data boundary. Imported types are accepted when their provider
+     * approves BOUNDARY; Julc's validator compiler checks them again.
      */
-    private static void checkBoundary(Ty type,Inference inference,Set<String> visiting,Token token,boolean imported) {
+    private static void checkBoundary(Ty type,Inference inference,Set<String> visiting,Token token) {
         if(visiting.size()>64)throw new Diagnostic("ELCI2013",token,"Expanding recursive boundary type is unsupported");
         var t=(Con)prune(type);
         if(t.name().equals("ScriptContext"))throw new Diagnostic("ELCI2013",token,"ScriptContext is only valid in the ledger context argument, not serialized user data");
         if(inference.importedRepresentations.containsKey(t.name())&&!inference.byteEquality(t.name())) {
-            if(imported&&inference.approves(t.name(),LibraryType.Operation.BOUNDARY))return;
-            if(imported)throw new Diagnostic("ELCI2013",token,t.name()+" has no approved strict Data boundary (BOUNDARY); for example records containing the map-encoded Value cannot be checked");
-            throw new Diagnostic("ELCI2013",token,"Imported ledger records are currently context views in [entrypoint] projects; use an Elci data type, or a named validator for imported types that approve BOUNDARY");
+            if(inference.approves(t.name(),LibraryType.Operation.BOUNDARY))return;
+            throw new Diagnostic("ELCI2013",token,t.name()+" has no approved strict Data boundary (BOUNDARY); for example records containing the map-encoded Value cannot be checked");
         }
         if(t.name().equals("->"))throw new Diagnostic("ELCI2013",token,"Functions cannot be serialized as datum or redeemer");
-        t.args().forEach(a->checkBoundary(a,inference,visiting,token,imported));
+        t.args().forEach(a->checkBoundary(a,inference,visiting,token));
         for(var union:inference.unions.values())if(inference.nominal(union.name()).equals(t.name())&&visiting.add(t.toString())) {
             var vars=new HashMap<String,Ty>();for(int i=0;i<union.parameters().size();i++)vars.put(union.parameters().get(i),t.args().get(i));
-            for(var variant:union.variants())for(var field:variant.fields())checkBoundary(inference.annotatedPublic(field,vars),inference,visiting,token,imported);
+            for(var variant:union.variants())for(var field:variant.fields())checkBoundary(inference.annotatedPublic(field,vars),inference,visiting,token);
             visiting.remove(t.toString());
         }
     }

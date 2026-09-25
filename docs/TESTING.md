@@ -133,8 +133,7 @@ strangerCannotRelease =
 For each scenario, the runner does the following:
 
 1. It compiles the named validator exactly as `elci build` does and applies
-   `parameters` in the declared order. A project with an `[entrypoint]` spending or
-   minting validator names it `"entrypoint"`.
+   `parameters` in the declared order.
 2. It computes the applied script's hash. The validator's own address, minting
    policy and staking credential derive from it.
 3. It builds the ledger context with julc-testkit's `ScriptContextTestBuilder`. For
@@ -229,7 +228,7 @@ The facade has three entry points:
 
 - `ElciTestkit.validator(project, name, parameters...)`: a named validator with its
   parameters applied;
-- `ElciTestkit.entrypoint(project)`: the `[entrypoint]` script;
+- `ElciTestkit.entrypoint(project)`: the `[entrypoint]` function;
 - `ElciTestkit.value(project, module, name)`: any exposed zero-argument declaration,
   including those in test modules.
 

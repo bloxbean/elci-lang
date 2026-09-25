@@ -33,15 +33,12 @@ representation planner encodes lists, tuples, records and unions explicitly.
 
 Elci uses two revisions of Julc's neutral backend contract.
 
-**Revision 1 (`[entrypoint]` projects).** Elci supplies a closed, specialized
-`FrontendProgram` containing its PIR term, PIR type, compiler target, entrypoint
-purpose, boundary policy and named types. Library exports are inlined at each use.
-Julc checks target and boundary compatibility, lexical closure and supported
-entrypoint shape. It applies the existing spending or minting wrapper once and
-runs the shared PIR-to-UPLC pass sequence. This path keeps existing script bytes
-stable.
+**Revision 1 (functions).** An `[entrypoint]` function, and each `elci test`
+program, is a closed, specialized `FrontendProgram` with purpose `FUNCTION`: its
+PIR term, PIR type, target and named types. Library exports are inlined at each
+use. Julc checks the target and lexical closure and lowers it without a wrapper.
 
-**Revision 2 (named validators).** Each `[validators.<name>]` group becomes one
+**Revision 2 (validators).** Each `[validators.<name>]` group becomes one
 Julc `ValidatorProgram` (ADR-059):
 
 - **imports:** one trusted library import group, materialized once per group, so
@@ -67,8 +64,8 @@ dependencies. Elci never invokes those exports as ordinary JVM functions.
 ## Correctness boundaries
 
 The frontend owns source typing, symbol hygiene, specialization and runtime
-representation choices. Revision-1 programs are checked for closure and entrypoint
-boundaries only. Revision-2 programs also pass Julc's structural verifier, which
+representation choices. Revision-1 function programs are checked for closure
+only. Revision-2 programs also pass Julc's structural verifier, which
 checks binding, typing and data-constructor agreement. It is not a proof of
 semantic correctness.
 

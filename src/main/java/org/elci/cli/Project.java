@@ -12,12 +12,12 @@ import java.util.regex.Pattern;
 
 /**
  * Strict, documented project-configuration subset of TOML. Unknown keys fail closed. A project
- * configures either one legacy {@code [entrypoint]} or one or more {@code [validators.<name>]}
- * groups, never both.
+ * configures either one {@code [entrypoint]} function (for {@code elci eval}) or one or more
+ * {@code [validators.<name>]} groups, never both. Validators are always named (ADR-007).
  */
 public record Project(Path root,List<String> sourceDirectories,Entrypoint entrypoint,List<Validator> validators,
                       Map<String,String> javaModules,String expectedAbi,List<String> libraryJars,List<String> testDirectories) {
-    /** The legacy single entrypoint. */
+    /** A plain function entrypoint, evaluated with {@code elci eval}. */
     public record Entrypoint(String module,String function,FrontendProgram.Purpose purpose) {}
 
     /**
@@ -43,7 +43,7 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
         javaModules=Map.copyOf(javaModules);libraryJars=List.copyOf(libraryJars);testDirectories=List.copyOf(testDirectories);
     }
 
-    /** Legacy accessors for single-entrypoint projects. */
+    /** Accessors for an {@code [entrypoint]} function project. */
     public String module(){return legacy().module();}
     public String function(){return legacy().function();}
     public FrontendProgram.Purpose purpose(){return legacy().purpose();}
@@ -81,7 +81,7 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
         var validatorSections=sections.keySet().stream().filter(s->s.startsWith("validators.")).sorted().toList();
         boolean legacy=sections.containsKey("entrypoint");
         if(legacy&&!validatorSections.isEmpty())throw new IllegalArgumentException("ELCI4001: elci.toml mixes [entrypoint] with [validators.*]; use one form");
-        if(!legacy&&validatorSections.isEmpty())throw new IllegalArgumentException("ELCI4001: elci.toml must configure [entrypoint] or at least one [validators.<name>]");
+        if(!legacy&&validatorSections.isEmpty())throw new IllegalArgumentException("ELCI4001: elci.toml must configure at least one [validators.<name>], or an [entrypoint] function");
         String expected=project.containsKey("expected-abi")?quoted(project.get("expected-abi")):null;
         var jars=project.containsKey("library-jars")?paths(project.get("library-jars"),"library-jars"):List.<String>of();
         var tests=sections.getOrDefault("tests",Map.of());keys(tests,Set.of("source-directories"),"tests");
@@ -89,10 +89,12 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
         if(legacy) {
             var entry=sections.get("entrypoint");
             keys(entry,Set.of("module","function","purpose","boundary"),"entrypoint");
-            if(!quoted(required(entry,"boundary","entrypoint")).equals("julc-strict-v1"))throw new IllegalArgumentException("Unsupported boundary policy");
-            String purpose=quoted(required(entry,"purpose","entrypoint"));
-            var p=switch(purpose){case "spend"->FrontendProgram.Purpose.SPEND;case "mint"->FrontendProgram.Purpose.MINT;case "function"->FrontendProgram.Purpose.FUNCTION;
-                default->throw new IllegalArgumentException("Unsupported purpose: "+purpose+(PURPOSES.containsKey(purpose)?"; the "+purpose+" purpose requires a [validators.<name>] group":""));};
+            if(entry.containsKey("boundary")&&!quoted(entry.get("boundary")).equals("julc-strict-v1"))throw new IllegalArgumentException("Unsupported boundary policy");
+            // [entrypoint] is a plain function for elci eval and tests; validators are named (ADR-007).
+            String purpose=entry.containsKey("purpose")?quoted(entry.get("purpose")):"function";
+            if(PURPOSES.containsKey(purpose))throw new IllegalArgumentException("ELCI4001: [entrypoint] purpose = \""+purpose+"\" was removed; configure validators as [validators.<name>] with "+purpose+" = \""+quoted(required(entry,"module","entrypoint"))+"."+quoted(required(entry,"function","entrypoint"))+"\"");
+            if(!purpose.equals("function"))throw new IllegalArgumentException("Unsupported purpose: "+purpose+"; [entrypoint] only supports purpose = \"function\"");
+            var p=FrontendProgram.Purpose.FUNCTION;
             return new Project(root.toAbsolutePath().normalize(),sourceDirs,new Entrypoint(quoted(required(entry,"module","entrypoint")),quoted(required(entry,"function","entrypoint")),p),List.of(),modules,expected,jars,testDirs);
         }
         if(expected!=null)throw new IllegalArgumentException("ELCI4001: [project] expected-abi applies to [entrypoint] projects; set expected-abi in each [validators.<name>] table");
@@ -169,7 +171,7 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
         }
         return result;
     }
-    /** The source file of the legacy entrypoint module. */
+    /** The source file of the entrypoint function's module. */
     public Path source() {return source(module());}
     /** The source file of {@code module}. */
     public Path source(String module) {

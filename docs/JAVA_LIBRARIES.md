@@ -135,8 +135,8 @@ module remains available and needs no configuration.
 Julc composes the Java-source provider, the programmatic provider and Elci's own
 type descriptions with deterministic ownership. A symbol exported by two
 providers is rejected rather than ordered. Named validators link each
-specialization once per script. `[entrypoint]` projects inline a closed copy at
-each use, keeping their existing bytes for concrete exports.
+specialization once per script. Function programs (`eval` and tests) inline a
+closed copy at each use.
 
 ## Types and supported operations
 

@@ -1,37 +1,31 @@
 package org.elci.abi;
 
 import org.elci.driver.ElciCompiler;
-import org.julclang.compiler.backend.FrontendProgram;
 import org.julclang.compiler.pir.PirType;
 import java.util.*;
 
 /** Canonical, deterministic encoding metadata. This is not a transaction-construction blueprint. */
 public final class Abi {
     private Abi() {}
-    public static String manifest(ElciCompiler.Result result,FrontendProgram.Purpose purpose) {
+    /** Format revision 1: an [entrypoint] function's arguments, result and type definitions. */
+    public static String manifest(ElciCompiler.Result result) {
         var root=new TreeMap<String,Object>();root.put("formatVersion",1);root.put("compiler","elci-"+org.elci.driver.BuildInfo.VERSION);root.put("julcVersion",ElciCompiler.JULC_VERSION);
-        root.put("target",result.target().profileId());root.put("entrypoint",result.module()+"."+result.function());root.put("purpose",purpose.name().toLowerCase(Locale.ROOT));root.put("boundary","julc-strict-v1");root.put("parameters",List.of());
-        root.put("ledgerArguments",purpose==FrontendProgram.Purpose.FUNCTION?0:1);
+        root.put("target",result.target().profileId());root.put("entrypoint",result.module()+"."+result.function());root.put("purpose","function");root.put("boundary","julc-strict-v1");root.put("parameters",List.of());
+        root.put("ledgerArguments",0);
         var arguments=new ArrayList<Object>();PirType type=result.pirType();org.elci.types.Types.Ty sourceType=result.type();int index=0;
         var references=new LinkedHashSet<String>();
         while(type instanceof PirType.FunType fn) {
-            String role=purpose==FrontendProgram.Purpose.FUNCTION?"argument"+(index+1):purpose==FrontendProgram.Purpose.SPEND?List.of("datum","redeemer","context").get(index):List.of("redeemer","context").get(index);
             var sourceFunction=(org.elci.types.Types.Con)org.elci.types.Types.prune(sourceType);
-            arguments.add(Map.of("role",role,"sourceType",sourceFunction.args().get(0).toString(),"schema",role.equals("context")?Map.of("kind","ledger-context","encoding","PlutusV3.ScriptContext"):schema(fn.paramType())));
-            if(!role.equals("context"))references(fn.paramType(),references);
+            arguments.add(Map.of("role","argument"+(index+1),"sourceType",sourceFunction.args().get(0).toString(),"schema",schema(fn.paramType())));
+            references(fn.paramType(),references);
             sourceType=sourceFunction.args().get(1);type=fn.returnType();index++;
         }
         root.put("arguments",arguments);root.put("result",schema(type));
         references(type,references);
-        var definitions=new TreeMap<String,Object>();var queue=new ArrayDeque<>(references);
-        while(!queue.isEmpty()) {
-            String name=queue.removeFirst();if(definitions.containsKey(name))continue;
-            var definition=result.namedTypes().get(name);if(definition==null)throw new IllegalArgumentException("Missing ABI type definition: "+name);
-            definitions.put(name,schema(definition));var next=new LinkedHashSet<String>();references(definition,next);queue.addAll(next);
-        }
-        root.put("definitions",definitions);
+        root.put("definitions",definitions(references,result.namedTypes()));
         return json(root)+"\n";
     }
+
     /**
      * Format revision 2: one named validator (ADR-004). Parameters are listed in application
      * order and handlers in ledger-tag order, each with its datum profile and boundary schemas.

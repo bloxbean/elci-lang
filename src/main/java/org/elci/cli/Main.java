@@ -21,10 +21,10 @@ public final class Main {
                         +"       elci eval [project-directory]\n"
                         +"       elci test [project-directory] [--match <substring>]\n"
                         +"       elci apply [project-directory] --validator <name> --param <name>=<plutus-data-json|@file> [--output <file>]\n"
-                        +"       elci init <project-directory> [--purpose spend|mint|function]\n"
+                        +"       elci init <project-directory> [--validator <name>] [--purpose spend|mint|withdraw|certify|vote|propose|function]\n"
                         +"       elci --version\n"
-                        +"An [entrypoint] build writes build/validator.flat, validator.plutus, validator.plutus.json (Julc format) and abi.json (Elci schema).\n"
-                        +"A named-validator build writes the same files under build/validators/<name>/ for each [validators.<name>] group.");return 0;
+                        +"A build writes build/validators/<name>/validator.flat, validator.plutus, validator.plutus.json (Julc format) and abi.json (Elci schema)\n"
+                        +"for each [validators.<name>] group; an [entrypoint] function project writes build/validator.flat, validator.plutus and abi.json.");return 0;
             }
             if(args[0].equals("--version")){System.out.println("elci "+org.elci.driver.BuildInfo.VERSION+" / julc "+ElciCompiler.JULC_VERSION);return 0;}
             if(args[0].equals("init"))return ProjectInitializer.run(Arrays.copyOfRange(args,1,args.length));
@@ -55,33 +55,22 @@ public final class Main {
                 return ParameterApplication.run(project,selected.isEmpty()?null:selected.iterator().next(),parameters,appliedOutput);
             }
             if(project.named())return named(args[0],project,selected);
-            if(!selected.isEmpty())throw new IllegalArgumentException("ELCI4001: --validator requires [validators.<name>] configuration; this project uses [entrypoint]");
+            if(!selected.isEmpty())throw new IllegalArgumentException("ELCI4001: --validator requires [validators.<name>] configuration; this project has an [entrypoint] function");
             source=project.source().toString();
             var result=new ElciCompiler().compileProject(project.sources(),project.module(),project.function(),project.purpose(),project.javaModules(),new CompilerOptions(),project.librarySources());
             if(!result.module().equals(project.module()))throw new IllegalArgumentException("Module header does not match configured source path");
-            String manifest=org.elci.abi.Abi.manifest(result,project.purpose());
+            String manifest=org.elci.abi.Abi.manifest(result);
             if(project.expectedAbi()!=null&&!Files.readString(project.root().resolve(project.expectedAbi())).equals(manifest))throw new IllegalArgumentException("ELCI4001: ABI drift from "+project.expectedAbi()+"; compare constructor tags, field order, and entrypoint roles");
             byte[] flat=UplcFlatEncoder.encodeProgram(result.program());
             if(args[0].equals("eval")) {
-                if(project.purpose()!=org.julclang.compiler.backend.FrontendProgram.Purpose.FUNCTION)throw new IllegalArgumentException("eval requires purpose = \"function\"; validators need ledger context fixtures");
                 var evaluation=JulcVm.create().evaluate(result.program(),result.target().ledgerTarget());System.out.println(evaluation);return evaluation instanceof EvalResult.Success?0:1;
             }
             if(args[0].equals("build")) {
                 var output=project.root().resolve("build");Files.createDirectories(output);
                 Files.write(output.resolve("validator.flat"),flat);
-                var script=org.julclang.clientlib.JulcScriptAdapter.fromProgram(result.program());
-                String hex=script.getCborHex();
-                if(project.purpose()!=org.julclang.compiler.backend.FrontendProgram.Purpose.FUNCTION) {
-                    String purpose=project.purpose()==org.julclang.compiler.backend.FrontendProgram.Purpose.SPEND?"spending":"minting";
-                    var artifact=new org.julclang.clientlib.ValidatorOutput("PlutusScriptV3",purpose,
-                            result.module()+"."+result.function(),hex,
-                            org.julclang.clientlib.JulcScriptAdapter.scriptHash(result.program()),"",flat.length);
-                    Files.writeString(output.resolve("validator.plutus.json"),artifact.toJson());
-                } else {
-                    // A former validator build must not survive switching this project to a function.
-                    Files.deleteIfExists(output.resolve("validator.plutus.json"));
-                }
-                Files.writeString(output.resolve("validator.plutus"),"{\n  \"type\": \"PlutusScriptV3\",\n  \"description\": \"Elci validator\",\n  \"cborHex\": \""+hex+"\"\n}\n");
+                String hex=org.julclang.clientlib.JulcScriptAdapter.fromProgram(result.program()).getCborHex();
+                // A function is not a validator; no Julc validator artifact is written.
+                Files.writeString(output.resolve("validator.plutus"),"{\n  \"type\": \"PlutusScriptV3\",\n  \"description\": \"Elci function\",\n  \"cborHex\": \""+hex+"\"\n}\n");
                 Files.writeString(output.resolve("abi.json"),manifest);
             }
             System.out.println(result.module()+"."+result.function()+": checked; "+flat.length+" FLAT bytes; "+result.target().profileId());return 0;
@@ -94,7 +83,7 @@ public final class Main {
      * expected ABI before any output is written, so a failure publishes nothing.
      */
     private static int named(String command,Project project,Set<String> selected) throws Exception {
-        if(command.equals("eval"))throw new IllegalArgumentException("ELCI4001: eval requires an [entrypoint] project with purpose = \"function\"; named validators need ledger context fixtures");
+        if(command.equals("eval"))throw new IllegalArgumentException("ELCI4001: eval runs an [entrypoint] function; test validators with elci test");
         var configured=new TreeMap<String,Project.Validator>();project.validators().forEach(v->configured.put(v.name(),v));
         for(String name:selected)if(!configured.containsKey(name))throw new IllegalArgumentException("ELCI4001: unknown validator '"+name+"'; configured: "+String.join(", ",configured.keySet()));
         var groups=configured.values().stream().filter(v->selected.isEmpty()||selected.contains(v.name())).toList();

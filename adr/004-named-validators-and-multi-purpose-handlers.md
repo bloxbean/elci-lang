@@ -138,6 +138,11 @@ The Julc artifact is not renamed or represented as a CIP-57 blueprint.
 
 ## Compatibility and invariants
 
+> **Superseded (25 September 2026):** [ADR-007](007-named-validators-only.md)
+> removes `[entrypoint]` validators during the development preview. The
+> `[entrypoint]` compatibility bullets below no longer apply; `[entrypoint]` now
+> names a function for `elci eval`.
+
 - Keep `[entrypoint]` working, including `purpose = "function"`, existing artifact
   paths and single-entrypoint ABI drift checks.
 - Reject mixing `[entrypoint]` and `[validators.*]` in one configuration.

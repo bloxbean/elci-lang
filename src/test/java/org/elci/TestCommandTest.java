@@ -99,7 +99,7 @@ class TestCommandTest {
     }
 
     @Test
-    void entrypointValidatorsAreAddressedAsEntrypoint() throws Exception {
+    void vestingScenariosCheckValidityRangesAndSignatures() throws Exception {
         copy("vesting");
         var result = run("test", project.toString());
         assertEquals(0, result.status(), result.out() + result.err());

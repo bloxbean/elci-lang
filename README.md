@@ -23,14 +23,16 @@ validate minimum offered _ =
     offered >= Math.max minimum 0
 ```
 
-`Math.max` is compiled from the actual bundled Julc Java on-chain library source.
-The source's three logical arguments become **one Plutus V3 ledger context
-argument**, with strict datum/redeemer decoding and Bool-to-success/failure wrapping.
+Configured as `[validators.threshold]` with `spend = "Example.Threshold.validate"`,
+this becomes one script. `Math.max` is compiled from the actual bundled Julc Java
+on-chain library source. The source's three logical arguments become **one Plutus
+V3 ledger context argument**, with purpose dispatch, strict datum/redeemer
+decoding and Bool-to-success/failure wrapping.
 
 ```sh
 # After publishing the pinned local Julc dependencies; see Getting Started.
 ./gradlew test installDist
-build/install/elci/bin/elci init my-contract --purpose spend
+build/install/elci/bin/elci init my-contract
 build/install/elci/bin/elci build examples/threshold
 build/install/elci/bin/elci test examples/treasury
 
@@ -40,12 +42,12 @@ build/native/elci build examples/threshold
 build/native/elci eval examples/functional
 ```
 
-Validator builds include `build/validator.plutus.json` in Julc’s format for Cardano
-Client Lib, plus `abi.json` for Elci schema and ABI drift checks. Named validators
-(`[validators.<name>]`) combine spend, mint, withdraw, certify, vote and propose
-handlers in one script, with deployment parameters and datum profiles. They
-publish per-group artifacts under `build/validators/<name>/`. CIP-57 blueprint
-generation is not implemented yet.
+Validators are configured as `[validators.<name>]` tables. Each one is a single
+script combining any of spend, mint, withdraw, certify, vote and propose
+handlers, with deployment parameters and datum profiles. A build writes
+`build/validators/<name>/validator.plutus.json` in Julc’s format for Cardano
+Client Lib, plus `abi.json` for Elci schema and ABI drift checks. CIP-57
+blueprint generation is not implemented yet.
 
 - [Release workflow](docs/RELEASING.md): versioning, native binaries and GitHub Releases.
 - [Getting started](docs/GETTING_STARTED.md): build, first project, JVM/native CLI.

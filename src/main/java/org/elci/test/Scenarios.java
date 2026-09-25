@@ -4,7 +4,6 @@ import org.elci.cli.Project;
 import org.elci.driver.ElciCompiler;
 import org.julclang.clientlib.JulcScriptAdapter;
 import org.julclang.compiler.CompilerOptions;
-import org.julclang.compiler.backend.FrontendProgram;
 import org.julclang.compiler.pir.PirType;
 import org.julclang.core.PlutusData;
 import org.julclang.core.Program;
@@ -23,9 +22,6 @@ import java.util.*;
  * which the deployed script is evaluated.
  */
 final class Scenarios {
-    /** The name under which an {@code [entrypoint]} spending or minting validator is addressed. */
-    static final String ENTRYPOINT = "entrypoint";
-
     private final Project project;
     private final CompilerOptions options;
     private final Map<String, Program> compiled = new HashMap<>();
@@ -75,19 +71,12 @@ final class Scenarios {
     private Program program(String validator) throws Exception {
         var cached = compiled.get(validator);
         if (cached != null) return cached;
-        Program program;
-        if (project.named()) {
-            var group = project.validators().stream().filter(v -> v.name().equals(validator)).findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("no [validators." + validator + "] in elci.toml"));
-            program = new ElciCompiler().compileValidator(project.sources(), group.spec(), project.javaModules(), options,
-                    project.librarySources()).program();
-        } else {
-            if (!validator.equals(ENTRYPOINT) || project.purpose() == FrontendProgram.Purpose.FUNCTION)
-                throw new IllegalArgumentException("this project's validator is its [entrypoint]; name it \""
-                        + ENTRYPOINT + "\"");
-            program = new ElciCompiler().compileProject(project.sources(), project.module(), project.function(),
-                    project.purpose(), project.javaModules(), options, project.librarySources()).program();
-        }
+        if (!project.named())
+            throw new IllegalArgumentException("this project has no validators; configure [validators." + validator + "]");
+        var group = project.validators().stream().filter(v -> v.name().equals(validator)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("no [validators." + validator + "] in elci.toml"));
+        var program = new ElciCompiler().compileValidator(project.sources(), group.spec(), project.javaModules(), options,
+                project.librarySources()).program();
         compiled.put(validator, program);
         return program;
     }

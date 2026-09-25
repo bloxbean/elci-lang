@@ -93,7 +93,7 @@ identical script bytes; ABI manifests differ only in `julcVersion`.
 
 - The treasury example has 9 tests: scenarios for both validators across all their
   roles, and `Bool` and `Expectation` unit tests. The vesting example's 4
-  `[entrypoint]` scenarios check validity ranges and signatures.
+  scenarios check validity ranges and signatures.
 - Failures show `Expect.equal` values, a rejected transaction, a budget ceiling
   broken through julc-testkit's `BudgetAssertions`, `Debug.trace` output and
   runtime errors, each without aborting other tests.

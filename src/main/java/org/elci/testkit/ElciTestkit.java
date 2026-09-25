@@ -38,7 +38,7 @@ public final class ElciTestkit {
         return parameters.length == 0 ? program : program.applyParams(parameters);
     }
 
-    /** A project's {@code [entrypoint]} script. */
+    /** A project's {@code [entrypoint]} function, as {@code elci eval} runs it. */
     public static Program entrypoint(Path project) throws IOException {
         var configuration = Project.read(project);
         return new ElciCompiler().compileProject(configuration.sources(), configuration.module(),

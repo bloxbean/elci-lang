@@ -406,17 +406,6 @@ class ImportedTypeTest {
                     1
                 """;
         assertEquals("ELCI2104", assertThrows(Diagnostic.class, () -> function(value)).code());
-        // [entrypoint] validators keep the Elci-data-only boundary.
-        assertThrows(Diagnostic.class, () -> new ElciCompiler().compileProject(Map.of("Main", """
-                module Main exposing (mint)
-
-                import Julc.Ledger exposing (Credential, ScriptContext)
-
-
-                mint : Credential -> ScriptContext -> Bool
-                mint _ _ =
-                    True
-                """), "Main", "mint", FrontendProgram.Purpose.MINT, MODULES, new CompilerOptions(), LIBRARIES));
     }
 
     static final String TWO = """

@@ -200,8 +200,12 @@ language features through a frozen backend contract.
 | E6 | Done: revision and role capabilities checked before type checking, request-kind capabilities before each materialization (`ELCI4003`); backend rejections located at the Elci declaration (`ELCI4002`); diagnostics rendered at their own module's file | `BackendCompatibilityTest`, `NamedValidatorCliTest` |
 | E5 | Done: `parameters` and `spend-datum = required/optional/absent` configuration, ABI revision 2, and `elci apply` with off-chain strict parameter checks | [ADR-004 evidence](004-named-validators-and-multi-purpose-handlers.md#implementation-evidence), `ApplyCommandTest` |
 
-Follow-up: the source-level contract test runner deferred above is designed and
-implemented in [ADR-006](006-source-level-tests.md).
+Follow-ups:
+
+- The source-level contract test runner deferred above is designed and
+  implemented in [ADR-006](006-source-level-tests.md).
+- [ADR-007](007-named-validators-only.md) drops `[entrypoint]` validators, and with
+  them the legacy byte-stability constraint.
 
 ## Alternatives and open decisions
 

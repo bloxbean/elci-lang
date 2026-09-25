@@ -3,11 +3,9 @@ source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
 julc-version = "0.1.0-gb-97e168c"
 
-[entrypoint]
-module = "Example.Threshold"
-function = "validate"
-purpose = "spend"
+[validators.threshold]
 boundary = "julc-strict-v1"
+spend = "Example.Threshold.validate"
 
 [java-modules]
 "Julc.Math" = "org.julclang.stdlib.lib.MathLib"

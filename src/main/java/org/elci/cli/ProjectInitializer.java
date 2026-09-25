@@ -6,15 +6,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Set;
 
 /**
- * Creates a minimal project. Without {@code --validator} the project uses the single
- * {@code [entrypoint]} form; with it, a {@code [validators.<name>]} group whose first handler
- * has the chosen purpose. The purpose only selects the starter source.
+ * Creates a minimal project: a {@code [validators.<name>]} group (default name {@code main})
+ * whose first handler has the chosen purpose, or with {@code --purpose function} an
+ * {@code [entrypoint]} function for {@code elci eval}. The purpose only selects the starter.
  */
 final class ProjectInitializer {
-    private static final Set<String> ENTRYPOINT_PURPOSES = Set.of("spend", "mint", "function");
     private static final List<String> HANDLER_PURPOSES = List.of("spend", "mint", "withdraw", "certify", "vote", "propose");
 
     private ProjectInitializer() {}
@@ -43,22 +41,21 @@ final class ProjectInitializer {
             }
         }
         if (target == null) {
-            throw new IllegalArgumentException("Usage: elci init <project-directory> [--purpose spend|mint|function] "
-                    + "[--validator <name> [--purpose spend|mint|withdraw|certify|vote|propose]]");
+            throw new IllegalArgumentException("Usage: elci init <project-directory> [--validator <name>] "
+                    + "[--purpose spend|mint|withdraw|certify|vote|propose|function]");
         }
         if (purpose == null) purpose = "spend";
-        if (validator == null) {
-            if (HANDLER_PURPOSES.contains(purpose) && !ENTRYPOINT_PURPOSES.contains(purpose))
-                throw new IllegalArgumentException("The " + purpose + " purpose requires a named validator; add --validator <name>");
-            if (!ENTRYPOINT_PURPOSES.contains(purpose))
-                throw new IllegalArgumentException("Unsupported initial purpose: " + purpose + "; expected spend, mint or function");
+        if (purpose.equals("function")) {
+            if (validator != null)
+                throw new IllegalArgumentException("A function project has no validator; drop --validator or choose a handler purpose");
         } else {
+            if (validator == null) validator = "main";
             if (!Project.VALIDATOR_NAME.matcher(validator).matches())
                 throw new IllegalArgumentException("Invalid validator name '" + validator
                         + "'; use lowercase letters, digits, '-' or '_', starting with a letter");
             if (!HANDLER_PURPOSES.contains(purpose))
-                throw new IllegalArgumentException("Unsupported handler purpose: " + purpose
-                        + "; expected spend, mint, withdraw, certify, vote or propose");
+                throw new IllegalArgumentException("Unsupported purpose: " + purpose
+                        + "; expected spend, mint, withdraw, certify, vote, propose or function");
         }
         if (Files.exists(target)) {
             if (!Files.isDirectory(target)) throw new IllegalArgumentException("Project path is not a directory: " + target);
@@ -71,9 +68,8 @@ final class ProjectInitializer {
 
         Files.createDirectories(target.resolve("src"));
         if (validator == null) {
-            String function = purpose.equals("function") ? "main" : "validate";
-            Files.writeString(target.resolve("elci.toml"), configuration(function, purpose));
-            Files.writeString(target.resolve("src/Main.elm"), source(purpose));
+            Files.writeString(target.resolve("elci.toml"), configuration());
+            Files.writeString(target.resolve("src/Main.elm"), FUNCTION_SOURCE);
         } else {
             Files.writeString(target.resolve("elci.toml"), validatorConfiguration(validator, purpose));
             Files.writeString(target.resolve("src/Main.elm"), handlerSource(purpose));
@@ -83,7 +79,7 @@ final class ProjectInitializer {
         Files.writeString(target.resolve("README.md"), readme(target.getFileName().toString(), purpose, validator));
         Files.writeString(target.resolve(".gitignore"), "build/\n");
         System.out.println("Created Elci project at " + target + " with initial "
-                + (validator == null ? purpose + " entrypoint." : purpose + " handler in validator " + validator + "."));
+                + (validator == null ? "function entrypoint." : purpose + " handler in validator " + validator + "."));
         System.out.println("Run: elci check " + target);
         return 0;
     }
@@ -97,15 +93,14 @@ final class ProjectInitializer {
                 """.formatted(ElciCompiler.JULC_VERSION);
     }
 
-    private static String configuration(String function, String purpose) {
+    private static String configuration() {
         return header() + """
 
                 [entrypoint]
                 module = "Main"
-                function = "%s"
-                purpose = "%s"
-                boundary = "julc-strict-v1"
-                """.formatted(function, purpose);
+                function = "main"
+                purpose = "function"
+                """;
     }
 
     private static String validatorConfiguration(String validator, String purpose) {
@@ -121,39 +116,14 @@ final class ProjectInitializer {
                 """.formatted(validator, purpose, purpose);
     }
 
-    private static String source(String purpose) {
-        return switch (purpose) {
-            case "spend" -> """
-                    module Main exposing (validate)
-
-                    import Julc.Ledger exposing (ScriptContext)
+    private static final String FUNCTION_SOURCE = """
+            module Main exposing (main)
 
 
-                    validate : Int -> Int -> ScriptContext -> Bool
-                    validate _ _ _ =
-                        True
-                    """;
-            case "mint" -> """
-                    module Main exposing (validate)
-
-                    import Julc.Ledger exposing (ScriptContext)
-
-
-                    validate : Int -> ScriptContext -> Bool
-                    validate _ _ =
-                        True
-                    """;
-            case "function" -> """
-                    module Main exposing (main)
-
-
-                    main : Int
-                    main =
-                        42
-                    """;
-            default -> throw new IllegalArgumentException("Unsupported initial purpose: " + purpose);
-        };
-    }
+            main : Int
+            main =
+                42
+            """;
 
     /**
      * A handler that accepts only transactions signed by the {@code owner} deployment parameter,
@@ -244,17 +214,16 @@ final class ProjectInitializer {
                     `build/validators/%s/`.
                     """.formatted(name, validator, purpose, validator);
         }
-        String next = purpose.equals("function") ? "eval" : "build";
         return """
                 # %s
 
-                This project was created by `elci init` with an initial `%s` entrypoint.
-                The purpose selects the starter source and does not permanently limit the project.
+                This project was created by `elci init` with a function entrypoint for `elci eval`.
+                Validators are configured as `[validators.<name>]` tables; see `elci init --help`.
 
                 ```sh
                 elci check .
-                elci %s .
+                elci eval .
                 ```
-                """.formatted(name, purpose, next);
+                """.formatted(name);
     }
 }

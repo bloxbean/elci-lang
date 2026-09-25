@@ -3,8 +3,6 @@ source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
 julc-version = "0.1.0-gb-97e168c"
 
-[entrypoint]
-module = "Signed"
-function = "validate"
-purpose = "spend"
+[validators.signed]
 boundary = "julc-strict-v1"
+spend = "Signed.validate"

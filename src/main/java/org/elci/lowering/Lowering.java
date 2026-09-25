@@ -23,8 +23,8 @@ import java.util.*;
 public final class Lowering {
     /**
      * How library implementations reach the program. {@link #INLINE} copies each closed export
-     * at its use site (revision-1 programs, whose bytes are kept stable); {@link #LINK}
-     * references provider bindings that the backend links once as trusted imports (revision 2).
+     * at its use site (revision-1 function programs); {@link #LINK} references provider bindings
+     * that the backend links once as trusted imports (revision-2 validators).
      */
     public enum ImportMode {
         INLINE,
@@ -139,7 +139,7 @@ public final class Lowering {
         var reference = new PirTerm.Var(binding.name(), binding.type());
         // Linked imports are evaluated when the script starts. Functions are safe to share that
         // way; a value export (a zero-argument method) is evaluated at its use instead, as in
-        // [entrypoint] projects, so an unused failing value cannot fail every purpose.
+        // function programs, so an unused failing value cannot fail every purpose.
         if (importMode == ImportMode.LINK && binding.type() instanceof PirType.FunType) return reference;
         if (importMode == ImportMode.LINK) {
             requested.remove(request);

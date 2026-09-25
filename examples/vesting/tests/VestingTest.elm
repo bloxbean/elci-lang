@@ -16,11 +16,9 @@ datum =
     { beneficiary = beneficiary, deadline = 1000 }
 
 
-{-| An [entrypoint] validator is addressed as "entrypoint".
--}
 claimFrom : Int -> Scenario
 claimFrom time =
-    Scenario.spend "entrypoint" (Scenario.outRef "vesting" 0) (Data.encode datum)
+    Scenario.spend "vesting" (Scenario.outRef "vesting" 0) (Data.encode datum)
         |> Scenario.redeemer (Data.encode Claim)
         |> Scenario.validFrom time
 

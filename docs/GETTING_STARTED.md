@@ -55,33 +55,28 @@ build/install/elci/bin/elci build examples/threshold
 Create a spending-validator project:
 
 ```sh
-elci init my-contract --purpose spend
+elci init my-contract
 cd my-contract
 elci check .
+elci test .
 elci build .
 ```
 
-The supported starter purposes are `spend` (the default), `mint`, and `function`:
+This creates one validator named `main` whose first handler serves the `spend`
+purpose. Choose another purpose or name with `--purpose` and `--validator`. For a
+plain function to run with `elci eval`, use `--purpose function`:
 
 ```sh
 elci init token-policy --purpose mint
+elci init rewards --validator rewards --purpose withdraw
 elci init calculation --purpose function
 ```
 
-`--purpose` selects the initial source and entrypoint; it is not a permanent
-project classification. Add `--validator <name>` to start with a named validator
-instead of an `[entrypoint]` (see [Named validators](#named-validators)):
-
-```sh
-elci init treasury --validator treasury
-elci init rewards --validator rewards --purpose withdraw
-```
-
-A named-validator template accepts only transactions signed by an `owner`
-deployment parameter. It comes with `tests/MainTest.elm`, two transaction
-scenarios that `elci test` runs (see [Testing](TESTING.md)). The `withdraw`, `certify`, `vote` and `propose` purposes
-exist only in named validators. Initialization refuses to write into a non-empty
-directory.
+`--purpose` selects the starter source; it is not a permanent project
+classification. The validator template accepts only transactions signed by an
+`owner` deployment parameter. It comes with `tests/MainTest.elm`, two transaction
+scenarios that `elci test` runs (see [Testing](TESTING.md)). Initialization refuses
+to write into a non-empty directory.
 
 The generated layout is:
 
@@ -100,11 +95,9 @@ source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
 julc-version = "0.1.0-gb-97e168c"
 
-[entrypoint]
-module = "Example.Threshold"
-function = "validate"
-purpose = "spend"
+[validators.threshold]
 boundary = "julc-strict-v1"
+spend = "Example.Threshold.validate"
 
 [java-modules]
 "Julc.Math" = "org.julclang.stdlib.lib.MathLib"
@@ -116,23 +109,25 @@ Blank lines and full-line `#` comments are accepted. Unknown keys, duplicate
 keys, unsupported targets, and mismatched compiler versions are errors. Inline
 comments and the wider TOML grammar are not supported yet.
 
-Entrypoint profiles:
+A project configures its validators, or a single function to evaluate:
 
-| Purpose | Source type | Runtime |
-| --- | --- | --- |
-| `spend` | `Datum -> Redeemer -> ScriptContext -> Bool` | Required datum; one ledger context argument |
-| `mint` | `Redeemer -> ScriptContext -> Bool` | One ledger context argument |
-| `function` | Concrete function/value | Unwrapped computation, useful for evaluation |
+```toml
+[entrypoint]
+module = "Main"
+function = "main"
+purpose = "function"
+```
 
-Entrypoint roles are positional; parameter names do not determine their meaning.
-Deployment parameters, optional or absent spending datums and the other ledger
-purposes are available in named validators.
+An `[entrypoint]` is a concrete function or value that `elci eval` runs, useful
+for exploring computations. It is not a validator. Validators are always named;
+`[entrypoint]` with `purpose = "spend"` or `"mint"` was removed in the development
+preview ([ADR-007](../adr/007-named-validators-only.md)).
 
 ### Named validators
 
-A project can instead define one or more named validators. Each
-`[validators.<name>]` table is one deployed script with its own hash. Handler keys
-name exposed functions, and the ledger purpose selects the handler to run:
+A project defines one or more named validators. Each `[validators.<name>]` table
+is one deployed script with its own hash. Handler keys name exposed functions,
+and the ledger purpose selects the handler to run:
 
 ```toml
 [project]
@@ -163,8 +158,8 @@ Rules:
 - **`parameters`** (optional): deployment parameter names in application order.
 - **`spend-datum`** (optional): `"required"` (default), `"optional"` or `"absent"`.
 - **`expected-abi`** (optional): a committed `abi.json` for this group to compare.
-- **Exclusive forms:** a project uses either `[entrypoint]` or named validators.
-  Mixing them is an error.
+- **Exclusive forms:** a project has either validators or an `[entrypoint]`
+  function. Mixing them is an error.
 
 See the [language guide](LANGUAGE.md#validators-and-handler-roles) for handler
 signatures. `examples/treasury` is a complete example.
@@ -180,24 +175,23 @@ set, before anything is written. A failure therefore publishes nothing. A full
 build removes the outputs of groups that are no longer configured. It uses
 `build/validators/elci-outputs.json`, which records the files Elci owns; other
 files in those directories are left alone. A `--validator` build never removes
-unselected outputs. `eval` applies only to `[entrypoint]` `function` projects.
+unselected outputs. `eval` applies only to `[entrypoint]` function projects.
 
-To move an `[entrypoint]` project to named validators, replace `[entrypoint]` with a
-`[validators.<name>]` table whose handler key is the old purpose. Its value is the
-old `module.function`. Treat this as a deployment change: named validators check
-the purpose before calling the handler, so the script hash changes.
+An older project with `[entrypoint]` `purpose = "spend"` or `"mint"` is rejected
+with the replacement table spelled out. Replace `[entrypoint]` with a
+`[validators.<name>]` table whose handler key is the old purpose and whose value
+is the old `module.function`. The script hash changes, because named validators
+check the purpose before calling the handler.
 
 ## 3. Read the outputs
 
-A validator build produces:
+Each validator writes four files beneath `build/validators/<name>/`:
 
 - `validator.flat`: FLAT-encoded UPLC.
 - `validator.plutus`: a Plutus V3 text envelope with double-CBOR-wrapped script bytes.
 - `validator.plutus.json`: Julc-compatible validator artifact with `type`, `purpose`,
-  `description`, `cborHex`, `hash`, `params` and `sizeBytes`. Generated for spending
-  and minting validators; `params` is empty because deployment parameters are not
-  supported yet.
-- `abi.json`: target, entrypoint roles, nominal identities, codecs, constructor tags,
+  `description`, `cborHex`, `hash`, `params` and `sizeBytes`.
+- `abi.json`: target, handler roles, nominal identities, codecs, constructor tags,
   record field order, and recursive type references.
 
 `validator.plutus.json` uses Julc's `ValidatorOutput` format, not CIP-57. The
@@ -213,18 +207,18 @@ import org.julclang.clientlib.ValidatorOutput;
 import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script;
 
 var output = ValidatorOutput.fromJson(
-    Files.readString(Path.of("build/validator.plutus.json")));
+    Files.readString(Path.of("build/validators/threshold/validator.plutus.json")));
 var script = PlutusV3Script.builder().cborHex(output.cborHex()).build();
 if (!HexFormat.of().formatHex(script.getScriptHash()).equals(output.hash())) {
     throw new IllegalStateException("Script hash mismatch");
 }
 ```
 
-A `purpose = "function"` build does not create the Julc validator artifact and
-removes a stale one from a previous validator build. Function outputs are intended
-for evaluation, not deployment as validators.
+An `[entrypoint]` function build writes `build/validator.flat`, `validator.plutus`
+and `abi.json`, but no Julc validator artifact: functions are for evaluation, not
+deployment.
 
-A named validator writes the same four files beneath `build/validators/<name>/`:
+In detail:
 
 - **`validator.plutus.json`:** the Julc artifact.
   - `purpose` is `multi` for several handlers. For one handler it is Julc's
@@ -262,11 +256,11 @@ var program = JulcScriptAdapter.toProgram(output.cborHex())
 ```
 
 Keep the ABI with application code that constructs datum/redeemer data. To reject
-unexpected ABI changes, save a copy outside `build/` and add:
+unexpected ABI changes, save a copy outside `build/` and set it on the validator:
 
 ```toml
-[project]
-# ... the existing project settings ...
+[validators.threshold]
+# ... the handler keys ...
 expected-abi = "expected-abi.json"
 ```
 

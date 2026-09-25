@@ -25,7 +25,7 @@ separate milestones.
 | Ledger access | Typed record views, transaction fields, nominal hash types, approved constructors/patterns/equality of ledger sums and records |
 | Data conversions | `Julc.Data.decode`/`encode` strict codecs and Julc optional ↔ `Maybe` adapters |
 | Java libraries | Concrete exports, generic Java templates specialized per use, and Julc's programmatic list exports |
-| Validators | `[entrypoint]` spend/mint/function, or named `[validators.<name>]` groups with spend, mint, withdraw, certify, vote and propose handlers, deployment parameters and required/optional/absent spending datums |
+| Validators | Named `[validators.<name>]` groups with spend, mint, withdraw, certify, vote and propose handlers, deployment parameters and required/optional/absent spending datums; `[entrypoint]` functions for `eval` |
 | CLI | Check/build/function evaluation; `--validator` selection; `apply` parameters; `test`; pinned target/version; ABI comparison |
 | Testing | `elci test`: `Bool`/`Expect` unit tests and transaction scenarios on the deployed scripts ([Testing](TESTING.md)) |
 | Native image | GraalVM executable with bundled source and reflection resources |
@@ -230,9 +230,8 @@ operations its provider approves, never by its shape.
 - **Fields.** Approved record fields (PROJECT) are read with `.field`.
 - **Equality.** `==` uses the provider's approved equality (EQUALS), with Java
   `equals` semantics.
-- **Boundaries.** Named validators accept imported datum, redeemer and parameter
-  types that approve BOUNDARY, such as `TxOutRef`, `Credential` or `PubKeyHash`.
-  `[entrypoint]` projects keep the older Elci-data-only rule.
+- **Boundaries.** Validators accept imported datum, redeemer and parameter types
+  that approve BOUNDARY, such as `TxOutRef`, `Credential` or `PubKeyHash`.
 
 ```elm
 import Julc.Ledger as Ledger exposing (Credential(..), ScriptContext, TxOutRef)
@@ -312,11 +311,9 @@ decoder that certifies arbitrary off-chain context data.
 
 ## Validators and handler roles
 
-Configuration, not source syntax, decides how a function is deployed. A legacy
-`[entrypoint]` compiles one function as a spending or minting validator, or as a
-plain `function` for `elci eval`. A named validator is a
-`[validators.<name>]` table. Each table is **one script** with one hash. Its handler
-keys name exposed functions as `Module.function`. The ledger purpose selects
+Configuration, not source syntax, decides how a function is deployed. A validator
+is a `[validators.<name>]` table. Each table is **one script** with one hash. Its
+handler keys name exposed functions as `Module.function`. The ledger purpose selects
 exactly one handler; purposes without a handler fail.
 
 | Handler key | Required source type |
@@ -341,15 +338,19 @@ before calling the handler. With `absent`, the datum is never inspected.
 Only the selected handler's datum and redeemer are decoded, so handlers may use
 different redeemer types. Top-level values reachable from any handler are
 program-level definitions. They are evaluated once per script execution, before
-dispatch, exactly as in a single-entrypoint script. A failing top-level value
-therefore fails every purpose; keep purpose-specific work inside the handler.
-Library functions are linked once per script. A zero-argument library value is
-evaluated where it is used, as in `[entrypoint]` projects.
+dispatch. A failing top-level value therefore fails every purpose; keep
+purpose-specific work inside the handler. Library functions are linked once per
+script. A zero-argument library value is evaluated where it is used.
 
-Adding, removing or changing a handler changes the group's script hash. Named
-validators always dispatch on the purpose, even with one handler. A one-handler
-group therefore has a different hash from the equivalent `[entrypoint]` script.
-Moving a project to named validators is a deployment change.
+Adding, removing or changing a handler changes the group's script hash. Validators
+always check the purpose before calling a handler, even with one handler, so a
+purpose without a handler is rejected. The check costs roughly 1.1M CPU and 35
+bytes per script.
+
+An `[entrypoint]` with `purpose = "function"` is not a validator. It names one
+concrete function or value for `elci eval`. `[entrypoint]` spending and minting
+validators were removed in the development preview
+([ADR-007](../adr/007-named-validators-only.md)).
 
 ## Costs and limits
 

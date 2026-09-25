@@ -221,8 +221,7 @@ class NamedValidatorCliTest {
                 [entrypoint]
                 module = "Token"
                 function = "mint"
-                purpose = "mint"
-                boundary = "julc-strict-v1"
+                purpose = "function"
                 """);
         var legacy = run("check", project.toString());
         assertEquals(1, legacy.status());
@@ -254,12 +253,11 @@ class NamedValidatorCliTest {
                 [entrypoint]
                 module = "Token"
                 function = "mint"
-                purpose = "mint"
-                boundary = "julc-strict-v1"
+                purpose = "function"
                 """;
         String[][] cases = {
                 {legacy + VAULT_TABLE, "mixes [entrypoint]"},
-                {"", "must configure [entrypoint]"},
+                {"", "must configure at least one [validators.<name>]"},
                 {"\n[validators.Vault]\nboundary = \"julc-strict-v1\"\nmint = \"Token.mint\"\n", "invalid validator name"},
                 {"\n[validators.../x]\nboundary = \"julc-strict-v1\"\nmint = \"Token.mint\"\n", "invalid validator name"},
                 {"\n[validators.v]\nboundary = \"julc-strict-v1\"\n", "configures no handler"},
@@ -279,7 +277,7 @@ class NamedValidatorCliTest {
             assertTrue(result.err().contains(test[1]), test[1] + " / " + result.err());
         }
         config(VAULT_TABLE);
-        assertTrue(run("eval", project.toString()).err().contains("eval requires an [entrypoint]"));
+        assertTrue(run("eval", project.toString()).err().contains("eval runs an [entrypoint] function"));
         config(legacy);
         var selected = run("check", project.toString(), "--validator", "vault");
         assertEquals(1, selected.status());

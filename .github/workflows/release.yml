@@ -83,7 +83,7 @@ jobs:
           build/native/elci check build/init-smoke
           build/native/elci check examples/vesting
           build/native/elci build examples/vesting
-          test -s examples/vesting/build/validator.plutus.json
+          test -s examples/vesting/build/validators/vesting/validator.plutus.json
           build/native/elci eval examples/elci-library | tee build/native-eval.txt
           grep -F 'value=105' build/native-eval.txt
           build/native/elci build examples/treasury
