@@ -96,14 +96,26 @@ foldl step initial bindings =
     List.foldl (\( key, value ) acc -> step key value acc) initial (toList bindings)
 
 
+{-| The bindings that pass the test, in map order.
+-}
 filter : (k -> v -> Bool) -> Map k v -> Map k v
 filter keep bindings =
-    fromList (List.filter (\( key, value ) -> keep key value) (toList bindings))
+    rebuild (List.filter (\( key, value ) -> keep key value) (toList bindings))
 
 
+{-| Transform every value, keeping map order.
+-}
 map : (k -> a -> b) -> Map k a -> Map k b
 map transform bindings =
-    fromList (List.map (\( key, value ) -> ( key, transform key value )) (toList bindings))
+    rebuild (List.map (\( key, value ) -> ( key, transform key value )) (toList bindings))
+
+
+{-| Bindings with distinct keys back into a map, in the same order: `insert` puts a new
+key first, so the last binding goes in first.
+-}
+rebuild : List ( k, v ) -> Map k v
+rebuild bindings =
+    List.foldr (\( key, value ) acc -> insert key value acc) empty bindings
 
 
 zip : List a -> List b -> List ( a, b )

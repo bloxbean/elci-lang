@@ -104,6 +104,18 @@ public final class TestRunner {
         for (String module : tests.keySet())
             if (sources.containsKey(module))
                 throw new IllegalArgumentException("ELCI4001: module " + module + " is both a source and a test module");
+        // The test library exists only during `elci test`; a source module importing it would
+        // compile here and then fail `elci build`.
+        var library = java.util.regex.Pattern.compile("(?m)^import\\s+(" + String.join("|", LIBRARY) + ")\\b");
+        for (var entry : sources.entrySet()) {
+            var matcher = library.matcher(entry.getValue());
+            if (matcher.find()) {
+                int line = (int) entry.getValue().substring(0, matcher.start()).chars().filter(c -> c == '\n').count() + 1;
+                throw new org.elci.syntax.Diagnostic("ELCI2101", new org.elci.syntax.Token("import",
+                        org.elci.syntax.Token.Kind.NAME, matcher.start(), line, 1, entry.getKey()), "Only test modules can import "
+                        + matcher.group(1) + "; it is part of the test library, not available to elci build");
+            }
+        }
         var all = new LinkedHashMap<>(sources);
         all.putAll(tests);
         for (String module : LIBRARY) {

@@ -49,7 +49,7 @@ signatures of many Java `ListsLib` methods. For example:
 List.map (\value -> value + 1) [ 1, 2, 3 ]
 ```
 
-`not` and `remainderBy` are compiler-provided functions. `Julc.Data` provides
+`not`, `modBy` and `remainderBy` are compiler-provided functions. `Julc.Data` provides
 explicit `decode`, `encode`, `fromOptional` and `toOptional` conversions. `Bytes`
 wraps byte-string builtins (`fromString`, `length`, `append`, `slice`, hashes).
 `Debug.trace` emits traces (see the
@@ -170,8 +170,9 @@ account for that sentinel when using these methods.
 - Generic Java methods are specialized per use, and `ListsLib`'s programmatic
   `map`, `filter`, `any`, `all`, `find` and `foldl` are available (see
   [Java libraries](JAVA_LIBRARIES.md#generic-methods-and-programmatic-exports)).
-  No bundled stdlib method is generic today. Missing capabilities must be added
-  generically, rather than by hardcoding library method names in Elci.
+  The only generic bundled Java libraries are `TypedMapLib` and `TypedArrayLib`,
+  which back the core `Map` and `Array` modules. Missing capabilities must be
+  added generically, rather than by hardcoding library method names in Elci.
 
 See [Java libraries](JAVA_LIBRARIES.md) for custom source JARs and the provider
 boundary. The [exact inventory](stdlib-compatibility.tsv) records every described

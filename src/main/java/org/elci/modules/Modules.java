@@ -10,6 +10,8 @@ import java.util.*;
 public final class Modules {
     /** Core modules written in Elci and bundled with the compiler. */
     public static final List<String> CORE_MODULES = List.of("List", "Map", "Array");
+    /** Core modules whose type is built in, and may still be named as in Elm: {@code Map.Map}, {@code exposing (Map)}. */
+    private static final Map<String, String> BUILTIN_TYPES = Map.of("Map", "Map", "Array", "Array", "List", "List");
     /**
      * Library modules the core modules import, mapped without project configuration: Julc's
      * typed map templates back {@code Map}.
@@ -79,10 +81,12 @@ public final class Modules {
                 (name, source) -> {
                     var module = new Parser(source, name).parse();
                     if (!module.name().equals(name))
-                        throw new IllegalArgumentException(
+                        throw new Diagnostic(
+                                "ELCI2104",
+                                new Token(module.name(), Token.Kind.NAME, 0, 1, 1, name),
                                 "Module header "
                                         + module.name()
-                                        + " does not match source path "
+                                        + " does not match its source path, which names module "
                                         + name);
                     if (javaModules.containsKey(name) || intrinsic(name))
                         throw new IllegalArgumentException(
@@ -315,8 +319,8 @@ public final class Modules {
                         throw new Diagnostic(
                                 "ELCI2104",
                                 imp.token(),
-                                "Use explicit names when exposing Java exports in multi-module"
-                                        + " projects");
+                                "Java modules cannot be imported with exposing (..); list the exported"
+                                        + " names you use");
                     var libraryTypes = libraryTypes(javaModules.get(imp.module()));
                     var exposedConstructors = new HashSet<String>();
                     for (String n : imp.exposing()) {
@@ -371,13 +375,17 @@ public final class Modules {
                         for (var variant : union.variants())
                             put(names, variant.name(), dp + variant.name(), imp.token());
                     } else if (exported.containsKey(n)) put(names, n, exported.get(n), imp.token());
-                    else if (!dependency.aliases().containsKey(n)
+                    else if (BUILTIN_TYPES.getOrDefault(dependency.name(), "").equals(n)) {
+                        // `import Map exposing (Map)`, as with Elm's Dict: the type is always in scope.
+                    } else if (!dependency.aliases().containsKey(n)
                             && dependency.unions().stream().noneMatch(u -> u.name().equals(n)))
                         throw new Diagnostic(
                                 "ELCI2104",
                                 imp.token(),
                                 "Module does not expose '" + n + "': " + dependency.name());
                 }
+                if (BUILTIN_TYPES.containsKey(dependency.name()))
+                    types.put(imp.alias() + "." + BUILTIN_TYPES.get(dependency.name()), BUILTIN_TYPES.get(dependency.name()));
                 for (String n : dependency.aliases().keySet())
                     if (exposes(dependency, n)) {
                         types.put(imp.alias() + "." + n, dp + n);
@@ -443,14 +451,27 @@ public final class Modules {
     }
 
     private void visit(String name) {
+        visit(name, null);
+    }
+
+    /** {@code via} is the import that reached {@code name}, for locating cycles and missing modules. */
+    private void visit(String name, Token via) {
         if (ordered.containsKey(name)) return;
-        if (!visiting.add(name))
-            throw new IllegalArgumentException("Import cycle: " + visiting + " -> " + name);
+        if (!visiting.add(name)) {
+            String cycle = "Import cycle: " + String.join(" -> ", visiting) + " -> " + name;
+            if (via != null) throw new Diagnostic("ELCI2104", via, cycle);
+            throw new IllegalArgumentException("ELCI2104: " + cycle);
+        }
         var module = available.get(name);
-        if (module == null) throw new IllegalArgumentException("Missing source module: " + name);
+        if (module == null) {
+            String missing = "Missing source module: " + name + "; add " + name.replace('.', '/')
+                    + ".elm under a source directory, or map a Java library to it under [java-modules]";
+            if (via != null) throw new Diagnostic("ELCI2101", via, missing);
+            throw new IllegalArgumentException("ELCI2101: " + missing);
+        }
         for (var imp : module.imports())
             if (!javaModules.containsKey(imp.module()) && !intrinsic(imp.module()))
-                visit(imp.module());
+                visit(imp.module(), imp.token());
         visiting.remove(name);
         ordered.put(name, module);
     }
@@ -476,7 +497,7 @@ public final class Modules {
             else if (names.containsKey("$ledgerAll")) name = "org.julclang.ledger." + t.name();
             else
                 throw new IllegalArgumentException(
-                        "Type is not declared or imported in this module: " + t.name());
+                        "ELCI2012: Type is not declared or imported in this module: " + t.name());
         }
         if (name.equals("org.julclang.ledger.ScriptContext")) name = "ScriptContext";
         return new Type(name, t.arguments().stream().map(a -> type(a, names)).toList());

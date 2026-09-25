@@ -24,7 +24,7 @@ import java.util.*;
 final class Scenarios {
     private final Project project;
     private final CompilerOptions options;
-    private final Map<String, Program> compiled = new HashMap<>();
+    private final Map<String, ElciCompiler.ValidatorBuild> compiled = new HashMap<>();
 
     Scenarios(Project project, CompilerOptions options) {
         this.project = project;
@@ -38,8 +38,15 @@ final class Scenarios {
         Program applied;
         try {
             var parameters = Data.list(spec.get("parameters"));
-            applied = parameters.isEmpty() ? program(validator)
-                    : program(validator).applyParams(parameters.toArray(PlutusData[]::new));
+            var build = build(validator);
+            // A missing parameter would fail the script while decoding, and so vacuously satisfy
+            // expectFailure: reject the scenario instead.
+            if (parameters.size() != build.parameters().size())
+                throw new IllegalArgumentException("it takes " + build.parameters().size() + " parameter(s) "
+                        + build.parameters().stream().map(ElciCompiler.ParameterInfo::name).toList()
+                        + ", but the scenario gives " + parameters.size() + "; set them with Scenario.parameters");
+            applied = parameters.isEmpty() ? build.program()
+                    : build.program().applyParams(parameters.toArray(PlutusData[]::new));
         } catch (Exception e) {
             return new TestRunner.Outcome(name, TestRunner.Kind.SCENARIO, false, "cannot prepare validator '"
                     + validator + "': " + e.getMessage(), null, List.of());
@@ -68,17 +75,17 @@ final class Scenarios {
     }
 
     /** The unapplied script, compiled once per run as {@code elci build} would. */
-    private Program program(String validator) throws Exception {
+    private ElciCompiler.ValidatorBuild build(String validator) throws Exception {
         var cached = compiled.get(validator);
         if (cached != null) return cached;
         if (!project.named())
             throw new IllegalArgumentException("this project has no validators; configure [validators." + validator + "]");
         var group = project.validators().stream().filter(v -> v.name().equals(validator)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("no [validators." + validator + "] in elci.toml"));
-        var program = new ElciCompiler().compileValidator(project.sources(), group.spec(), project.javaModules(), options,
-                project.librarySources()).program();
-        compiled.put(validator, program);
-        return program;
+        var build = new ElciCompiler().compileValidator(project.sources(), group.spec(), project.javaModules(), options,
+                project.librarySources());
+        compiled.put(validator, build);
+        return build;
     }
 
     private static PlutusData context(Map<String, PlutusData> spec, PirType specType, ScriptHash hash) {

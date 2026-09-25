@@ -8,6 +8,7 @@ import java.util.*;
 /** Recursive descent with token-column layout boundaries and Pratt operators. */
 public final class Parser {
     private final List<Token> tokens;
+    private final String source;
     private int pos;
     private final List<Union> unions = new ArrayList<>();
     private final Map<String, Integer> typeArities = new HashMap<>(Map.of("List", 1, "Maybe", 1));
@@ -54,6 +55,7 @@ public final class Parser {
 
     /** @param module the module the source defines, recorded on tokens for diagnostics */
     public Parser(String source, String module) {
+        this.source = source;
         tokens = new Lexer(source, module).lex();
         for (int i = 0; i < tokens.size() - 2; i++)
             if (tokens.get(i).text().equals("type") && !tokens.get(i + 1).text().equals("alias")) {
@@ -308,6 +310,12 @@ public final class Parser {
             if (is(".") && peek().offset() == previous().offset() + previous().text().length()) {
                 Token dot = next();
                 left = new Field(left, lower().text(), dot);
+                continue;
+            }
+            if (negation() && 10 >= min) {
+                // Elm 0.19: `f -1` passes a negative argument; `a - 1` and `a-1` subtract.
+                Token minus = next();
+                left = new Apply(left, new Binary("-", new Literal(BigInteger.ZERO, minus), expression(11, floor), minus), minus);
                 continue;
             }
             String op = peek().text();
@@ -591,6 +599,19 @@ public final class Parser {
     private boolean boundary(int floor) {
         return peek().kind() == Token.Kind.EOF
                 || (peek().column() <= floor && peek().line() > previous().line());
+    }
+
+    /**
+     * Whether the next {@code -} negates the operand that follows it: as in Elm 0.19, the minus
+     * follows whitespace or an opening bracket and touches its operand.
+     */
+    private boolean negation() {
+        var t = peek();
+        if (t.kind() != Token.Kind.SYMBOL || !t.text().equals("-") || t.offset() + 1 >= source.length()) return false;
+        char after = source.charAt(t.offset() + 1);
+        if (Character.isWhitespace(after) || after == '-') return false;
+        return t.offset() == 0 || Character.isWhitespace(source.charAt(t.offset() - 1))
+                || "([{,".indexOf(source.charAt(t.offset() - 1)) >= 0;
     }
 
     private boolean atomStart() {

@@ -89,9 +89,15 @@ The generated layout is:
 
 ```text
 elci.toml
+README.md
+.gitignore
 src/
   Main.elm
+tests/
+  MainTest.elm
 ```
+
+A `--purpose function` project has no `tests/` directory.
 
 The module header and source path must agree. Configuration is separate from the
 Elm source:
@@ -298,8 +304,18 @@ runtime. `GRAALVM_HOME` must select a GraalVM installation containing
 `bin/native-image`.
 
 `eval` is for a `function` entrypoint. It runs the generated UPLC with Julc's Java
-VM and prints its result and execution budget. The functional example returns
-`12`. Validator acceptance/rejection belongs in ledger-context tests.
+VM and prints the result in Elci syntax, then the execution budget and any
+`Debug.trace` messages:
+
+```text
+$ elci eval examples/functional
+12
+cpu 11011670, mem 45999
+```
+
+`--builtins` also lists every builtin call. A failing evaluation prints
+`evaluation failed: <reason>` and exits with status 1. Validator acceptance and
+rejection belong in ledger-context tests.
 
 ## 5. Editor and diagnostics
 

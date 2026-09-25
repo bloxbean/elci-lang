@@ -168,11 +168,29 @@ public final class Lowering {
     }
 
     private PirTerm reference(String name, Ty concrete) {
+        return reference(name, concrete, null);
+    }
+
+    /** {@code use} locates a failure at the reference rather than at the definition. */
+    private PirTerm reference(String name, Ty concrete, Token use) {
         if (!Types.concrete(concrete))
             throw new Diagnostic(
                     "ELCI3001",
-                    definitions.get(name).token(),
-                    "Cannot specialize an unconstrained type: " + concrete);
+                    use != null ? use : definitions.get(name).token(),
+                    "Cannot specialize " + name + " at an unconstrained type " + Types.show(concrete)
+                            + "; add a type annotation so the type is known here");
+        try {
+            return specialize(name, concrete);
+        } catch (IllegalArgumentException e) {
+            // A type Elci cannot represent, located at this reference (or the definition).
+            String message = e.getMessage() == null ? e.toString() : e.getMessage();
+            boolean data = message.contains("Data encoding") || message.contains("data fields")
+                    || message.contains("serialized containers");
+            throw new Diagnostic(data ? "ELCI2013" : "ELCI3001", use != null ? use : definitions.get(name).token(), message);
+        }
+    }
+
+    private PirTerm specialize(String name, Ty concrete) {
         String key = name + ":" + concrete;
         if (instances.containsKey(key)) return new PirTerm.Var(instances.get(key), pir(concrete));
         if (instances.size() > 256)
@@ -390,7 +408,7 @@ public final class Lowering {
                                             new PirTerm.Var(b, new PirType.IntegerType()),
                                             new PirTerm.Var(a, new PirType.IntegerType()))));
                 }
-                yield reference(n.name(), type(n, map));
+                yield reference(n.name(), type(n, map), n.token());
             }
             case Apply a ->
                     new PirTerm.App(expr(a.function(), env, map), expr(a.argument(), env, map));

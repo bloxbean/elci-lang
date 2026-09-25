@@ -15,10 +15,13 @@ public final class Diagnostic extends RuntimeException {
         return source + ":" + token.line() + ":" + token.column() + ": " + code + ": " + getMessage();
     }
     /**
-     * Render at the token's own module file when {@code files} knows it, else at {@code fallback}.
+     * Render at the token's own module file when {@code files} knows it. A module the project does
+     * not own (a bundled core or test-library module) is named as {@code <bundled>/Module.elm};
+     * tokens without a module render at {@code fallback}.
      */
     public String render(Function<String, String> files, String fallback) {
-        String file = token.source() == null ? null : files.apply(token.source());
-        return render(file == null ? fallback : file);
+        if (token.source() == null) return render(fallback);
+        String file = files.apply(token.source());
+        return render(file != null ? file : "<bundled>/" + token.source().replace('.', '/') + ".elm");
     }
 }

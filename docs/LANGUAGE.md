@@ -96,6 +96,11 @@ Boolean operators.
 its function operands strictly. `++` appends lists or strings; `::` prepends a list
 element.
 
+As in Elm 0.19, a `-` directly before its operand negates it when it follows
+whitespace or an opening bracket. `f -1` therefore passes `-1` to `f`, and
+`scale -x 10` passes `-x`. `a - 1` and `a-1` subtract. This matches elm-format,
+which writes `f (-1)` as `f -1`.
+
 ## Lists and recursion
 
 `List` is implicitly available. The bundled core exposes `map`, `filter`, `foldl`,
@@ -269,6 +274,9 @@ supported surface.
 | `Julc.Data` | `decode`, `encode`, `fromOptional`, `toOptional` (below) |
 | `Bytes` | see the table below |
 | `Debug` | `trace : String -> a -> a`, which emits a Plutus trace and returns its second argument |
+
+The types `Map` and `Array` are always in scope. As with Elm's `Dict`, you may still
+write `import Map exposing (Map)` or `Map.Map`.
 
 **`Map k v`** works like Elm's `Dict`: `Map.get key map : Maybe v`, and
 `Map.insert key value map` replaces an existing binding. A map is the ledger's

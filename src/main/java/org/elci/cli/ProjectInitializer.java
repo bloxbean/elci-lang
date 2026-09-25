@@ -218,7 +218,7 @@ final class ProjectInitializer {
                 # %s
 
                 This project was created by `elci init` with a function entrypoint for `elci eval`.
-                Validators are configured as `[validators.<name>]` tables; see `elci init --help`.
+                Validators are configured as `[validators.<name>]` tables; see `elci --help`.
 
                 ```sh
                 elci check .

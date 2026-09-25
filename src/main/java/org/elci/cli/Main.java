@@ -15,10 +15,11 @@ public final class Main {
     public static int run(String...args) {
         String source="<project>";java.util.function.Function<String,String> files=module->null;
         try {
-            if(args.length==0||args[0].equals("--help")||args[0].equals("help")) {
+            // `elci --help`, `elci help` and `elci <command> --help` all print the usage.
+            if(args.length==0||args[0].equals("help")||Arrays.asList(args).contains("--help")) {
                 System.out.println("Elci "+org.elci.driver.BuildInfo.VERSION+" — Elm-syntax compiler powered by Julc\n"
                         +"Usage: elci <check|build> [project-directory] [--validator <name>]...\n"
-                        +"       elci eval [project-directory]\n"
+                        +"       elci eval [project-directory] [--builtins]\n"
                         +"       elci test [project-directory] [--match <substring>] [--seed <n>] [--fuzz <runs>]\n"
                         +"       elci apply [project-directory] --validator <name> --param <name>=<plutus-data-json|@file> [--output <file>]\n"
                         +"       elci init <project-directory> [--validator <name>] [--purpose spend|mint|withdraw|certify|vote|propose|function]\n"
@@ -30,7 +31,7 @@ public final class Main {
             if(args[0].equals("init"))return ProjectInitializer.run(Arrays.copyOfRange(args,1,args.length));
             if(args[0].equals("test"))return test(Arrays.copyOfRange(args,1,args.length));
             if(!Set.of("check","build","eval","apply").contains(args[0]))throw new IllegalArgumentException("Expected init, check, build, eval, test or apply; see --help");
-            String directory=null;var selected=new LinkedHashSet<String>();var parameters=new LinkedHashMap<String,String>();Path appliedOutput=null;
+            String directory=null;var selected=new LinkedHashSet<String>();var parameters=new LinkedHashMap<String,String>();Path appliedOutput=null;boolean builtins=false;
             for(int i=1;i<args.length;i++) {
                 if(args[0].equals("apply")&&args[i].equals("--param")) {
                     if(++i==args.length)throw new IllegalArgumentException("ELCI4001: --param requires <name>=<plutus-data-json>");
@@ -40,6 +41,8 @@ public final class Main {
                 } else if(args[0].equals("apply")&&args[i].equals("--output")) {
                     if(++i==args.length||appliedOutput!=null)throw new IllegalArgumentException("ELCI4001: --output requires one file path");
                     appliedOutput=Path.of(args[i]);
+                } else if(args[0].equals("eval")&&args[i].equals("--builtins")) {
+                    builtins=true;
                 } else if(args[i].equals("--validator")) {
                     if(args[0].equals("eval"))throw new IllegalArgumentException("ELCI4001: eval does not select validators; it runs [entrypoint] purpose = \"function\" projects");
                     if(++i==args.length)throw new IllegalArgumentException("ELCI4001: --validator requires a validator name");
@@ -58,13 +61,11 @@ public final class Main {
             if(!selected.isEmpty())throw new IllegalArgumentException("ELCI4001: --validator requires [validators.<name>] configuration; this project has an [entrypoint] function");
             source=project.source().toString();
             var result=new ElciCompiler().compileProject(project.sources(),project.module(),project.function(),project.purpose(),project.javaModules(),new CompilerOptions(),project.librarySources());
-            if(!result.module().equals(project.module()))throw new IllegalArgumentException("Module header does not match configured source path");
+            if(!result.module().equals(project.module()))throw new IllegalArgumentException("ELCI4001: the [entrypoint] module header does not match its configured source path");
             String manifest=org.elci.abi.Abi.manifest(result);
             if(project.expectedAbi()!=null&&!Files.readString(project.root().resolve(project.expectedAbi())).equals(manifest))throw new IllegalArgumentException("ELCI4001: ABI drift from "+project.expectedAbi()+"; compare constructor tags, field order, and entrypoint roles");
             byte[] flat=UplcFlatEncoder.encodeProgram(result.program());
-            if(args[0].equals("eval")) {
-                var evaluation=JulcVm.create().evaluate(result.program(),result.target().ledgerTarget());System.out.println(evaluation);return evaluation instanceof EvalResult.Success?0:1;
-            }
+            if(args[0].equals("eval"))return evaluate(result,builtins);
             if(args[0].equals("build")) {
                 var output=project.root().resolve("build");Files.createDirectories(output);
                 Files.write(output.resolve("validator.flat"),flat);
@@ -152,7 +153,7 @@ public final class Main {
             }
         }
         if(outcomes.isEmpty()) {
-            System.out.println(match==null?"No tests found in "+project.testDirectories():"No tests match '"+match+"'");
+            System.out.println(match==null?"No tests found in "+String.join(", ",project.testDirectories()):"No tests match '"+match+"'");
             return 1;
         }
         System.out.println((outcomes.size()-failed)+" passed, "+failed+" failed"+(properties?" (seed "+runner.seed()+")":""));
@@ -162,6 +163,21 @@ public final class Main {
     private static long number(String text,String option) {
         try {return Long.parseLong(text);}
         catch(NumberFormatException e){throw new IllegalArgumentException("ELCI4001: "+option+" expects an integer, not '"+text+"'");}
+    }
+
+    /**
+     * {@code elci eval}: run the entrypoint on Julc's VM and print its value in Elci syntax, the
+     * budget and any traces; {@code --builtins} also lists every builtin call.
+     */
+    private static int evaluate(ElciCompiler.Result result,boolean builtins) {
+        var evaluation=JulcVm.create().evaluate(result.program(),result.target().ledgerTarget());
+        if(evaluation instanceof EvalResult.Success success)System.out.println(org.elci.driver.ElciValues.show(success.resultTerm(),result.pirType(),result.namedTypes()));
+        else System.out.println("evaluation failed: "+(evaluation instanceof EvalResult.Failure failure?failure.error():"budget exhausted"));
+        var budget=evaluation.budgetConsumed();
+        System.out.println("cpu "+budget.cpuSteps()+", mem "+budget.memoryUnits());
+        for(String trace:evaluation.traces())System.out.println("trace: "+trace);
+        if(builtins)for(var call:evaluation.builtinTrace())System.out.println("builtin: "+call);
+        return evaluation instanceof EvalResult.Success?0:1;
     }
 
     private static String where(Project project,Project.Validator group) {

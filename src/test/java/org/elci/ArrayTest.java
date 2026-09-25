@@ -36,7 +36,7 @@ class ArrayTest {
                         ( Nothing, Nothing ) -> -1
 
                         _ -> 0
-                """.replace("Array.get -1", "Array.get (-1)")));
+                """));
         var summary = run("""
                 values : Array Int
                 values =
@@ -63,7 +63,7 @@ class ArrayTest {
                         + (if Array.isEmpty none && not (Array.isEmpty values) then 100 else 0)
                         + Array.length (Array.filter (\\v -> v > 2) values) * 10
                         + Array.foldr (\\v total -> total - v) 0 (Array.slice 1 -1 values)
-                """.replace("Array.slice 1 -1", "Array.slice 1 (-1)"));
+                """);
         // 31415, length 5, mapped 42526, sum 14, empty check, 3 values above 2, -(1 + 4 + 1).
         assertEquals(31415L * 1000000000000L + 5L * 10000000000L + 42526L * 100000 + 14 * 1000 + 100 + 30 - 6, summary);
         // squares 0 + 1 + 4 + 9 = 14; indexed pairs (0, 1000), (1, 1001), (2, 1002) sum to 3006.

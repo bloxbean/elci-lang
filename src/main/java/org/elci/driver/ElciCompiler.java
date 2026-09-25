@@ -230,7 +230,8 @@ public final class ElciCompiler {
             if(hasDatum)expected=fn(datum,expected);
             for(int i=parameterTypes.size()-1;i>=0;i--)expected=fn(parameterTypes.get(i),expected);
             try {unify(copy(type,new HashMap<>()),expected,declaration.token());}
-            catch(Diagnostic e){throw new Diagnostic("ELCI2014",declaration.token(),"Handler "+handler.symbol()+" does not have the "+purpose(handler.purpose())+" signature "+signature(spec,handler.purpose())+": "+e.getMessage());}
+            catch(Diagnostic e){throw new Diagnostic("ELCI2014",declaration.token(),"Handler "+handler.symbol()+" does not have the "+purpose(handler.purpose())+" signature "+signature(spec,handler.purpose())
+                    +" that [validators."+spec.name()+"] needs ("+spec.parameters().size()+" parameter"+(spec.parameters().size()==1?"":"s")+"); its type is "+Types.show(type)+" ("+e.getMessage()+")");}
             if(hasDatum&&spec.spendDatum()==DatumProfile.OPTIONAL) {
                 var maybe=prune(datum);
                 if(!(maybe instanceof Con c)||!c.name().equals("Elci.Maybe"))throw new Diagnostic("ELCI2014",declaration.token(),"Handler "+handler.symbol()+" uses spend-datum = \"optional\", so its datum must have type Maybe d, not "+maybe);
@@ -450,6 +451,7 @@ public final class ElciCompiler {
             throw new Diagnostic("ELCI2013",token,t.name()+" has no approved strict Data boundary (BOUNDARY); for example records containing the map-encoded Value cannot be checked");
         }
         if(t.name().equals("->"))throw new Diagnostic("ELCI2013",token,"Functions cannot be serialized as datum or redeemer");
+        if(t.name().equals("Array"))throw new Diagnostic("ELCI2013",token,"Arrays have no Data encoding and cannot be a datum, redeemer or parameter; take a List and convert it with Array.fromList");
         t.args().forEach(a->checkBoundary(a,inference,visiting,token));
         for(var union:inference.unions.values())if(inference.nominal(union.name()).equals(t.name())&&visiting.add(t.toString())) {
             var vars=new HashMap<String,Ty>();for(int i=0;i<union.parameters().size();i++)vars.put(union.parameters().get(i),t.args().get(i));

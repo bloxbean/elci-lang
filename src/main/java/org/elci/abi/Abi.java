@@ -80,6 +80,7 @@ public final class Abi {
             case PirType.ListType l->references(l.elemType(),references);
             case PirType.MapType m->{references(m.keyType(),references);references(m.valueType(),references);}
             case PirType.OptionalType o->references(o.elemType(),references);
+            case PirType.ArrayType a->references(a.elemType(),references);
             case PirType.FunType f->{references(f.paramType(),references);references(f.returnType(),references);}
             default->{}
         }
@@ -99,6 +100,8 @@ public final class Abi {
             case PirType.SumType s->Map.of("kind","union","identity",s.name(),"constructors",s.constructors().stream().map(c->Map.of("name",c.name(),"tag",c.tag(),"fields",c.fields().stream().map(f->schema(f.type())).toList())).toList());
             case PirType.NamedTypeRef n->Map.of("ref",n.stableId());
             case PirType.FunType f->Map.of("kind","function","argument",schema(f.paramType()),"result",schema(f.returnType()));
+            // A PV11 array of Data-encoded elements; it never crosses a Data boundary.
+            case PirType.ArrayType a->Map.of("kind","array","encoding","native","element",schema(a.elemType()));
             default->throw new IllegalArgumentException("No Elci ABI codec for "+type);
         };
     }

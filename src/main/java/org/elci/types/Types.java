@@ -65,8 +65,43 @@ public final class Types {
         var x = (Con) a;
         var y = (Con) b;
         if (!x.name.equals(y.name) || x.args.size() != y.args.size())
-            throw new Diagnostic("ELCI2002", at, "Type mismatch: expected " + a + ", found " + b);
+            throw new Diagnostic("ELCI2002", at, "Type mismatch: expected " + show(a) + ", found " + show(b));
         for (int i = 0; i < x.args.size(); i++) unify(x.args.get(i), y.args.get(i), at);
+    }
+
+    /**
+     * A type as Elci source writes it, for diagnostics: {@code List Int -> Maybe a},
+     * {@code { amount : Int }}, {@code ( Int, String )}. Internal names are simplified.
+     */
+    public static String show(Ty type) {
+        return show(type, false);
+    }
+
+    private static String show(Ty type, boolean argument) {
+        type = prune(type);
+        if (type instanceof Var) return "t";
+        var c = (Con) type;
+        String name = c.name.startsWith("$") ? c.name.substring(1) : c.name;
+        if (name.startsWith("org.julclang.ledger.")) name = name.substring("org.julclang.ledger.".length());
+        if (name.equals("Elci.Maybe")) name = "Maybe";
+        if (name.equals("->")) {
+            String text = show(c.args.get(0), true) + " -> " + show(c.args.get(1), false);
+            return argument ? "(" + text + ")" : text;
+        }
+        if (name.equals("Unit")) return "()";
+        if (name.equals("Tuple"))
+            return "( " + String.join(", ", c.args.stream().map(a -> show(a, false)).toList()) + " )";
+        if (name.startsWith("Record:")) {
+            String fields = name.substring("Record:".length());
+            if (fields.isEmpty()) return "{}";
+            var names = fields.split(",");
+            var shown = new ArrayList<String>();
+            for (int i = 0; i < names.length; i++) shown.add(names[i] + " : " + show(c.args.get(i), false));
+            return "{ " + String.join(", ", shown) + " }";
+        }
+        if (c.args.isEmpty()) return name;
+        String text = name + " " + String.join(" ", c.args.stream().map(a -> show(a, true)).toList());
+        return argument ? "(" + text + ")" : text;
     }
 
     private static boolean occurs(Var v, Ty t) {

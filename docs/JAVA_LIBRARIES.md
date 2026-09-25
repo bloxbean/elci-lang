@@ -188,7 +188,8 @@ amount action =
 Record constructors take fields in the Java record's declaration order, which is
 also its encoding order. Julc approves operations only for representations it
 has verified. Special layouts, such as records with custom codecs or the ledger
-`Value`, stay opaque, and so do types that contain them. Java factory functions
+`Value`, stay opaque. Types that contain them keep field access and matching,
+but have no equality, strict decoding or boundary use. Java factory functions
 remain available for such types.
 
 Concrete lists, maps and Java Optional retain their own representations. Java
@@ -199,10 +200,11 @@ reported when referenced. The provider checks that the source signature's
 representation matches the compiled PIR signature.
 
 This is a generic description mechanism for the supported on-chain Java subset,
-not support for arbitrary JVM libraries. Polymorphic Java method specialization,
-parameterized custom Java records, arbitrary object/function types and programmatic
-PIR export catalogues remain separate work under ADR-003. Their absence is not
-worked around by pretending their signatures are concrete Data.
+not support for arbitrary JVM libraries. Generic Java methods are specialized per
+use (above). Parameterized custom Java records, wildcards and arbitrary
+object/function types remain unsupported. A class that uses them fails to
+describe, and its failure is reported. Their absence is not worked around by
+pretending their signatures are concrete Data.
 
 ## Development dependency
 

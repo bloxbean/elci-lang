@@ -567,7 +567,8 @@ public final class Inference {
                                             + " does not approve construction (CONSTRUCT)");
                         if (scheme == null)
                             throw new Diagnostic(
-                                    "ELCI2005", n.token(), "Unknown name '" + n.name() + "'");
+                                    "ELCI2005", n.token(), "Unknown name '" + n.name().replaceFirst("^[A-Za-z0-9_.]*\\$", "")
+                                            + "'" + (n.name().contains("$") ? "; check that the imported module exports it" : ""));
                         yield instantiate(scheme, n.token());
                     }
                     case Apply a -> {
@@ -631,8 +632,18 @@ public final class Inference {
                             equality.add(Map.entry(a, b.token()));
                             yield con("Bool");
                         }
-                        unify(a, con("Int"), b.token());
-                        unify(z, con("Int"), b.token());
+                        for (Ty operand : List.of(a, z)) {
+                            if (prune(operand) instanceof Con c && !c.name().equals("Int")) {
+                                boolean ordering = Set.of("<", ">", "<=", ">=").contains(op);
+                                String hint = ordering
+                                        ? (c.name().equals("Bytes") ? "; use Bytes.lessThan for byte strings" : "")
+                                        : op.equals("+") && (c.name().equals("String") || c.name().equals("List"))
+                                                ? "; use ++ to append" : "";
+                                throw new Diagnostic("ELCI2002", b.token(), "The operator " + op + (ordering ? " compares" : " works on")
+                                        + " Int values, not " + Types.show(operand) + hint);
+                            }
+                            unify(operand, con("Int"), b.token());
+                        }
                         yield Set.of("<", ">", "<=", ">=").contains(op) ? con("Bool") : con("Int");
                     }
                     case Let l -> {

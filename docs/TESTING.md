@@ -36,7 +36,9 @@ source-directories = ["tests", "spec"]
   and the test library (`Expect`, `Scenario`, `Property`). They never become part of
   `check`, `build` or published artifacts.
 - **Naming:** a test module may not share a name with a source module or with
-  `Expect`, `Scenario` or `Property`.
+  `Expect`, `Scenario` or `Property`. Only test modules may import these modules;
+  a source module that does is rejected (ELCI2101), because `elci build` does not
+  have them.
 - **Discovery:** a test is an **exposed, zero-argument, top-level declaration**
   whose type is `Bool`, `Expect.Expectation`, `Scenario.Scenario` or
   `Property.Property`.
@@ -139,7 +141,9 @@ strangerCannotRelease =
 For each scenario, the runner does the following:
 
 1. It compiles the named validator exactly as `elci build` does and applies
-   `parameters` in the declared order.
+   `parameters` in the declared order. A scenario must supply every parameter.
+   Otherwise it fails before running: a script that fails while decoding its
+   parameters would make `expectFailure` pass for the wrong reason.
 2. It computes the applied script's hash. The validator's own address, minting
    policy and staking credential derive from it.
 3. It builds the ledger context with julc-testkit's `ScriptContextTestBuilder`. For

@@ -66,8 +66,8 @@ class ModuleTest {
 
     @Test
     void cyclesRejected() {
-        assertThrows(
-                IllegalArgumentException.class,
+        var cycle = assertThrows(
+                org.elci.syntax.Diagnostic.class,
                 () ->
                         compile(
                                 Map.of(
@@ -81,6 +81,8 @@ class ModuleTest {
                                                 + "import Main\n"
                                                 + "value : Int\n"
                                                 + "value = 1\n")));
+        assertEquals("ELCI2104", cycle.code());
+        assertTrue(cycle.getMessage().contains("Import cycle: Main -> Other -> Main"), cycle.getMessage());
     }
 
     @Test
