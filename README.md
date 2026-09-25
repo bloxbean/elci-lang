@@ -49,6 +49,8 @@ handlers, with deployment parameters and datum profiles. A build writes
 Client Lib, plus `abi.json` for Elci schema and ABI drift checks. CIP-57
 blueprint generation is not implemented yet.
 
+- [Documentation site](www/README.md): the developer guide, tutorials and reference (Astro Starlight;
+  `cd www && npm install && npm run dev`).
 - [Release workflow](docs/RELEASING.md): versioning, native binaries and GitHub Releases.
 - [Getting started](docs/GETTING_STARTED.md): build, first project, JVM/native CLI.
 - [Testing](docs/TESTING.md): `elci test`, expectations, transaction scenarios, property tests and JUnit.

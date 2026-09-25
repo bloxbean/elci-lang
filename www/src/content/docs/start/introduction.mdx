@@ -1,0 +1,206 @@
+---
+title: Why Elci
+description: What Elci is, who it is for, how it turns Elm-syntax source into Plutus V3 scripts, and what you get from it today.
+sidebar:
+  order: 1
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Elci (pronounced "el-see") is a small functional language for writing Cardano smart contracts. You write
+Elm-syntax `.elm` files, and Elci compiles them to Plutus V3 scripts that run on the Cardano ledger.
+This page explains what Elci is, who it is for, how the compiler works, and where the project stands today.
+
+## What Elci is
+
+A Cardano smart contract is a **validator**: a function that the ledger runs when a transaction tries to
+spend locked funds, mint tokens, withdraw rewards or take part in governance. It receives the data involved
+and the whole transaction, and it either approves or rejects.
+
+Elci lets you write those functions in the syntax of [Elm](https://elm-lang.org), a language known for
+readable code and helpful compile errors:
+
+```elm title="src/Treasury.elm"
+module Treasury exposing (Action(..), Payout, spend)
+
+import Julc.Ledger exposing (PubKeyHash, ScriptContext)
+
+
+type alias Payout =
+    { beneficiary : PubKeyHash
+    , amount : Int
+    }
+
+
+type Action
+    = Release
+    | Cancel
+
+
+spend : PubKeyHash -> Payout -> Action -> ScriptContext -> Bool
+spend admin payout action ctx =
+    case action of
+        Release ->
+            payout.amount > 0 && signedBy payout.beneficiary ctx
+
+        Cancel ->
+            signedBy admin ctx
+
+
+signedBy : PubKeyHash -> ScriptContext -> Bool
+signedBy key ctx =
+    List.any (\signer -> signer == key) ctx.txInfo.signatories
+```
+
+The `Payout` record is the datum stored with the locked funds, `Action` is the redeemer the spender sends,
+and `admin` is a deployment parameter. You declare how the function is deployed in `elci.toml`, not in the source:
+
+```toml title="elci.toml"
+[project]
+source-directories = ["src"]
+target = "plutus-v3-pv11-uplc-1.1.0"
+julc-version = "0.1.0-gb-5a3378b"
+
+[validators.treasury]
+boundary = "julc-strict-v1"
+parameters = ["admin"]
+spend = "Treasury.spend"
+```
+
+A test runs the compiled script against a real transaction context:
+
+```elm title="tests/TreasuryTest.elm"
+module TreasuryTest exposing (beneficiaryReleases, strangerCannotRelease)
+
+import Julc.Data as Data
+import Julc.Ledger exposing (PubKeyHash)
+import Scenario exposing (Scenario)
+import Treasury exposing (Action(..))
+
+
+admin : PubKeyHash
+admin =
+    Scenario.key "admin"
+
+
+beneficiary : PubKeyHash
+beneficiary =
+    Scenario.key "beneficiary"
+
+
+release : Scenario
+release =
+    Scenario.spend "treasury" (Scenario.outRef "treasury" 0) (Data.encode { beneficiary = beneficiary, amount = 50 })
+        |> Scenario.parameters [ Data.encode admin ]
+        |> Scenario.redeemer (Data.encode Release)
+
+
+beneficiaryReleases : Scenario
+beneficiaryReleases =
+    release
+        |> Scenario.signedBy beneficiary
+
+
+strangerCannotRelease : Scenario
+strangerCannotRelease =
+    release
+        |> Scenario.signedBy (Scenario.key "stranger")
+        |> Scenario.expectFailure
+```
+
+```text
+$ elci test .
+PASS TreasuryTest.beneficiaryReleases (cpu 11698810, mem 46679)
+PASS TreasuryTest.strangerCannotRelease (cpu 12077243, mem 48611)
+2 passed, 0 failed
+$ elci build .
+validator treasury (spend): checked; 458 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+```
+
+## Who it is for
+
+- **Developers who like typed functional programming.** If you know Elm, Haskell, F# or OCaml, most of the
+  syntax will be familiar. If you don't, it is a small language, and the Learn pages cover all of it.
+- **Newcomers to Cardano.** The compiler rejects whole classes of mistakes before anything reaches the
+  chain, and the test runner runs your script in a realistic ledger context.
+- **Java and Cardano Client Lib teams.** Elci is built on Julc, the Java toolchain for Cardano smart
+  contracts. It writes Julc's artifact format, can call Julc's on-chain Java libraries, and its scripts can
+  be tested from JUnit.
+
+## How it works
+
+Elci is a compiler frontend. It owns the language (parsing, modules, types) and hands a typed program to
+Julc's backend, which produces the script:
+
+```text
+ .elm source ──► parse and resolve modules ──► type inference and checks
+                                                      │
+       ┌──────────────────────────────────────────────┘
+       ▼
+ specialization ──► typed PIR ──► Julc backend ──► Plutus V3 UPLC
+                                  (wrapper, strict      (validator.plutus.json,
+                                   decoding, optimizer)  abi.json, .flat, .plutus)
+```
+
+1. **Source.** Your modules under `src/`, written in Elm 0.19 syntax.
+2. **Type inference.** Hindley–Milner style inference checks every expression. It also checks that
+   every `case` covers all possibilities and that `==` is used only on types that support it.
+3. **Typed PIR.** Generic functions are specialized for each type they are used at, and the program is
+   lowered to PIR, the typed intermediate language that Julc also uses for its Java validators.
+4. **Julc backend.** Julc wraps each validator so that it checks the purpose (spend, mint and so on)
+   and strictly decodes the datum and redeemer before calling your handler. Then it optimizes and
+   serializes the script.
+5. **Plutus V3 UPLC.** The result is a Plutus V3 script, plus an `abi.json` that records exactly how your
+   types are encoded as on-chain data.
+
+## What you get
+
+- **Elm syntax with type inference.** Records, custom types, pattern matching, pipelines and lambdas.
+  Types are inferred inside functions. Every top-level declaration needs a signature, so its types are
+  written where the reader can see them.
+- **Exhaustive pattern matching.** A `case` that misses a constructor is a compile error, and so is an
+  unreachable branch. Adding a redeemer action means the compiler shows you every place that must handle it.
+- **Strict data boundaries.** Datums and redeemers are decoded strictly before your code runs. Wrong
+  constructor tags, wrong field counts and wrong kinds of data fail the script instead of reaching your
+  logic. `elci apply` checks deployment parameters against their types before applying them.
+- **Named, multi-purpose validators with parameters.** Each `[validators.<name>]` table is one script with
+  one hash. It can combine `spend`, `mint`, `withdraw`, `certify`, `vote` and `propose` handlers, take
+  deployment parameters, and have them applied with `elci apply`.
+- **Built-in testing.** `elci test` runs unit tests, transaction scenarios against the same script that
+  `elci build` writes, and property-based tests with shrinking. Every test reports its CPU and memory budget.
+- **Julc libraries and Java interop.** Map a Julc on-chain Java library (math, intervals, values, byte strings
+  and more) in `elci.toml` and import it like an Elm module. Elci compiles the library's Java source to
+  on-chain code. It doesn't run that Java on your machine.
+- **Typed collections and bytes.** `Map k v` works like Elm's `Dict`, `Array a` gives constant-time indexed
+  reads, and `Bytes` exposes the Plutus byte-string builtins, including hashes and bitwise operations.
+- **A native CLI.** Build `elci` as a GraalVM native executable that starts fast and needs no Java at
+  runtime, or run the JVM version.
+
+## Current status
+
+:::caution[Development preview]
+Elci is a development preview, not a production-ready contract toolchain, and its own test suite is not
+a security audit. Test your contracts thoroughly, and don't lock real value with them yet.
+:::
+
+Be aware of these limits before you start:
+
+- **You build it from source.** Elci depends on a development build of Julc that you publish to your local
+  Maven repository. [Installation](/start/installation/) walks you through it.
+- **It is not browser Elm.** There is no `Html`, no ports, no commands or subscriptions, and no `Float`.
+  A contract is a pure function that returns `Bool`.
+- **No Elm packages.** Elci has its own small core (`List`, `Map`, `Array`, `Bytes`, `Debug`, `Julc.Data`)
+  plus Julc's Java libraries. `elm.json` and the Elm package registry are not used.
+- **Some tooling is missing.** There is no language server, and no CIP-57 blueprint generation yet. The
+  build writes Julc's `validator.plutus.json` format and Elci's own `abi.json`.
+
+[Coming from Elm](/learn/coming-from-elm/) lists every difference in detail.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Installation" description="Build the elci CLI and put it on your PATH." href="/start/installation/" />
+  <LinkCard title="Your first validator" description="Create, test, build and change a validator in a few minutes." href="/start/first-validator/" />
+  <LinkCard title="Learn the language" description="Values, functions and types, with examples you can run." href="/learn/basics/" />
+  <LinkCard title="Coming from Elm" description="What stays the same and what changes on-chain." href="/learn/coming-from-elm/" />
+</CardGrid>

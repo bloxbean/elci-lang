@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="t" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff7a3d"/><stop offset="0.5" stop-color="#f0417e"/><stop offset="1" stop-color="#7a5cff"/>
+    </linearGradient>
+    <radialGradient id="peach" cx="0.1" cy="0.05" r="0.6">
+      <stop offset="0" stop-color="#ffc9a8" stop-opacity="0.9"/><stop offset="1" stop-color="#fffaf5" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lilac" cx="0.9" cy="0.15" r="0.6">
+      <stop offset="0" stop-color="#d4c8ff" stop-opacity="0.9"/><stop offset="1" stop-color="#fffaf5" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#fffaf5"/>
+  <rect width="1200" height="630" fill="url(#peach)"/>
+  <rect width="1200" height="630" fill="url(#lilac)"/>
+  <rect x="96" y="96" width="120" height="120" rx="34" fill="url(#t)"/>
+  <path d="M136 132v48" stroke="#ffffff" stroke-width="14" stroke-linecap="round"/>
+  <path d="M158 134 182 156 158 178" fill="none" stroke="#ffffff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="96" y="340" fill="#221a2e" font-family="Inter, system-ui, sans-serif" font-size="76" font-weight="700" letter-spacing="-2">Cardano smart contracts,</text>
+  <text x="96" y="430" fill="url(#t)" font-family="Inter, system-ui, sans-serif" font-size="76" font-weight="700" letter-spacing="-2">written like Elm.</text>
+  <text x="96" y="520" fill="#6c6376" font-family="Inter, system-ui, sans-serif" font-size="32">Elci · typed, functional, Plutus V3 through Julc</text>
+</svg>
