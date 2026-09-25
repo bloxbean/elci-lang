@@ -464,8 +464,10 @@ public final class Modules {
         }
         var module = available.get(name);
         if (module == null) {
-            String missing = "Missing source module: " + name + "; add " + name.replace('.', '/')
-                    + ".elm under a source directory, or map a Java library to it under [java-modules]";
+            String missing = Set.of("Expect", "Scenario", "Property").contains(name)
+                    ? name + " is part of the test library; only test modules can import it"
+                    : "Missing source module: " + name + "; add " + name.replace('.', '/')
+                            + ".elm under a source directory, or map a Java library to it under [java-modules]";
             if (via != null) throw new Diagnostic("ELCI2101", via, missing);
             throw new IllegalArgumentException("ELCI2101: " + missing);
         }

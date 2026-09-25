@@ -77,6 +77,11 @@ public final class Types {
         return show(type, false);
     }
 
+    /** The left side of an arrow needs parentheses only when it is itself a function. */
+    private static String showParameter(Ty type) {
+        return prune(type) instanceof Con c && c.name.equals("->") ? "(" + show(type, false) + ")" : show(type, false);
+    }
+
     private static String show(Ty type, boolean argument) {
         type = prune(type);
         if (type instanceof Var) return "t";
@@ -85,7 +90,7 @@ public final class Types {
         if (name.startsWith("org.julclang.ledger.")) name = name.substring("org.julclang.ledger.".length());
         if (name.equals("Elci.Maybe")) name = "Maybe";
         if (name.equals("->")) {
-            String text = show(c.args.get(0), true) + " -> " + show(c.args.get(1), false);
+            String text = showParameter(c.args.get(0)) + " -> " + show(c.args.get(1), false);
             return argument ? "(" + text + ")" : text;
         }
         if (name.equals("Unit")) return "()";
