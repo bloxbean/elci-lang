@@ -67,7 +67,7 @@ The first message is the common one, and the least helpful: a validator that ret
 
 ## Debug.trace
 
-`Debug.trace : String -> a -> a` returns its second argument unchanged and emits the message as a Plutus trace. Import the module with `import Debug`.
+`Debug.trace : String -> a -> a` returns its second argument unchanged and emits the message as a Plutus trace. As in Elm, every module imports `Debug`, so it needs no import.
 
 Put a trace in the branch that rejects, so it only fires when that check fails. For the marketplace from [Transaction scenarios](/testing/scenarios/), change `endsBy` in `src/Market.elm`:
 

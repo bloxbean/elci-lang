@@ -1,11 +1,11 @@
 {
-  "description": "Signatures of Elci's compiler-provided functions that have no Elci source: the Bytes, Julc.Data and Debug modules and the always-available functions. List, Map and Array are Elci source modules bundled with the compiler; Expect, Scenario and Property are the test library. Every signature was type-checked with the Elci CLI.",
+  "description": "Signatures of Elci's compiler-provided functions that have no Elci source: the Bytes, Julc.Data and Debug modules, the Basics intrinsics (not, modBy, remainderBy and the ^ operator) and the built-in constructors. Basics, List, Maybe, Result, String, Tuple, Map and Array are Elci source modules bundled with the compiler; Expect, Scenario and Property are the test library. Every module imports Basics exposing (..), List, Maybe exposing (Maybe(..)), Result exposing (Result(..)), String, Tuple and Debug by default, as in Elm. Every signature was type-checked with the Elci CLI.",
   "compiler": "elci 0.1.0-dev / julc 0.1.0-gb-5a3378b",
   "modules": [
     {
       "module": "Bytes",
       "import": "import Bytes",
-      "summary": "Byte-string builtins; each function is a direct Plutus builtin call with the byte string as the last argument. The type Bytes is built in and needs no import.",
+      "summary": "Byte-string builtins; each function is a direct Plutus builtin call with the byte string as the last argument. The type Bytes is built in and needs no import. Compare byte strings with ==, and order them with <, <=, >, >=, compare, min and max (lexicographic by unsigned byte, a proper prefix first); there is no Bytes.lessThan.",
       "functions": [
         {
           "name": "empty",
@@ -61,16 +61,6 @@
           "name": "replicate",
           "signature": "Int -> Int -> Bytes",
           "summary": "replicate count byte; fails outside 0-255 or above 8192 bytes."
-        },
-        {
-          "name": "lessThan",
-          "signature": "Bytes -> Bytes -> Bool",
-          "summary": "Lexicographic a < b (the < operator works on Int only)."
-        },
-        {
-          "name": "lessThanOrEqual",
-          "signature": "Bytes -> Bytes -> Bool",
-          "summary": "Lexicographic a <= b."
         },
         {
           "name": "fromIntBigEndian",
@@ -182,7 +172,7 @@
         {
           "name": "encode",
           "signature": "a -> Data",
-          "summary": "The Data encoding of a value: records are constructor 0 with fields sorted by name, union variants use declaration-order tags, Maybe is Nothing 0 / Just 1, tuples are constructor 0, lists are lists, maps are maps. Rejected for (), functions and Array."
+          "summary": "The Data encoding of a value: records are constructor 0 with fields sorted by name, union variants use declaration-order tags, Maybe is Nothing 0 / Just 1, tuples are constructor 0, lists are lists, maps are maps. Result is Ok 0 / Err 1. Accepts a type nothing determines, such as that of Nothing or []. Rejected for (), functions and Array."
         },
         {
           "name": "fromOptional",
@@ -198,7 +188,7 @@
     },
     {
       "module": "Debug",
-      "import": "import Debug",
+      "import": "(imported by default: import Debug)",
       "summary": "Tracing.",
       "functions": [
         {
@@ -209,9 +199,9 @@
       ]
     },
     {
-      "module": "(always available)",
-      "import": null,
-      "summary": "Functions and constructors in scope in every module without an import. They cannot be qualified (there is no Basics module). There is no negate, abs, min, max, identity, always, compare, xor, toFloat or clamp; Julc.Math (MathLib) provides max, min and abs.",
+      "module": "Basics",
+      "import": "(imported by default: import Basics exposing (..))",
+      "summary": "The compiler intrinsics of the Basics prelude. The rest of Basics (negate, abs, min, max, clamp, compare, Order(LT, EQ, GT), identity, always, xor) is Elci source, listed with the bundled modules. Every module imports Basics exposing (..), so these names need no qualifier; Basics.not and the like also work, and a module's own declaration of the same name shadows them.",
       "functions": [
         {
           "name": "not",
@@ -227,8 +217,18 @@
           "name": "remainderBy",
           "signature": "Int -> Int -> Int",
           "summary": "remainderBy divisor value: result has the value's sign (Elm semantics); remainderBy 3 -7 is -1. Fails the script for divisor 0."
+        },
+        {
+          "name": "(^)",
+          "signature": "Int -> Int -> Int",
+          "summary": "Integer power operator: 2 ^ 10 is 1024. Right-associative, binds tighter than * (precedence 8); a negative exponent fails the script. Usable as a function, (^) 2 10."
         }
-      ],
+      ]
+    },
+    {
+      "module": "(built in)",
+      "import": null,
+      "summary": "Constructors built into the compiler; Just and Nothing are exposed through the default import Maybe exposing (Maybe(..)). A module may not declare constructors with these names, or types named Int, Bool, String, Bytes, Data, List, Maybe, Map, Array or Float.",
       "constructors": [
         {
           "name": "Just",

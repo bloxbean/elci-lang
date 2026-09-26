@@ -60,13 +60,17 @@ or refutable patterns in function arguments, fail here with a message that names
 ### Modules and names
 
 Module resolution builds the module graph. Each module `A.B` must live at `A/B.elm` under one source
-directory, every module has one owner, and import cycles are rejected. The bundled `List`, `Map` and
-`Array` modules are ordinary Elci source compiled with your code; `List` is imported into every module
-automatically. `Bytes`, `Debug` and `Julc.Data` are compiler intrinsics, and modules listed in
-`[java-modules]` are resolved to Julc library classes.
+directory, every module has one owner, and import cycles are rejected. The core modules (`Basics`,
+`List`, `Maybe`, `Result`, `Tuple`, `String`, `Map` and `Array`) are ordinary Elci source, bundled with the
+compiler and compiled with your code. Every project and test module gets Elm's default imports of
+`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple` and `Debug`; the core modules themselves import
+what they need explicitly, as in Elm. `Bytes`, `Debug` and `Julc.Data` are compiler intrinsics, as are
+`not`, `modBy` and `remainderBy`, which `Basics` exposes. Modules listed in `[java-modules]` are resolved
+to Julc library classes.
 
 Every name is then qualified with the module that owns it. A name is visible only if its module exposes
-it and your module imports it, and two imports may never silently shadow each other.
+it and your module imports it. A module's own declarations shadow its imports, and two imports never
+silently shadow each other: a name both expose is an error where it is used.
 
 ### Type inference and checks
 
@@ -76,7 +80,10 @@ signatures. Every top-level declaration needs a signature. The checker also:
 - groups recursive definitions and rejects eager value cycles (recursion must go through functions);
 - keeps recursive calls monomorphic, so polymorphic recursion is rejected;
 - allows limited local polymorphism: simple local functions and values may be used at several types;
-- checks that `==` and `++` are used only at types that support them;
+- checks that `==`, ordering and `++` are used only at types that support them, and that a signature
+  names such requirements with Elm's `comparable` and `appendable` type variables;
+- accepts type variables that nothing determines, as Elm does: no value of such a type can exist, so any
+  representation serves;
 - proves every `case` exhaustive and every branch reachable;
 - requires validator handlers and entrypoints to have concrete types that match their configuration.
 
@@ -95,6 +102,9 @@ Lowering then produces typed PIR while keeping Elci's evaluation rules:
 - **Selective branches.** `if`, `case`, `&&` and `||` evaluate only the branch they take.
 - **Explicit representations.** Lists are Julc's native `List<Data>`, with each element encoded and
   decoded explicitly. Records, tuples and custom types become Plutus Data constructors.
+- **Ordering.** `Int` and byte strings compare with the Plutus builtins, and `String` compares its UTF-8
+  bytes. Lists and tuples compare with a function generated once per concrete type, like any other
+  specialization.
 
 Nothing is erased to an untyped `Data` value behind your back: a type Elci cannot represent faithfully is
 a compile error.
@@ -166,6 +176,7 @@ The encoding is deterministic:
 | tuple | constructor 0, fields in position order |
 | custom type | constructor tag = declaration order of the variant, fields in order |
 | `Maybe a` | `Nothing` is constructor 0, `Just x` is constructor 1 with one field |
+| `Result e a` | `Ok x` is constructor 0, `Err e` is constructor 1, each with one field |
 | `List a` | list |
 | `Map k v` | map |
 

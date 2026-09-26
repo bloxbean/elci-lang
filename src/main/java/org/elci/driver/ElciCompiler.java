@@ -375,9 +375,10 @@ public final class ElciCompiler {
     /** Resolve imports, ledger types and library exports; inference is prepared but not run. */
     private Frontend frontend(Ast.Module module,Map<String,String> javaModules,CompilerOptions options,JavaLibraryProvider java) {
         var importedTypes=new LinkedHashMap<String,Ty>();var importedSymbols=new LinkedHashMap<String,String>();
-        importedTypes.put("not",fn(con("Bool"),con("Bool")));
-        importedTypes.put("remainderBy",fn(con("Int"),fn(con("Int"),con("Int"))));
-        importedTypes.put("modBy",fn(con("Int"),fn(con("Int"),con("Int"))));
+        String basics=org.elci.modules.Modules.BASICS_PREFIX;
+        importedTypes.put(basics+"not",fn(con("Bool"),con("Bool")));
+        importedTypes.put(basics+"remainderBy",fn(con("Int"),fn(con("Int"),con("Int"))));
+        importedTypes.put(basics+"modBy",fn(con("Int"),fn(con("Int"),con("Int"))));
         intrinsics(importedTypes);
         var ledger=new LedgerTypeProvider();var ledgerAliases=new LinkedHashMap<String,String>();
         for(var imp:module.imports()) {
@@ -514,7 +515,6 @@ public final class ElciCompiler {
         importedTypes.put(bytes+"at",fn(con("Int"),fn(con("Bytes"),con("Int"))));
         importedTypes.put(bytes+"cons",fn(con("Int"),fn(con("Bytes"),con("Bytes"))));
         importedTypes.put(bytes+"replicate",fn(con("Int"),fn(con("Int"),con("Bytes"))));
-        for(String compare:List.of("lessThan","lessThanOrEqual"))importedTypes.put(bytes+compare,fn(con("Bytes"),fn(con("Bytes"),con("Bool"))));
         for(String from:List.of("fromIntBigEndian","fromIntLittleEndian"))importedTypes.put(bytes+from,fn(con("Int"),fn(con("Int"),con("Bytes"))));
         for(String to:List.of("toIntBigEndian","toIntLittleEndian"))importedTypes.put(bytes+to,fn(con("Bytes"),con("Int")));
         for(String logic:List.of("and","or","xor"))importedTypes.put(bytes+logic,fn(con("Bytes"),fn(con("Bytes"),con("Bytes"))));

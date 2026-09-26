@@ -183,8 +183,6 @@ The first line is the value, written in Elci syntax. The second is the CPU and m
 ```elm title="src/Main.elm"
 module Main exposing (main)
 
-import Debug
-
 
 type alias Quote =
     { price : Int, approved : Bool }

@@ -9,7 +9,7 @@ renders them as `path:line:column: code: message`.
 | `ELCI1002` | Malformed or unsupported syntax |
 | `ELCI2001` | Invalid pattern or expression form |
 | `ELCI2002` | Type mismatch or infinite type |
-| `ELCI2003` | Unsupported equality or append type |
+| `ELCI2003` | Unsupported equality, ordering or append type; a constrained type variable (`comparable`, `appendable`) missing or misnamed, or `number` |
 | `ELCI2004` | Missing required top-level signature |
 | `ELCI2005` | Unknown value name |
 | `ELCI2006` | Duplicate binder or unreachable pattern |
@@ -17,19 +17,19 @@ renders them as `path:line:column: code: message`.
 | `ELCI2008` | Eager recursive value cycle |
 | `ELCI2009` | Non-concrete handler or entrypoint |
 | `ELCI2010` | Unknown or unconstrained record field |
-| `ELCI2011` | Duplicate type or constructor |
-| `ELCI2012` | Invalid type, alias, arity or alias cycle |
+| `ELCI2011` | Duplicate type or constructor, or a built-in constructor or type name (`Just`, `Nothing`, `True`, `False`; `Int`, `Maybe`, `List` and the other built-in types) |
+| `ELCI2012` | Invalid type, alias, arity or alias cycle; `Tuple` or `Unit` written as a type name |
 | `ELCI2013` | Unsupported serialized boundary type, or a value without a Data encoding (a function or an `Array`) stored in data |
 | `ELCI2014` | Validator handler signature does not match its configured purpose, parameters or datum profile |
 | `ELCI2101` | Unknown or missing module or imported export; a source module importing the test library |
-| `ELCI2102` | Ambiguous or conflicting imported name |
+| `ELCI2102` | Ambiguous name: two imports, possibly a default import, expose different things under it |
 | `ELCI2103` | Entrypoint is not exposed |
-| `ELCI2104` | Source module path, ownership or cycle error; qualified reference to an unexposed or unimported name |
+| `ELCI2104` | Source module path, ownership or cycle error; reserved core module name or alias; qualified reference to an unexposed or unimported name, a name a core module lacks or an Elm function Elci does not provide |
 | `ELCI2105` | Unsupported Java export signature, with provider reason |
-| `ELCI3001` | PIR lowering cannot represent the inferred program, such as a generic function used at a type nothing determines |
+| `ELCI3001` | PIR lowering cannot represent the inferred program, such as `Julc.Data.decode` or a generic Java export at a type nothing determines |
 | `ELCI3002` | Specialization or polymorphic-recursion limit |
 | `ELCI3003` | Generic library type argument violates the export's constraint (for example `DATA_ENCODABLE`) |
-| `ELCI4001` | Invalid project configuration or CLI request |
+| `ELCI4001` | Invalid project configuration or CLI request, including a `[java-modules]` key that names a core module |
 | `ELCI4002` | Julc backend rejected generated PIR; reported at the Elci declaration it names, with the `JULC00xx` code |
 | `ELCI4003` | The Julc backend lacks a contract revision or capability the program needs |
 

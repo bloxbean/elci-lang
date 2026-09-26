@@ -31,6 +31,7 @@ public final class Parser {
                     Map.entry("++", 5),
                     Map.entry("+", 6),
                     Map.entry("-", 6),
+                    Map.entry("^", 8),
                     Map.entry(">>", 9),
                     Map.entry("<<", 9),
                     Map.entry("*", 7),
@@ -58,7 +59,8 @@ public final class Parser {
         this.source = source;
         tokens = new Lexer(source, module).lex();
         for (int i = 0; i < tokens.size() - 2; i++)
-            if (tokens.get(i).text().equals("type") && !tokens.get(i + 1).text().equals("alias")) {
+            if (tokens.get(i).kind() == Token.Kind.NAME && tokens.get(i).text().equals("type")
+                    && !tokens.get(i + 1).text().equals("alias")) {
                 int j = i + 2;
                 while (j < tokens.size()
                         && tokens.get(j).kind() == Token.Kind.NAME
@@ -297,6 +299,9 @@ public final class Parser {
         var t = name();
         String n = t.text();
         if (Character.isUpperCase(n.charAt(0))) while (take(".")) n += "." + upper().text();
+        if (n.equals("Tuple") || n.equals("Unit"))
+            throw new Diagnostic("ELCI2012", t, n.equals("Tuple")
+                    ? "Write tuple types as ( a, b ) or ( a, b, c )" : "Write the unit type as ()");
         if (n.equals("Float"))
             throw new Diagnostic("ELCI2001", t, "Float is unsupported; use scaled Int");
         var args = new ArrayList<Type>();
@@ -304,7 +309,15 @@ public final class Parser {
         return new Type(n, List.copyOf(args));
     }
 
+    /** Right-associative operators; the rest (other than comparisons) associate to the left. */
+    private static final Set<String> RIGHT_ASSOCIATIVE = Set.of("::", "++", "<|", "&&", "||", ">>", "^");
+
     private Expr expression(int min, int floor) {
+        return expression(min, floor, null);
+    }
+
+    /** @param rightOf the right-associative operator whose right operand this is, or null */
+    private Expr expression(int min, int floor, String rightOf) {
         Expr left = prefix(floor);
         while (!boundary(floor)) {
             if (is(".") && peek().offset() == previous().offset() + previous().text().length()) {
@@ -318,24 +331,26 @@ public final class Parser {
                 left = new Apply(left, new Binary("-", new Literal(BigInteger.ZERO, minus), expression(11, floor), minus), minus);
                 continue;
             }
-            String op = peek().text();
+            String op = peek().kind() == Token.Kind.SYMBOL ? peek().text() : "";
             Integer precedence = PRECEDENCE.get(op);
             if (precedence != null && precedence >= min) {
+                if (rightOf != null && precedence.equals(PRECEDENCE.get(rightOf)) && !RIGHT_ASSOCIATIVE.contains(op))
+                    throw mixing(rightOf, op);
                 Token token = next();
                 if (op.equals("/"))
                     throw new Diagnostic(
                             "ELCI2001",
                             token,
                             "Float division is unsupported; use // for integer quotient");
-                Expr right =
-                        expression(
-                                precedence
-                                        + (Set.of("::", "++", "<|", "&&", "||", "<<").contains(op)
-                                                ? 0
-                                                : 1),
-                                floor);
+                boolean rightAssociative = RIGHT_ASSOCIATIVE.contains(op);
+                Expr right = rightAssociative ? expression(precedence, floor, op) : expression(precedence + 1, floor);
                 left = new Binary(op, left, right, token);
-                if (precedence == 4 && PRECEDENCE.getOrDefault(peek().text(), -1) == 4)
+                String next = peek().kind() == Token.Kind.SYMBOL ? peek().text() : "";
+                if (!rightAssociative && precedence != 4 && precedence.equals(PRECEDENCE.get(next))
+                        && RIGHT_ASSOCIATIVE.contains(next))
+                    throw mixing(op, next);
+                if (precedence == 4 && peek().kind() == Token.Kind.SYMBOL
+                        && PRECEDENCE.getOrDefault(peek().text(), -1) == 4)
                     throw error(
                             "Comparison operators cannot be chained; use && or explicit"
                                     + " parentheses");
@@ -347,8 +362,16 @@ public final class Parser {
         return left;
     }
 
+    /** Elm's rule: operators of one precedence that associate in opposite directions don't mix. */
+    private Diagnostic mixing(String first, String second) {
+        return error("Mixing (" + first + ") and (" + second + ") needs parentheses: they associate in opposite"
+                + " directions, as in Elm");
+    }
+
     private Expr prefix(int floor) {
         Token t = next();
+        // A string's text is its content, never a keyword or symbol: "-", "(" and "of" are strings.
+        if (t.kind() == Token.Kind.STRING) return new Literal(t.text(), t);
         if (t.text().equals("if")) {
             Expr cond = expression(0, floor);
             expect("then");
@@ -408,11 +431,21 @@ public final class Parser {
         if (t.text().equals("-"))
             return new Binary("-", new Literal(BigInteger.ZERO, t), expression(9, floor), t);
         if (t.kind() == Token.Kind.INT) return new Literal(new BigInteger(t.text()), t);
-        if (t.kind() == Token.Kind.STRING) return new Literal(t.text(), t);
         if (t.text().equals("True") || t.text().equals("False"))
             return new Literal(t.text().equals("True"), t);
         if (t.text().equals("(")) {
             if (take(")")) return new Literal(null, t);
+            if (peek().kind() == Token.Kind.SYMBOL && PRECEDENCE.containsKey(peek().text())
+                    && tokens.get(pos + 1).kind() == Token.Kind.SYMBOL && tokens.get(pos + 1).text().equals(")")) {
+                // An operator as a function, as in Elm: (+) is \a b -> a + b.
+                Token op = next();
+                expect(")");
+                if (op.text().equals("/"))
+                    throw new Diagnostic("ELCI2001", op, "Float division is unsupported; use (//) for integer quotient");
+                String left = "$elci$left$" + (synthetic++), right = "$elci$right$" + (synthetic++);
+                return new Lambda(List.of(left, right),
+                        new Binary(op.text(), new Name(left, op), new Name(right, op), op), t);
+            }
             Expr e = expression(0, -1);
             if (take(",")) {
                 var es = new ArrayList<Expr>();
@@ -459,7 +492,9 @@ public final class Parser {
         if (t.kind() == Token.Kind.NAME && !RESERVED.contains(t.text())) {
             String n = t.text();
             if (Character.isUpperCase(n.charAt(0))) while (take(".")) n += "." + name().text();
-            return new Name(n, t);
+            // The token spells the whole qualified name, as written, for diagnostics.
+            return new Name(n, n.equals(t.text()) ? t
+                    : new Token(n, t.kind(), t.offset(), t.line(), t.column(), t.source()));
         }
         throw new Diagnostic("ELCI1002", t, "Expected expression, found '" + t.text() + "'");
     }
@@ -482,7 +517,7 @@ public final class Parser {
         Pattern p = patternAtom();
         if (constructor(p)) {
             var args = new ArrayList<Pattern>();
-            while (patternAtomStart() && !Set.of("as").contains(peek().text()))
+            while (patternAtomStart() && !is("as"))
                 args.add(patternAtom());
             if (!args.isEmpty()) p = new Pattern(p.name(), args, p.token());
         }
@@ -491,6 +526,9 @@ public final class Parser {
 
     private Pattern patternAtom() {
         Token t = next();
+        // A string pattern is named by its quoted text, so it never reads as `_`, a variable or a
+        // constructor.
+        if (t.kind() == Token.Kind.STRING) return new Pattern("\"" + t.text() + "\"", List.of(), t);
         if (t.text().equals("[")) {
             var parts = new ArrayList<Pattern>();
             if (!is("]"))
@@ -514,7 +552,7 @@ public final class Parser {
                 } while (take(","));
                 expect(")");
                 if (parts.size() > 3) throw error("Tuple patterns have two or three elements");
-                return new Pattern("Tuple", parts, t);
+                return new Pattern("$tuple", parts, t);
             }
             expect(")");
             return first;
@@ -572,7 +610,7 @@ public final class Parser {
     private static boolean irrefutable(Pattern p) {
         return simpleBinder(p)
                 || p.name().equals("$unit")
-                || p.name().equals("Tuple") && p.arguments().stream().allMatch(Parser::irrefutable)
+                || p.name().equals("$tuple") && p.arguments().stream().allMatch(Parser::irrefutable)
                 || p.name().equals("$record")
                 || p.name().equals("$as") && irrefutable(p.arguments().getFirst());
     }
@@ -665,8 +703,9 @@ public final class Parser {
         return tokens.get(pos++);
     }
 
+    /** Whether the next token is the keyword, name or symbol {@code s}; a string literal never is. */
     private boolean is(String s) {
-        return peek().text().equals(s);
+        return peek().kind() != Token.Kind.STRING && peek().text().equals(s);
     }
 
     private boolean take(String s) {

@@ -1,8 +1,9 @@
 # Elci standard library guide
 
-Elci has a small bundled library written in Elci and can import supported Julc
-on-chain Java libraries. It does not provide the complete Elm core/browser
-package ecosystem.
+Elci bundles a core library written in Elci, following Elm 0.19's core modules
+([ADR-008](../adr/008-native-standard-library-foundation.md)), and can import
+supported Julc on-chain Java libraries to fill its gaps. It does not provide the
+complete Elm core or the browser package ecosystem.
 
 This inventory was first checked on 20 September 2026 using Julc's
 source-description boundary at `d6e716e2` and Elci `c7552e9`, with target
@@ -27,20 +28,34 @@ contributes 24 exports. The six programmatic `ListsLib` exports (`map`, `filter`
 
 ## Bundled Elci library
 
-`Map` (`import Map`) provides typed association maps in the style of Elm's `Dict`.
-`Array` (`import Array`) provides constant-time indexed arrays in the style of Elm's
-`Array`. Both are described in the
-[language guide](LANGUAGE.md#compiler-provided-modules). They are Elci source over
-Julc's `TypedMapLib` and `TypedArrayLib`, which need no `[java-modules]` entry.
+The core modules live in `src/main/resources/elci/core/` and are compiled with each
+program; functions a program does not use are never lowered. As in Elm, every
+project and test module implicitly has:
 
-`List` is available as a qualified module without configuration:
+```elm
+import Basics exposing (..)
+import List
+import Maybe exposing (Maybe(..))
+import Result exposing (Result(..))
+import String
+import Tuple
+import Debug
+```
 
-| Functions | Purpose |
+| Module | Functions |
 | --- | --- |
-| `map`, `filter`, `concatMap` | Transform or select list elements |
-| `foldl`, `foldr` | Accumulate values; callbacks receive element then accumulator |
-| `all`, `any` | Predicate checks |
-| `length`, `reverse`, `append` | Basic list operations |
+| `Basics` | `negate`, `abs`, `min`, `max`, `clamp`, `compare` (`Order = LT \| EQ \| GT`), `identity`, `always`, `xor`, and the intrinsics `not`, `modBy`, `remainderBy`; the `^` operator |
+| `List` | `singleton`, `repeat`, `range`, `map`, `indexedMap`, `filter`, `filterMap`, `foldl`, `foldr`, `concat`, `concatMap`, `intersperse`, `map2`, `map3`, `length`, `reverse`, `member`, `all`, `any`, `maximum`, `minimum`, `sum`, `product`, `append`, `isEmpty`, `head`, `tail`, `take`, `drop`, `partition`, `unzip`, `sort`, `sortBy`, `sortWith` |
+| `Maybe` | `withDefault`, `map`, `map2`, `map3`, `andThen` (`Maybe`, `Just`, `Nothing` are built in) |
+| `Result` | `type Result error value = Ok value \| Err error`; `map`, `map2`, `map3`, `andThen`, `withDefault`, `toMaybe`, `fromMaybe`, `mapError` |
+| `Tuple` | `pair`, `first`, `second`, `mapFirst`, `mapSecond`, `mapBoth` |
+| `String` | `fromInt`, `isEmpty`, `append`, `concat`, `join` |
+
+Names, argument orders and edge cases follow Elm. `min`, `max`, `compare`,
+`List.sort`, `List.maximum` and `List.minimum` work on comparable types: `Int`,
+`String` (UTF-8 byte order), `Bytes`, the ledger's byte-string hashes, and lists
+and tuples of these. `Ok` is Data constructor 0 and `Err` constructor 1, the
+reverse of PlutusTx's `Either`.
 
 These functions are generic Elci functions, unlike the concrete `List Data`
 signatures of many Java `ListsLib` methods. For example:
@@ -49,15 +64,22 @@ signatures of many Java `ListsLib` methods. For example:
 List.map (\value -> value + 1) [ 1, 2, 3 ]
 ```
 
-`not`, `modBy` and `remainderBy` are compiler-provided functions. `Julc.Data` provides
-explicit `decode`, `encode`, `fromOptional` and `toOptional` conversions. `Bytes`
-wraps byte-string builtins (`fromString`, `length`, `append`, `slice`, hashes).
-`Debug.trace` emits traces (see the
-[language guide](LANGUAGE.md#compiler-provided-modules)). Test modules
-additionally see the `Expect` and `Scenario` test library ([Testing](TESTING.md)). `Maybe` with `Just` and
-`Nothing` is a built-in type; a complete Elm-style `Maybe` module is not bundled.
-`Julc.Ledger` exposes ledger types and supported fields rather than an ordinary
-Java function library.
+`Map` (`import Map`) provides typed association maps in the style of Elm's `Dict`.
+`Array` (`import Array`) provides constant-time indexed arrays in the style of Elm's
+`Array`. Both are described in the
+[language guide](LANGUAGE.md#compiler-provided-modules). They are Elci source over
+Julc's `TypedMapLib` and `TypedArrayLib`, which need no `[java-modules]` entry.
+
+`Julc.Data` provides explicit `decode`, `encode`, `fromOptional` and `toOptional`
+conversions. `Bytes` wraps byte-string builtins (`fromString`, `length`, `append`,
+`slice`, hashes); `<` and `compare` order byte strings. `Debug.trace` emits traces
+(see the [language guide](LANGUAGE.md#compiler-provided-modules)). Test modules
+additionally see the `Expect`, `Scenario` and `Property` test library
+([Testing](TESTING.md)). `Julc.Ledger` exposes ledger types and supported fields
+rather than an ordinary Java function library.
+
+Still missing compared with Elm's core: `Dict` and `Set` (use `Map`), `Char`, most
+of `String`, `map4`/`map5`, and every `Float` function.
 
 ## Julc library availability
 
@@ -98,8 +120,9 @@ import Julc.Math as Math
 import Julc.Interval as Interval
 ```
 
-Use `Math.max 5 9` or `Interval.finiteLowerBound ctx.txInfo.validRange` in an
-appropriately typed declaration. Library dependencies are resolved transitively.
+Use `Math.floorDiv -7 2` or `Interval.finiteLowerBound ctx.txInfo.validRange` in an
+appropriately typed declaration. Prefer the prelude's `max`, `min`, `abs` and `^`
+over their `MathLib` counterparts; they need no mapping. Library dependencies are resolved transitively.
 `finiteLowerBound` and `finiteUpperBound` return `-1` for an infinite bound;
 account for that sentinel when using these methods.
 
@@ -226,7 +249,8 @@ needs no entrypoint of its own. Modules may contain generic functions, aliases,
 custom types and other imports within the supported Elci language profile.
 Use `exposing (TypeName(..))` to export a custom type and its constructors.
 Module paths must match names, imports must be acyclic, and duplicate module
-ownership is rejected. `List` is reserved for the bundled core module.
+ownership is rejected. The core module names (`Basics`, `List`, `Maybe`, `Result`,
+`String`, `Tuple`, `Map`, `Array`) and `Dict`, `Set`, `Value` and `Elci` are reserved.
 
 Run the [complete example](../examples/elci-library/README.md):
 

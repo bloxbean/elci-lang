@@ -9,19 +9,20 @@ separate milestones.
 
 | Feature | Current support |
 | --- | --- |
-| Modules, imports, aliases, exposing | Source modules and configured Java modules; import cycles rejected |
+| Modules, imports, aliases, exposing | Source modules and configured Java modules; Elm's default imports and name precedence; import cycles rejected |
 | Functions, lambdas, partial application | Strict, curried application and immediate argument capture |
 | Top-level generics | Rank-1 inference, signature checking, concrete specialization |
 | Local declarations | Dependency SCCs, conservative value-restricted rank-1 polymorphism, strict initialization |
 | Recursion | Self-recursion and finite function-only mutual groups; polymorphic recursion rejected |
 | Basic types | Arbitrary-precision Int, Bool, String, unit |
+| Core library | Elm's `Basics` prelude and `List`, `Maybe`, `Result`, `Tuple`, `String` modules, written in Elci ([ADR-008](../adr/008-native-standard-library-foundation.md)) |
 | Lists | Homogeneous Data-backed lists, list patterns, generic core functions |
 | Tuples | Pairs/triples, nested patterns and parameter destructuring; tag-zero encoding |
 | Records | Closed structural records, generic aliases and constructors, destructuring, field access and updates |
 | Custom types | Generic and regular recursive unions; declaration-order tags |
 | Patterns | Nested constructors/lists/tuples/records, aliases, unit and Bool/Int/String literals |
 | Pattern coverage | Nested exhaustiveness and usefulness analysis; duplicate/unreachable branches rejected |
-| Equality | Structural equality for eligible primitives, lists, tuples, records and unions |
+| Equality and ordering | Structural equality for eligible primitives, lists, tuples, records and unions; `comparable` ordering for `Int`, `String`, bytes, ledger hashes, lists and tuples |
 | Ledger access | Typed record views, transaction fields, nominal hash types, approved constructors/patterns/equality of ledger sums and records |
 | Data conversions | `Julc.Data.decode`/`encode` strict codecs and Julc optional ↔ `Maybe` adapters |
 | Maps and bytes | Typed `Map k v` (Elm `Dict`-style) and complete byte-string builtins in `Bytes` |
@@ -33,8 +34,8 @@ separate milestones.
 | Native image | GraalVM executable with bundled source and reflection resources |
 
 Intentionally outside this profile: row polymorphism and extensible records,
-polymorphic recursion, higher-rank and unrestricted let-polymorphism, Float,
-ports, browser effects and user-defined typeclasses. Complete ledger-wide contract
+polymorphic recursion, higher-rank and unrestricted let-polymorphism, Float and
+`number`, ports, browser effects and user-defined typeclasses. Complete ledger-wide contract
 adapters and a language server remain future integration work. Java wildcard exposing is currently rejected; use
 explicit exported names.
 
@@ -70,13 +71,18 @@ Eligible local non-expansive bindings are rank-1 polymorphic. Function
 declarations, lambdas and immutable values can therefore be used at more than one
 type. Calls, conditionals, matches and record updates remain monomorphic so
 specialization cannot duplicate a strict computation. Compiler-known equality
-and append requirements follow a generic helper and are checked at each concrete
-use; Elci adds no constraint syntax.
+requirements follow a generic helper and are checked at each concrete use.
+Ordering and append requirements follow Elm's naming rule: a signature variable
+compared with `<` must be named `comparable…`, one appended with `++`
+`appendable…`, and `compappend…` allows both; `number` is rejected. Type variables
+that nothing determines, as in `[] == []`, are accepted as in Elm; only
+`Julc.Data.decode` and generic Java exports require the type to be known.
 
 ## Arithmetic and control flow
 
 `Int` is arbitrary precision. `+`, `-`, and `*` are exact; `//` truncates toward
-zero. `remainderBy divisor value` uses the dividend's sign and `modBy divisor value`
+zero; `^` is integer power (right-associative, precedence 8), and a negative
+exponent fails evaluation. `remainderBy divisor value` uses the dividend's sign and `modBy divisor value`
 the divisor's, as in Elm. Division, remainder and modulus by zero fail evaluation. `/` and Float literals are rejected.
 
 `if`, `&&`, `||`, and `case` evaluate only the selected branch. Local values are
@@ -88,13 +94,18 @@ independent ties.
 byte-backed ledger hashes, lists, tuples, closed records and regular recursive
 unions whose reachable fields are themselves equality-capable. Both operands are
 evaluated once from left to right. Functions, opaque Data and imported values
-without verified equality are rejected at compile time. Integer ordering uses
-`<`, `<=`, `>`, `>=`. Comparisons cannot be chained without parentheses or
-Boolean operators.
+without verified equality are rejected at compile time. `<`, `<=`, `>`, `>=` and
+`compare` order comparable values: `Int` numerically, `String` by UTF-8 bytes,
+`Bytes` and byte-string ledger hashes lexicographically (`lessThanByteString`),
+lists lexicographically and tuples by component. Comparisons cannot be chained
+without parentheses or Boolean operators.
 
 `|>` and `<|` apply functions; `>>` and `<<` compose them. Composition captures
-its function operands strictly. `++` appends lists or strings; `::` prepends a list
-element.
+its function operands strictly. `>>` groups to the right and `<<` to the left, as in
+Elm, and operators of one precedence that group in opposite directions cannot be
+mixed without parentheses. `++` appends lists or strings; `::` prepends a list
+element. Every binary operator can be used as a function: `(+)`, `(::)`, `(<)`;
+`(/)` is rejected.
 
 As in Elm 0.19, a `-` directly before its operand negates it when it follows
 whitespace or an opening bracket. `f -1` therefore passes `-1` to `f`, and
@@ -103,8 +114,9 @@ which writes `f (-1)` as `f -1`.
 
 ## Lists and recursion
 
-`List` is implicitly available. The bundled core exposes `map`, `filter`, `foldl`,
-`foldr`, `all`, `any`, `length`, `reverse`, `append`, and `concatMap`.
+`List` is imported by default. It has Elm's list functions except `map4` and
+`map5`: `map`, `filter`, `foldl`, `head`, `range`, `sum`, `member`, `sort`,
+`sortBy` and the rest ([standard library](STDLIB.md#bundled-elci-library)).
 
 ```elm
 sumPositive : List Int -> Int
@@ -173,7 +185,11 @@ Constructors are curried functions. The first constructor has tag zero, the
 second tag one, and fields preserve argument order. Recursive references retain a
 stable nominal identity. `Maybe a`, `Nothing`, and `Just` are built in, with
 `Nothing` tag zero and `Just` tag one. This differs from Julc Java Optional's tags;
-they are not silently interchangeable.
+they are not silently interchangeable. The core `Result` type has `Ok` tag zero and
+`Err` tag one, the reverse of PlutusTx's `Either`. Modules cannot declare the
+constructors `Just`, `Nothing`, `True` or `False`, or types named after the
+built-in types (`Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Map`,
+`Array`, `Float`).
 
 Cases must be exhaustive. Patterns can nest constructors, exact-length lists,
 cons, tuples, closed-record field selections, aliases, unit, and Bool, Int or
@@ -190,13 +206,24 @@ exposed source names are importable, whether exposed unqualified or referenced
 through a qualifier such as `Pricing.fee`. A qualified name must belong to a module
 that the current module imports. Module cycles and duplicate ownership are errors.
 
+Every module has Elm's default imports: `Basics exposing (..)`, `List`,
+`Maybe exposing (Maybe(..))`, `Result exposing (Result(..))`, `String`, `Tuple`
+and `Debug`. A module's own declarations shadow imports. Two imports that expose different
+things under one name make it ambiguous where it is used (`ELCI2102`), except that
+a name listed explicitly in `exposing` takes precedence over a default import. An
+import cannot be aliased to a default module's name. The core module names
+(`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Array`) and the
+reserved names `Dict`, `Set`, `Value` and `Elci` cannot name a project module or a
+`[java-modules]` key.
+
 Configure a Java library mapping in `elci.toml`, then write normal Elm imports:
 
 ```elm
-import Julc.Math as Math exposing (max)
+import Julc.Math as Math exposing (floorDiv)
 ```
 
-`Math.max` and `max` resolve to the configured class's public on-chain export.
+`Math.floorDiv` and `floorDiv` resolve to the configured class's public on-chain
+export.
 The provider parses and compiles its real Java source into PIR. It does not run
 that Java function on the JVM to fake an on-chain result. Ambiguous Java overloads
 are rejected. Generic Java methods are imported as generic functions and compiled
@@ -265,7 +292,9 @@ supported surface.
 
 ### Compiler-provided modules
 
-`List` is visible in every module. These modules are imported explicitly:
+The default imports (`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple` and
+`Debug`) are listed in the [standard library guide](STDLIB.md#bundled-elci-library).
+These modules are imported explicitly:
 
 | Module | Functions |
 | --- | --- |
@@ -273,7 +302,6 @@ supported surface.
 | `Array` | `empty`, `fromList`, `toList`, `toIndexedList`, `length`, `isEmpty`, `get`, `initialize`, `repeat`, `map`, `indexedMap`, `foldl`, `foldr`, `filter`, `slice` |
 | `Julc.Data` | `decode`, `encode`, `fromOptional`, `toOptional` (below) |
 | `Bytes` | see the table below |
-| `Debug` | `trace : String -> a -> a`, which emits a Plutus trace and returns its second argument |
 
 The types `Map` and `Array` are always in scope. As with Elm's `Dict`, you may still
 write `import Map exposing (Map)` or `Map.Map`.
@@ -307,7 +335,7 @@ compose in pipelines:
 | --- | --- |
 | Building | `empty`, `fromString` (UTF-8), `toString`, `cons byte`, `replicate count byte`, `append` |
 | Reading | `length`, `at index`, `slice start length`, `take n`, `drop n` |
-| Comparing | `lessThan`, `lessThanOrEqual` (and `==`) |
+| Comparing | the operators `==`, `<`, `<=`, `>`, `>=` and the prelude's `compare`, `min`, `max` |
 | Integers | `fromIntBigEndian width n`, `fromIntLittleEndian width n` (width `0` is minimal), `toIntBigEndian`, `toIntLittleEndian` |
 | Bits | `and`, `or`, `xor` (truncating to the shorter operand), `complement`, `shift n`, `rotate n`, `testBit i`, `countSetBits`, `findFirstSetBit` |
 | Hashes | `blake2b224`, `blake2b256`, `sha256`, `sha3_256`, `keccak256`, `ripemd160` |
@@ -316,7 +344,9 @@ Token names can be written as `Bytes.fromString "GOLD"`. `Bytes.toString` fails 
 invalid UTF-8. Composite helpers such as `toHex`, `intToDecimalString` and
 `utf8ToInteger` come from Julc's `ByteStringLib`: map
 `"Julc.ByteString" = "org.julclang.stdlib.lib.ByteStringLib"` and
-`import Julc.ByteString as ByteString`. `Debug.trace` costs budget like any trace.
+`import Julc.ByteString as ByteString`. `Debug.trace : String -> a -> a`, imported
+by default, emits a Plutus trace and returns its second argument; it costs budget
+like any trace.
 
 ### Explicit Data conversions
 

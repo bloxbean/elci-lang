@@ -1,6 +1,6 @@
 ---
 title: Coming from Elm
-description: What carries over from Elm 0.19 to Elci and what changes, from the program model and missing core functions to Data encoding, Map and strict decoding.
+description: What carries over from Elm 0.19 to Elci and what changes, from the program model and the core library to Data encoding, Map and strict decoding.
 sidebar:
   order: 7
 ---
@@ -17,8 +17,15 @@ difference that matters, so you can skip the parts of the Learn section you don'
 - Hindley–Milner type inference, generic functions (`a -> a`), and generic type aliases and custom types.
 - Exhaustive `case` checking. Redundant patterns are errors.
 - Local type annotations in `let`.
-- No typeclasses. Like Elm, Elci has no way to declare your own, and it goes further by dropping Elm's
-  built-in `number`, `comparable` and `appendable` (see below).
+- The core library's default imports: `Basics` with `exposing (..)`, `List`, `Maybe` with `Maybe(..)`,
+  `Result` with `Result(..)`, `String`, `Tuple` and `Debug`. Their functions have Elm's names, argument
+  orders and edge cases: `max`, `compare`, `identity`, `Maybe.withDefault`, `List.head`, `List.range`,
+  `List.sortBy`, `Result.andThen`, `Tuple.first`, `String.fromInt` and more.
+- Elm's name rules: your own declarations shadow imports, and two imports exposing one name make it
+  ambiguous where you use it.
+- No typeclasses, with Elm's constrained type variables `comparable`, `appendable` and `compappend`.
+- Operators as functions, such as `List.foldl (+) 0`, and `^` for powers.
+- Types that nothing determines, as in `[] == []` or `Result.withDefault 0 (Ok 5)`, need no annotation.
 - `//` truncates toward zero, and `modBy` and `remainderBy` follow Elm's sign rules: `modBy` takes the sign
   of the divisor, `remainderBy` the sign of the dividend.
 - Negative arguments: `modBy 3 -7` passes `-7`, while `a - 1` and `a-1` subtract.
@@ -51,48 +58,71 @@ Elm, `n // 0` evaluates to `0`. In Elci, it fails the script, as do `modBy 0` an
 | `Char`, `'a'` | Available | Not available |
 | Hex literals (`0xFF`) | Available | Not available |
 | String escapes | Including `\u{…}`, and `"""` for multi-line | `\n`, `\r`, `\t`, `\"`, `\\` only |
-| `String` module | Full module | None. Strings support `++` and `==`. Use `Bytes.fromString` and `Bytes.toString` for bytes |
-| `number`, `comparable`, `appendable` | Constrained type variables | Not available. `<`, `<=`, `>`, `>=` work on `Int` only |
+| `String` module | Full module | `fromInt`, `isEmpty`, `append`, `concat` and `join`. Use `Bytes.fromString` and `Bytes.toString` for bytes |
+| `String` order | By UTF-16 code units | By UTF-8 bytes, which is code point order. They differ only for characters outside the Basic Multilingual Plane |
+| `comparable`, `appendable`, `compappend` | Constrained type variables | The same. `Bytes` and ledger hashes such as `PubKeyHash` are also comparable |
+| `number` | `Int` or `Float` | Not available: write `Int` |
+| `2 ^ -1` | `0.5` | Fails the script |
 | `==` on functions | Runtime crash | Compile error, as for maps and opaque `Data` |
 | Extensible records `{ r \| x : Int }` | Available | Not available. Records are closed |
 | Accessor functions (`.price`) | Available | Not available. Use `\item -> item.price` |
-| Operator functions (`(+)`) | Available | Not available. Use `\a b -> a + b` |
-| `Result` | Built in | Not built in. Declare your own type if you need one |
 | Let-polymorphism | Values and functions | Only for non-expansive bindings (functions, lambdas, plain values) |
-| Unresolved type variables | Allowed | Every expression must end up with a concrete type |
+| Undetermined type variables | Allowed | Allowed, except where a value of the type is created: `Julc.Data.decode` and generic Java library functions need an annotation |
 
-Without `appendable`, a generic helper such as `joinTwo : a -> a -> a` that uses `++` still compiles. The
-compiler checks each concrete use instead, so `joinTwo "a" "b"` and `joinTwo [ 1 ] [ 2 ]` compile, and
-`joinTwo 1 2` doesn't. An expression like `List.length []` is rejected, because nothing fixes the element
-type:
+Constrained type variables follow Elm's rule, strictly: a signature variable whose values are compared
+must be named `comparable…`, and one whose values are appended `appendable…`. Elci reports the missing
+name:
 
 ```elm
-main : Int
-main =
-    List.length []
+joinTwo : a -> a -> a
+joinTwo left right =
+    left ++ right
 ```
 
 ```text
-.../src/Main.elm:6:5: ELCI3001: Cannot specialize List.length at an unconstrained type List t -> Int; add a type annotation so the type is known here
+.../src/Main.elm:6:10: ELCI2003: The operator ++ appends values of type `a`, but the annotation of `joinTwo` says `a` can be any type. Rename it `appendable` (as in Elm) to require String or List values
 ```
 
-## Missing core functions
+With `joinTwo : appendable -> appendable -> appendable`, both `joinTwo "a" "b"` and `joinTwo [ 1 ] [ 2 ]`
+compile, and `joinTwo 1 2` doesn't.
 
-Elci's core is much smaller than Elm's. Apart from the `List` module, only `not`, `modBy` and `remainderBy`
-are available without an import.
+## The core library
+
+Elci's core library is Elm's, imported by default in every module:
+
+| Module | What Elci has |
+| --- | --- |
+| `Basics` | `negate`, `abs`, `min`, `max`, `clamp`, `compare` and `Order`, `identity`, `always`, `not`, `xor`, `modBy`, `remainderBy`, `^` |
+| `List` | all of Elm's `List` except `map4` and `map5` |
+| `Maybe` | `withDefault`, `map`, `map2`, `map3`, `andThen` |
+| `Result` | `Ok`, `Err`, `map`, `map2`, `map3`, `andThen`, `withDefault`, `toMaybe`, `fromMaybe`, `mapError` |
+| `Tuple` | all of Elm's `Tuple` |
+| `String` | `fromInt`, `isEmpty`, `append`, `concat`, `join` |
+| `Debug` | `trace` |
+
+[Core modules](/reference/core-modules/) has every signature. What is still missing:
 
 | Elm | In Elci |
 | --- | --- |
-| `identity`, `always`, `max`, `min`, `abs`, `negate`, `clamp`, `compare` | Not built in. Write them, or map Julc's `MathLib` (`max`, `min`, `abs`, `pow` and more). See [Modules and imports](/learn/modules/) |
-| `Maybe.withDefault`, `Maybe.map` | No `Maybe` module. Use `case`, or write small helpers |
-| `Tuple.first`, `Tuple.second` | No `Tuple` module. Destructure: `let ( a, b ) = pair in …` |
-| `String.fromInt`, `Debug.toString` | Not built in. Julc's `ByteStringLib` has byte-string helpers such as `intToDecimalString` and `toHex` |
-| `List.head`, `sum`, `member`, `range`, `take`, `drop`, `sort`, `indexedMap`, `filterMap`… | Not in `List`. Write them with recursion (see [Lists, maps and arrays](/learn/collections/)) |
-| `Debug.log`, `Debug.todo` | `Debug.trace : String -> a -> a` only, after `import Debug` |
-| `Set` | Not available |
+| `toFloat`, `round`, `sqrt`, `pi` and the other `Float` functions | Not available: there is no `Float` |
+| `map4` and `map5` in `List`, `Maybe` and `Result` | Not available. Nest `map3`, or use `case` |
+| `String.length`, `toInt`, `split`, `slice`, `fromFloat`… | Not available. `Bytes.length (Bytes.fromString s)` is the byte length |
+| `Char` | Not available |
+| `Dict` | `Map` (`import Map`); see below |
+| `Set` | Not available. Use a `Map k Bool` or a `List` |
+| `Debug.log`, `Debug.todo`, `Debug.toString` | `Debug.trace : String -> a -> a`, and `String.fromInt` for numbers |
 
-`List` provides `map`, `filter`, `foldl`, `foldr`, `any`, `all`, `length`, `reverse`, `append` and
-`concatMap`, with Elm's argument order: the fold function takes the element first, then the accumulator.
+A name Elci lacks is an error that says what to use or lists what the module has:
+
+```text
+.../src/Main.elm:6:5: ELCI2104: Elci has no Debug.log; use Debug.trace message value, which returns value
+.../src/Main.elm:6:5: ELCI2104: Elci's String module has no toInt. It has append, concat, fromInt, isEmpty, join
+```
+
+One import rule differs from Elm: a name you list explicitly, as in `import Utils exposing (clamp)`,
+takes precedence over the default import of `Basics.clamp` instead of being ambiguous. Modules outside the
+default imports, `Bytes`, `Map`, `Array` and `Julc.Data`, need their own imports, as Elm's `Dict` and
+`Array` do.
 
 ## Map, Array and Dict
 
@@ -121,6 +151,7 @@ parameter is **Plutus Data**, and the encoding is derived from your types:
 | Tuple | Constructor 0, fields in position order |
 | `Bool` | `False` is constructor 0, `True` is constructor 1 |
 | `Maybe a` | `Nothing` is constructor 0, `Just` is constructor 1 |
+| `Result e a` | `Ok` is constructor 0, `Err` is constructor 1: the reverse of PlutusTx's `Either` |
 | `List a` | A Data list |
 | `Int`, `Bytes`, `String` | An integer, a byte string, and UTF-8 bytes |
 

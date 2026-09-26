@@ -43,11 +43,12 @@ cpu 10418493, mem 50002
 
 `amounts` is `[ 0, 10, 20, 30 ]`, so the result is 60 + 4. `[]` matches the empty list, and `first :: rest`
 matches a list with a first element and the rest after it. Most list functions are this shape: handle the
-empty list, then handle one element and recurse on the rest.
+empty list, then handle one element and recurse on the rest. `List.sum` already does this one; writing it
+yourself shows the pattern.
 
 ### The List module
 
-`List` is available in every module without an import. It provides these functions:
+Every module imports `List`, so its functions need no import. These are the ones you'll use most:
 
 | Function | Type | Example | Result |
 | --- | --- | --- | --- |
@@ -65,8 +66,36 @@ empty list, then handle one element and recurse on the rest.
 The folds pass the element first and the accumulator second. `foldl` starts from the front of the list and
 `foldr` from the back.
 
-These functions are ordinary Elci code, compiled like yours. Anything else, such as `head`, `sum`,
-`member`, `range` or `take`, you write yourself in a few lines:
+`List` has the rest of Elm's list functions too, with the same names, argument orders and edge cases:
+
+| Function | Example | Result |
+| --- | --- | --- |
+| `singleton`, `repeat` | `List.repeat 3 0` | `[ 0, 0, 0 ]` |
+| `range` | `List.range 1 4` | `[ 1, 2, 3, 4 ]` |
+| `isEmpty` | `List.isEmpty []` | `True` |
+| `head` | `List.head [ 3, 1, 4 ]` | `Just 3` |
+| `tail` | `List.tail [ 3, 1, 4 ]` | `Just [ 1, 4 ]` |
+| `take` | `List.take 2 [ 3, 1, 4 ]` | `[ 3, 1 ]` |
+| `drop` | `List.drop 2 [ 3, 1, 4 ]` | `[ 4 ]` |
+| `member` | `List.member 4 [ 3, 1, 4 ]` | `True` |
+| `sum`, `product` | `List.sum [ 3, 1, 4 ]` | `8` |
+| `maximum`, `minimum` | `List.maximum [ 3, 1, 4 ]` | `Just 4` |
+| `indexedMap` | `List.indexedMap (\i n -> i * n) [ 3, 1, 4 ]` | `[ 0, 1, 8 ]` |
+| `filterMap` | `List.filterMap List.head [ [ 3 ], [], [ 4 ] ]` | `[ 3, 4 ]` |
+| `partition` | `List.partition (\n -> n > 2) [ 3, 1, 4 ]` | `( [ 3, 4 ], [ 1 ] )` |
+| `concat` | `List.concat [ [ 1 ], [ 2, 3 ] ]` | `[ 1, 2, 3 ]` |
+| `intersperse` | `List.intersperse 0 [ 3, 1, 4 ]` | `[ 3, 0, 1, 0, 4 ]` |
+| `map2`, `map3` | `List.map2 (+) [ 3, 1, 4 ] [ 10, 20 ]` | `[ 13, 21 ]` |
+| `unzip` | `List.unzip [ ( 1, "a" ), ( 2, "b" ) ]` | `( [ 1, 2 ], [ "a", "b" ] )` |
+| `sort` | `List.sort [ 3, 1, 4 ]` | `[ 1, 3, 4 ]` |
+| `sortBy` | `List.sortBy negate [ 3, 1, 4 ]` | `[ 4, 3, 1 ]` |
+| `sortWith` | `List.sortWith (\a b -> compare b a) [ 3, 1, 4 ]` | `[ 4, 3, 1 ]` |
+
+`map2` stops at the shorter list, as in Elm, so the `4` above is dropped. [Core
+modules](/reference/core-modules/#list) has every signature.
+
+These functions are ordinary Elci code, compiled like yours. When one is missing, write it in a few lines.
+There is no function to read the element at an index, for example:
 
 ```elm title="src/Main.elm"
 module Main exposing (main)
@@ -97,17 +126,54 @@ range from to =
 
 main : Maybe Int
 main =
-    nth 90 (range 1 100)
+    nth 90 (List.range 1 100)
 ```
 
 ```text
 Just 91
-cpu 157858965, mem 712356
+cpu 159618965, mem 723356
 ```
 
 The 91st element (index 90) is `Just 91`. Note the budget: building a 100-element list and
-walking 90 steps into it took about 158 million CPU units. On-chain lists are linked lists, so reaching
+walking 90 steps into it took about 160 million CPU units. On-chain lists are linked lists, so reaching
 element `n` takes `n` steps.
+
+### Sorting
+
+`List.sort` sorts values of a comparable type: numbers, strings, bytes and ledger hashes, and lists and
+tuples of them. Records and custom types are not comparable, so sort them by a key with `List.sortBy`, or
+with a comparison function that returns `LT`, `EQ` or `GT`:
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+
+type alias Bid =
+    { bidder : String
+    , amount : Int
+    }
+
+
+bids : List Bid
+bids =
+    [ Bid "carol" 30, Bid "alice" 50, Bid "bob" 30 ]
+
+
+main : ( List String, List String, List String )
+main =
+    ( List.sort (List.map (\bid -> bid.bidder) bids)
+    , List.map (\bid -> bid.bidder) (List.sortBy (\bid -> bid.amount) bids)
+    , List.map (\bid -> bid.bidder) (List.sortWith (\a b -> compare b.amount a.amount) bids)
+    )
+```
+
+```text
+( ["alice", "bob", "carol"], ["carol", "bob", "alice"], ["alice", "carol", "bob"] )
+cpu 67631155, mem 300118
+```
+
+The sorts are stable: `carol` and `bob` bid the same amount and keep their order. Sorting costs budget, so
+sort on-chain only when the result depends on the order.
 
 ## Maps
 
@@ -191,7 +257,8 @@ Data encoding. That has consequences:
 - **Lookups are O(n).** `get`, `member`, `insert` and `remove` scan the pairs. That's fine for small maps;
   keep large ones off-chain.
 - **Maps are not sorted.** `keys`, `values` and `toList` follow the map's own order. Currently `insert` and
-  `fromList` put a new key at the front, and `map` and `filter` keep the existing order:
+  `fromList` put a new key at the front, and `map` and `filter` keep the existing order. Sort the bindings
+  when you need key order: `List.sortBy Tuple.first (Map.toList balances)`.
 
   ```elm title="src/Main.elm"
   module Main exposing (main)
@@ -214,7 +281,7 @@ Data encoding. That has consequences:
 - **Maps can't be compared with `==`:**
 
   ```text
-  .../src/Main.elm:8:31: ELCI2003: Equality is unsupported for Map [Int, Int] because it contains a function, opaque Data, or an imported type without verified equality
+  .../src/Main.elm:8:23: ELCI2003: The operator == cannot compare Map Int Int values: it has no equality
   ```
 
 Keys and values can be any type that has a Data encoding, including your own records and custom types and
@@ -285,20 +352,11 @@ module Main exposing (main)
 import Array
 
 
-range : Int -> Int -> List Int
-range from to =
-    if from > to then
-        []
-
-    else
-        from :: range (from + 1) to
-
-
 main : Int
 main =
     let
         values =
-            Array.fromList (range 1 100)
+            Array.fromList (List.range 1 100)
 
         at index =
             case Array.get index values of
@@ -311,13 +369,13 @@ main =
     List.foldl (\index total -> at index + total) 0 [ 10, 20, 30, 40, 50, 60, 70, 80, 90 ]
 ```
 
-The other version is the same program with `values = range 1 100` and `nth index values` in place of
+The other version is the same program with `values = List.range 1 100` and `nth index values` in place of
 `Array.get index values`, using the `nth` function from earlier on this page:
 
 | Version | CPU | Memory |
 | --- | ---: | ---: |
-| `List` with `nth` | 498,539,665 | 2,253,391 |
-| `Array` with `Array.get` | 114,358,728 | 482,247 |
+| `List` with `nth` | 500,299,665 | 2,264,391 |
+| `Array` with `Array.get` | 116,118,728 | 493,247 |
 
 Both results are 459, and both build the same list. The array version also converts it once, but it wins
 on the lookups: each `nth` walks up to 90 elements, while each `Array.get` takes a constant number of steps.

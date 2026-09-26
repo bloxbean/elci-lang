@@ -1,12 +1,13 @@
 ---
 title: Language reference
-description: Elci's feature matrix, syntax summary, lexical rules, operators and precedence, evaluation order and Plutus Data encoding rules.
+description: Elci's feature matrix, syntax, imports and reserved names, operators and precedence, equality and ordering, constrained type variables, evaluation order and Plutus Data encoding rules.
 sidebar:
   order: 5
 ---
 
 This page is the compact reference for the Elci language: what is supported, how the syntax looks, how
-operators bind, in which order things are evaluated and how values are encoded as Plutus Data. For a
+names resolve, how operators bind, which types compare, in which order things are evaluated and how values
+are encoded as Plutus Data. For a
 gentle introduction, start with [values, functions and types](/learn/basics/).
 
 Elci uses Elm 0.19 syntax for a functional core, with its own on-chain semantics. It is a development
@@ -16,19 +17,20 @@ preview: the profile below is implemented and tested, and everything outside it 
 
 | Feature | Support |
 | --- | --- |
-| Modules and imports | Source modules, `as` aliases, explicit `exposing`, `exposing (..)` for source modules, `Type(..)` for constructors. Import cycles are rejected. |
-| Functions | Top-level and local functions, lambdas with several arguments, curried and partial application. |
+| Modules and imports | Source modules, `as` aliases, explicit `exposing`, `exposing (..)` for source modules, `Type(..)` for constructors, and Elm's default imports. Import cycles are rejected. |
+| Functions | Top-level and local functions, lambdas with several arguments, curried and partial application, operators as functions such as `(+)`. |
 | Type signatures | Required on every top-level declaration; allowed on local ones. |
-| Generics | Rank-1 type variables, specialized to each concrete use. |
+| Generics | Rank-1 type variables, specialized to each concrete use. Elm's constrained variables `comparable`, `appendable` and `compappend`. |
 | Local polymorphism | Simple local functions and values can be used at several types; calls, conditionals and matches stay monomorphic. |
 | Recursion | Self-recursion and mutually recursive functions, top-level or local. Polymorphic recursion and recursive values are rejected. |
 | Basic types | `Int` (arbitrary precision), `Bool`, `String`, `()`, `Bytes`, `Data`. |
-| Lists | `List a`, literals, `::`, `++`, list patterns and the core `List` module. |
+| Core library | The `Basics` prelude and the `List`, `Maybe`, `Result`, `Tuple` and `String` modules, imported by default. See [core modules](/reference/core-modules/). |
+| Lists | `List a`, literals, `::`, `++` and list patterns. |
 | Tuples | Pairs and triples, with patterns and destructuring. |
 | Records | Closed records, generic aliases with constructors, field access, update, destructuring. |
-| Custom types | Generic and recursive unions; `Maybe` is built in. |
+| Custom types | Generic and recursive unions; `Maybe` is built in, and `Result` and `Order` come from the core library. |
 | Patterns | Nested constructors, lists, cons, tuples, record fields, `as`, `_`, unit, and `Bool`, `Int` and `String` literals. Exhaustiveness and reachability are checked. |
-| Equality | Structural `==` and `/=` for equality-capable types (below). |
+| Equality and order | Structural `==` and `/=` for equality-capable types, and `<`, `compare` and sorting for comparable types (below). |
 | Maps and arrays | `Map k v` (like Elm's `Dict`) and `Array a` (constant-time `get`). |
 | Bytes | The `Bytes` module: every byte-string builtin. |
 | Ledger access | Typed views of the script context, nominal hash types, approved constructors, patterns and equality. |
@@ -37,10 +39,10 @@ preview: the profile below is implemented and tested, and everything outside it 
 | Validators | `[validators.<name>]` scripts with spend, mint, withdraw, certify, vote and propose handlers, parameters and datum profiles. |
 | Tests | `elci test` with unit tests, transaction scenarios and property tests. |
 
-**Not supported:** `Float` and `/`, typeclasses and user-defined constraints, extensible records and
-row polymorphism, higher-rank types, polymorphic recursion, ports and effects, `String`/`Maybe`/`Dict`
-modules from Elm core, record accessor functions such as `.name`, operator sections such as `(+)`,
-character literals, hexadecimal literals, tuples of four or more, and Elm packages.
+**Not supported:** `Float`, `/` and `number`, typeclasses and user-defined constraints, extensible
+records and row polymorphism, higher-rank types, polymorphic recursion, ports and effects, Elm's `Dict`,
+`Set` and `Char` modules and most of `String`, record accessor functions such as `.name`, character
+literals, hexadecimal literals, `%`, tuples of four or more, and Elm packages.
 
 ## Syntax summary
 
@@ -145,6 +147,7 @@ main =
 | Record | `{ x = 1, y = 2 }`, `r.x`, `{ r \| x = 3 }` |
 | Tuple | `( 1, True )`, `( 1, 2, 3 )` |
 | List | `[ 1, 2 ]`, `1 :: rest`, `xs ++ ys` |
+| Operator as a function | `(+)`, `(::)`, `(<)`: `List.foldl (+) 0 xs` |
 | Unit | `()` as a value, type and pattern |
 
 Function and lambda parameters, and local destructuring, accept only **irrefutable** patterns: names,
@@ -170,6 +173,61 @@ definition. Tabs are rejected.
 - **Comments.** `--` to the end of the line, and `{- ... -}` blocks, which nest. `{-| ... -}` doc comments
   are ordinary block comments.
 
+## Imports and names
+
+Every module has Elm's default imports, which you don't write:
+
+```elm
+import Basics exposing (..)
+import List
+import Maybe exposing (Maybe(..))
+import Result exposing (Result(..))
+import String
+import Tuple
+import Debug
+```
+
+`Bytes`, `Map`, `Array`, `Julc.Data` and Java library modules are imported explicitly. Names resolve as in
+Elm, with one addition:
+
+- A module's own declarations shadow every import.
+- Two imports that expose different things under one name make it ambiguous where it is used
+  (`ELCI2102`). The message lists the qualified alternatives.
+- *Addition:* a name listed explicitly, as in `import Utils exposing (clamp)`, takes precedence over a
+  default import.
+- Qualified names such as `Basics.max` and `Result.Ok` always work.
+- An import can't be aliased to a default module's name: `import Utils as String` is `ELCI2104`.
+
+[Core modules](/reference/core-modules/#default-imports) has the details and the messages.
+
+### Reserved names
+
+- **Module names.** `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map` and `Array` are core
+  modules, and `Dict`, `Set`, `Value` and `Elci` are reserved for the core library. A project module can't
+  use these names, and neither can a `[java-modules]` key:
+
+  ```text
+  src/String.elm:1:1: ELCI2104: The module name String is taken by Elci's core library; rename this module
+  src/Dict.elm:1:1: ELCI2104: The module name Dict is reserved for Elci's core library; rename this module
+  elci: ELCI4001: [java-modules] may not map Value, a module name of Elci's core library
+  ```
+
+  `Bytes`, `Debug` and `Julc.Data` belong to the compiler as well.
+- **Constructors and types.** A module can't declare constructors named `Just`, `Nothing`, `True` or
+  `False`, or types named `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Map`, `Array` or
+  `Float`:
+
+  ```text
+  src/Main.elm:4:6: ELCI2011: Nothing is a constructor of the built-in Maybe type; choose another name
+  src/Main.elm:4:6: ELCI2011: Bytes is a built-in type; choose another name
+  ```
+
+  Other prelude names, such as `Ok`, `Order` or `max`, can be declared; your declaration shadows the
+  prelude's in your module.
+- **Type names.** Tuples are written `( a, b )` and unit `()`. `Tuple Int Int` gives
+  `ELCI2012: Write tuple types as ( a, b ) or ( a, b, c )`, and `Unit` gives
+  `ELCI2012: Write the unit type as ()`.
+
 ## Operators
 
 From the tightest binding to the loosest:
@@ -178,7 +236,8 @@ From the tightest binding to the loosest:
 | ---: | --- | --- | --- |
 | highest | `record.field` | | field access, written without spaces |
 | 10 | `f x` | left | function application |
-| 9 | `>>`, `<<` | `>>` left, `<<` right | function composition |
+| 9 | `>>`, `<<` | `>>` right, `<<` left | function composition |
+| 8 | `^` | right | integer power |
 | 7 | `*`, `//` | left | multiplication, integer division truncating towards zero |
 | 6 | `+`, `-` | left | addition, subtraction |
 | 5 | `::`, `++` | right | list cons; append lists or strings |
@@ -187,11 +246,42 @@ From the tightest binding to the loosest:
 | 2 | `\|\|` | right | or, short-circuit |
 | 0 | `\|>`, `<\|` | `\|>` left, `<\|` right | pipelines |
 
-- `<`, `>`, `<=` and `>=` compare `Int` only. Compare bytes with `Bytes.lessThan`.
+Operators of one precedence that group in opposite directions can't be mixed without parentheses, as in
+Elm: `f <| x |> g` is `ELCI1002: Mixing (<|) and (|>) needs parentheses: they associate in opposite
+directions, as in Elm`, and the same holds for `>>` with `<<`.
+
+- `+`, `-`, `*`, `//` and `^` work on `Int`. `2 ^ 10` is `1024`, `2 * 3 ^ 2` is `18`, and a negative
+  exponent fails the script.
+- `<`, `>`, `<=` and `>=` compare two values of the same [comparable type](#ordering).
 - `==` and `/=` work on equality-capable types (below).
-- `/` is rejected; use `//` for the integer quotient, and `modBy` or `remainderBy` for the rest.
-  `^` and `%` do not exist.
+- `/` is rejected; use `//` for the integer quotient, and `modBy` or `remainderBy` for the rest. `%`
+  does not exist.
 - `a < b < c` is rejected: write `a < b && b < c`.
+
+### Operators as functions
+
+Every binary operator can be used as a function by writing it in parentheses, as in Elm: `(+)`, `(*)`,
+`(::)`, `(++)`, `(<)`, `(^)`, `(|>)`. `(op)` is the function `\a b -> a op b`, so `(-) 10` subtracts
+from 10. `(/)` is rejected, like `/`. As functions, `(&&)` and `(||)` evaluate both arguments, like any
+other call.
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+
+main : ( Int, List Int, List Bool )
+main =
+    ( List.foldl (+) 0 [ 1, 2, 3 ]
+    , List.foldr (::) [] [ 4, 5 ] ++ List.map ((-) 10) [ 1, 2 ]
+    , List.map2 (<) [ 1, 5 ] [ 2, 2 ]
+    )
+```
+
+```text
+$ elci eval
+( 6, [4, 5, 9, 8], [True, False] )
+cpu 16223362, mem 77496
+```
 
 ### Unary minus
 
@@ -240,7 +330,109 @@ tuples, records, `Maybe` and custom types whose contents are all equality-capabl
 the equality their provider approves (Java `equals`). Both operands are evaluated once, left to right.
 
 Rejected with `ELCI2003`: functions, `Data`, `Map`, `Array`, the ledger `Value` and types that contain one,
-and imported types without approved equality.
+and imported types without approved equality. The message names the part that has no equality:
+
+```text
+src/Main.elm:6:21: ELCI2003: The operator == cannot compare List (Int -> Int) values: Int -> Int is part of them, and functions have no equality
+```
+
+## Ordering
+
+`<`, `<=`, `>`, `>=`, `compare`, `min`, `max` and the sorting functions take two values of the same
+**comparable** type:
+
+- `Int`, ordered numerically;
+- `String`, ordered by its UTF-8 bytes, which is Unicode code point order;
+- `Bytes` and the ledger's byte-string types (`PubKeyHash`, `ScriptHash`, `PolicyId`, `TokenName`,
+  `TxId` and the other hashes), ordered lexicographically by unsigned byte, a proper prefix first;
+- lists of a comparable type, lexicographically, and tuples of comparable types, component by component.
+
+`Bool`, `()`, records, custom types, `Maybe`, `Map`, `Array`, `Data`, functions and ledger records such as
+`TxOutRef` are not comparable (`ELCI2003`). Every order is total and agrees with `==`. Comparing `Int`
+values uses the integer builtins; byte strings use `lessThanByteString` and `lessThanEqualsByteString`;
+`String` encodes both sides to UTF-8 and compares the bytes; lists and tuples use a comparison function
+generated once per type.
+
+## Constrained type variables
+
+As in Elm, a type variable in a signature is unconstrained unless its name says otherwise:
+
+| Name | Values must support | Example |
+| --- | --- | --- |
+| `comparable`, or a name starting with it (`comparable2`, `comparableKey`) | `<`, `compare` and sorting | `max : comparable -> comparable -> comparable` |
+| `appendable…` | `++` (strings and lists) | `twice : appendable -> appendable` |
+| `compappend…` | both | |
+
+The name is also a requirement on callers: each use is checked at its concrete type.
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+
+largest : comparable -> List comparable -> comparable
+largest first rest =
+    List.foldl max first rest
+
+
+twice : appendable -> appendable
+twice value =
+    value ++ value
+
+
+main : ( String, List Int )
+main =
+    ( twice (largest "fig" [ "apple", "pear" ]), twice [ largest 3 [ 9, 4 ] ] )
+```
+
+```text
+$ elci eval
+( "pearpear", [9, 9] )
+cpu 8891872, mem 43250
+```
+
+Comparing or appending values of a plain variable is an error that suggests the rename:
+
+```text
+src/Main.elm:6:10: ELCI2003: The operator > compares values of type `a`, but the annotation of `larger` says `a` can be any type. Rename it `comparable` (as in Elm) to require comparable values
+```
+
+A requirement that no type can meet, such as `x < y` on values of type `Maybe comparable`, is reported at
+the definition. A caller that passes the wrong type is reported at the call, and Elm's `number` gets its
+own message, because Elci has one number type:
+
+```text
+src/Main.elm:11:5: ELCI2003: `twice` appends String or List values, not Int
+src/Main.elm:4:1: ELCI2003: The annotation of `total` uses `number`, Elm's type variable for Int or Float. Elci has one number type: write Int
+```
+
+Equality needs no special name, as in Elm: `List.member : a -> List a -> Bool` uses `==`, and each use is
+checked at its type. Type and alias parameters are never constrained, and a definition without a
+signature, such as a local helper, infers its requirements.
+
+## Ambiguous types
+
+A type variable that nothing in a program determines, such as the element type of `[] == []` or the error
+type of `Ok 5`, is *ambiguous*. As in Elm, such programs compile without annotations: no value of that
+type can exist, so any representation serves. `List.length []` is `0`,
+`Result.withDefault 0 (Ok 5)` is `5`, and `Julc.Data.encode Nothing` is `Constr 0`.
+
+Creating a value of the type still needs to know it. `Julc.Data.decode` and generic Java library
+functions report `ELCI3001` and ask for an annotation:
+
+```elm
+import Julc.Data as Data
+
+
+main : Int
+main =
+    List.length (Data.decode (Data.encode [ 1, 2 ]))
+```
+
+```text
+src/Main.elm:8:18: ELCI3001: Cannot determine the type converted by Julc.Data.decode; add a type annotation
+```
+
+Annotating the decoded value, as in a local `amounts : List Int`, fixes it.
 
 ## Evaluation order
 
@@ -265,8 +457,6 @@ This program traces every step:
 
 ```elm title="src/Main.elm"
 module Main exposing (main)
-
-import Debug
 
 
 type alias Order =
@@ -339,6 +529,8 @@ use a fixed encoding:
 | tuple | constructor 0, fields in position order |
 | custom type | constructor tag = the variant's position in the declaration, from 0; fields in order |
 | `Maybe a` | `Nothing` is constructor 0; `Just x` is constructor 1 with one field |
+| `Result e a` | `Ok x` is constructor 0 and `Err e` constructor 1, each with one field |
+| `Order` | `LT`, `EQ` and `GT` are constructors 0, 1 and 2, no fields |
 | `JulcOptional a` | `Some x` is constructor 0 with one field; `None` is constructor 1 |
 | `List a` | list |
 | `Map k v` | map |

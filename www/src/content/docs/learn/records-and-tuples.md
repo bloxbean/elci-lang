@@ -290,6 +290,28 @@ main =
 cpu 3397721, mem 12146
 ```
 
+The `Tuple` module, which every module imports, works on pairs: `Tuple.first`, `Tuple.second`,
+`Tuple.pair`, `Tuple.mapFirst`, `Tuple.mapSecond` and `Tuple.mapBoth`. Tuples of comparable values, such as
+numbers and strings, compare component by component, so `List.sort` sorts them:
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+
+main : ( List ( Int, String ), List Int )
+main =
+    let
+        scores =
+            [ ( 2, "bob" ), ( 1, "carol" ), ( 2, "alice" ) ]
+    in
+    ( List.sort scores, List.map Tuple.first scores )
+```
+
+```text
+( [( 1, "carol" ), ( 2, "alice" ), ( 2, "bob" )], [2, 1, 2] )
+cpu 28573982, mem 123050
+```
+
 A tuple is encoded like a record, as a constructor with tag 0, but its fields stay in position order. For
 anything with more than three parts, or whose parts deserve names, use a record. A four-element tuple is
 rejected:
@@ -322,6 +344,9 @@ main =
 True
 cpu 6141566, mem 15472
 ```
+
+Records have no order, so `<` and `List.sort` reject them. Sort records by a field with
+`List.sortBy (\listing -> listing.price)`; see [sorting](/learn/collections/#sorting).
 
 ## Limits
 

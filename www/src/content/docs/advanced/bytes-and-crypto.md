@@ -27,8 +27,9 @@ A few things to know before you start:
 - **Every function is a direct builtin call.** There is no hidden loop, so each call is cheap and predictable.
 - **The byte string comes last.** Functions take the byte string as their final argument, so they read well
   in pipelines: `name |> Bytes.take 4`.
-- **`==` compares bytes.** Ledger hashes such as `PubKeyHash` are separate nominal types, even though
-  they are byte strings underneath. Use the `.hash` field to get their raw `Bytes`.
+- **`==` compares bytes, and `<` orders them.** Ledger hashes such as `PubKeyHash` are separate nominal
+  types, even though they are byte strings underneath. They compare and order like bytes, but only with
+  their own type. Use the `.hash` field to get their raw `Bytes`.
 
 ## Seeing bytes with `elci eval`
 
@@ -81,8 +82,9 @@ The builtin log keeps the last 20 calls, which is plenty for small experiments l
 | | `slice` | `Int -> Int -> Bytes -> Bytes` | `sliceByteString` |
 | | `take` | `Int -> Bytes -> Bytes` | `sliceByteString` |
 | | `drop` | `Int -> Bytes -> Bytes` | `sliceByteString` |
-| Comparing | `lessThan` | `Bytes -> Bytes -> Bool` | `lessThanByteString` |
-| | `lessThanOrEqual` | `Bytes -> Bytes -> Bool` | `lessThanEqualsByteString` |
+| Comparing | `==`, `/=` (operators) | `Bytes -> Bytes -> Bool` | `equalsByteString` |
+| | `<`, `<=`, `>`, `>=` (operators) | `Bytes -> Bytes -> Bool` | `lessThanByteString`, `lessThanEqualsByteString` |
+| | `compare`, `min`, `max` (prelude) | `Bytes -> Bytes -> Order`, `Bytes -> Bytes -> Bytes` | `lessThanByteString`, `equalsByteString` |
 | Integers | `fromIntBigEndian` | `Int -> Int -> Bytes` | `integerToByteString` |
 | | `fromIntLittleEndian` | `Int -> Int -> Bytes` | `integerToByteString` |
 | | `toIntBigEndian` | `Bytes -> Int` | `byteStringToInteger` |
@@ -156,8 +158,8 @@ abcd =
 main : ( List Int, List Bool, String )
 main =
     ( [ Bytes.length abcd, Bytes.at 1 abcd ]
-    , [ Bytes.lessThan (Bytes.fromString "ab") (Bytes.fromString "abc")
-      , Bytes.lessThanOrEqual abcd abcd
+    , [ Bytes.fromString "ab" < Bytes.fromString "abc"
+      , abcd <= abcd
       , Bytes.take 2 abcd == Bytes.fromString "ab"
       ]
     , Bytes.toString (Bytes.drop 2 abcd)
@@ -167,13 +169,36 @@ main =
 ```text
 $ elci eval
 ( [4, 98], [True, True, True], "cd" )
-cpu 3401703, mem 14999
+cpu 3449703, mem 15299
 ```
 
 - `at index bytes` returns a byte as an `Int` from 0 to 255. It **fails** outside the byte string.
-- `lessThan` and `lessThanOrEqual` compare lexicographically, so a proper prefix is smaller. The `<`
-  operator works only on `Int`; on bytes it is a compile error that points you to `Bytes.lessThan`.
+- `<`, `<=`, `>`, `>=` and `compare` order byte strings lexicographically by unsigned byte, so a proper
+  prefix is smaller. Because bytes are comparable, `min`, `max`, `List.sort` and `List.maximum` work on
+  them, and on ledger hashes such as `PubKeyHash`.
 - `toString` decodes UTF-8 and fails on invalid UTF-8.
+
+The order is lexicographic, not numeric: the one byte `#ff` sorts after the two bytes `#0001`. To order
+byte strings as numbers, compare `Bytes.toIntBigEndian` of each.
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+import Bytes
+
+
+main : ( List Bytes, Order )
+main =
+    ( List.sort [ Bytes.fromIntBigEndian 1 200, Bytes.fromString "ab", Bytes.fromIntBigEndian 1 7, Bytes.fromString "a" ]
+    , compare (Bytes.fromIntBigEndian 1 255) (Bytes.fromIntBigEndian 2 1)
+    )
+```
+
+```text
+$ elci eval
+( [#07, #61, #6162, #c8], GT )
+cpu 24647226, mem 95818
+```
 
 ## Integer conversions
 

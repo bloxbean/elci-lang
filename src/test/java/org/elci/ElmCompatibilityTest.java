@@ -207,8 +207,23 @@ class ElmCompatibilityTest {
                 main =
                     List.length []
                 """);
+        // As in Elm, a type nothing determines is fine where no value of it is inspected.
+        var ambiguous = NamedValidatorCliTest.run("eval", project.toString());
+        assertEquals(0, ambiguous.status(), ambiguous.err());
+        assertTrue(ambiguous.out().startsWith("0"), ambiguous.out());
+        write("src/Main.elm", """
+                module Main exposing (main)
+
+                import Julc.Data as Data
+
+
+                main : Bool
+                main =
+                    Maybe.withDefault False (Maybe.map (\\_ -> True) (Just (Data.decode (Data.encode 1))))
+                """);
         var unconstrained = NamedValidatorCliTest.run("eval", project.toString());
-        assertTrue(unconstrained.err().contains("src/Main.elm:6:5: ELCI3001: Cannot specialize List.length"), unconstrained.err());
+        assertTrue(unconstrained.err().contains("src/Main.elm:8:60: ELCI3001: Cannot determine the type converted by Julc.Data.decode"),
+                unconstrained.err());
         write("src/Main.elm", "module Mian exposing (main)\n\n\nmain : Int\nmain =\n    1\n");
         assertTrue(NamedValidatorCliTest.run("eval", project.toString()).err().contains("src/Main.elm:1:1: ELCI2104: Module header Mian"));
         write("src/Main.elm", "module Main exposing (main)\n\nimport Missing\n\n\nmain : Int\nmain =\n    1\n");

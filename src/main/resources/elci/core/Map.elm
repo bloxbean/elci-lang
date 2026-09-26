@@ -11,6 +11,7 @@ and value types.
 
 import Julc.Data as Data
 import Julc.TypedMap as Typed
+import List
 
 
 empty : Map k v

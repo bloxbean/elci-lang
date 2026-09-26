@@ -65,7 +65,7 @@ class IntrinsicsTest {
         assertEquals(new Term.Const(Constant.integer('O')), v.apply("main : Int\nmain = Bytes.at 1 " + gold + "\n"));
         assertEquals(new Term.Const(Constant.string("XGOLD")), v.apply("main : String\nmain = Bytes.toString (Bytes.cons 88 " + gold + ")\n"));
         assertEquals(new Term.Const(Constant.byteString(new byte[] {7, 7, 7})), v.apply("main : Bytes\nmain = Bytes.replicate 3 7\n"));
-        assertEquals(new Term.Const(Constant.bool(true)), v.apply("main : Bool\nmain = Bytes.lessThan (Bytes.fromString \"a\") (Bytes.fromString \"b\") && Bytes.lessThanOrEqual (Bytes.fromString \"b\") (Bytes.fromString \"b\")\n"));
+        assertEquals(new Term.Const(Constant.bool(true)), v.apply("main : Bool\nmain = Bytes.fromString \"a\" < Bytes.fromString \"b\" && Bytes.fromString \"b\" <= Bytes.fromString \"b\"\n"));
         // Integer conversions: 258 = 0x0102.
         assertEquals(new Term.Const(Constant.byteString(new byte[] {0, 0, 1, 2})), v.apply("main : Bytes\nmain = Bytes.fromIntBigEndian 4 258\n"));
         assertEquals(new Term.Const(Constant.byteString(new byte[] {2, 1})), v.apply("main : Bytes\nmain = Bytes.fromIntLittleEndian 0 258\n"));

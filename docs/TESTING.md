@@ -81,7 +81,7 @@ FAIL PricingTest.scalesFees (cpu 3174066, mem 12095)
 | --- | --- |
 | `equal expected actual` | the values are structurally equal |
 | `notEqual unexpected actual` | they differ |
-| `atMost`, `atLeast`, `lessThan`, `greaterThan` bound actual | integer comparison with the bound holds |
+| `atMost`, `atLeast`, `lessThan`, `greaterThan` bound actual | the comparison with the bound holds, for any comparable type (`Int`, `String`, `Bytes`, ledger hashes, lists and tuples of these) |
 | `pass` / `fail message` | always / never |
 | `onFail message expectation` | the expectation passes, and replaces its failure message otherwise |
 | `every [ e1, e2, ... ]` | all pass; the first failure is reported |
@@ -309,11 +309,10 @@ binary runs properties too.
 
 ## Debugging
 
-`Debug.trace message value` returns `value` and emits `message` as a Plutus trace:
+`Debug.trace message value` returns `value` and emits `message` as a Plutus trace.
+`Debug` is imported by default, as in Elm:
 
 ```elm
-import Debug
-
 checked : Bool
 checked =
     Debug.trace "checking the deadline" (deadline <= now)

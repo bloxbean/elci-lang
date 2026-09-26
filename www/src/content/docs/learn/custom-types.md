@@ -1,6 +1,6 @@
 ---
 title: Custom types and pattern matching
-description: Define custom types, match on them exhaustively with case, use Maybe, nest patterns, and see how constructors are encoded on-chain.
+description: Define custom types, match on them exhaustively with case, use Maybe and Result, nest patterns, and see how constructors are encoded on-chain.
 sidebar:
   order: 4
 ---
@@ -134,7 +134,8 @@ datum and redeemer of that type. Add new constructors at the end, and pin the en
 ## Maybe
 
 `Maybe a` is built in. It is either `Just value` or `Nothing`, and it's how Elci represents "there may be no
-answer". There is no `Maybe` module, so helpers like `withDefault` are short functions you write yourself:
+answer". The `Maybe` module, which every module imports, has Elm's helpers: `withDefault`, `map`, `map2`,
+`map3` and `andThen`.
 
 ```elm title="src/Main.elm"
 module Main exposing (main)
@@ -154,23 +155,13 @@ findPrice name prices =
                 findPrice name rest
 
 
-withDefault : a -> Maybe a -> a
-withDefault fallback maybe =
-    case maybe of
-        Just value ->
-            value
-
-        Nothing ->
-            fallback
-
-
 main : Int
 main =
     let
         prices =
             [ ( "apple", 3 ), ( "pear", 5 ) ]
     in
-    withDefault 0 (findPrice "pear" prices) + withDefault 0 (findPrice "plum" prices)
+    Maybe.withDefault 0 (findPrice "pear" prices) + Maybe.withDefault 0 (findPrice "plum" prices)
 ```
 
 ```text
@@ -182,8 +173,47 @@ cpu 11103777, mem 42693
 two aren't interchangeable. `Julc.Data.fromOptional` and `toOptional` convert between them when a Java
 library returns an optional value.
 
-Elci has no built-in `Result` type. If you need one, declare it:
-`type Outcome e a = Failed e | Succeeded a`.
+## Result
+
+`Result error value` is either `Ok value` or `Err error`, as in Elm. Use it for a computation that can
+fail with a reason. The `Result` module, imported into every module, has `map`, `andThen`, `withDefault`,
+`toMaybe`, `mapError` and more:
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+
+type alias Payout =
+    { amount : Int
+    , fee : Int
+    }
+
+
+validate : Payout -> Result String Payout
+validate payout =
+    if payout.amount <= 0 then
+        Err "amount must be positive"
+
+    else if payout.fee > payout.amount then
+        Err "fee exceeds amount"
+
+    else
+        Ok payout
+
+
+main : List (Result String Int)
+main =
+    [ Payout 100 2, Payout 0 1, Payout 5 9 ]
+        |> List.map (\payout -> Result.map (\valid -> valid.amount - valid.fee) (validate payout))
+```
+
+```text
+[Ok 98, Err "amount must be positive", Err "fee exceeds amount"]
+cpu 15781289, mem 59252
+```
+
+On-chain, a validator returns `Bool`, so a `Result` usually ends in a `case` that returns `False` for an
+`Err`. As Data, `Ok` is constructor 0 and `Err` is constructor 1, the reverse of PlutusTx's `Either`.
 
 ## Nested patterns
 

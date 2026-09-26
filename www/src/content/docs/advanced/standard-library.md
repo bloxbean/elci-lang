@@ -1,35 +1,46 @@
 ---
 title: Standard library
-description: What ships with Elci — the core modules and Julc's verified Java libraries — how to import them, and the most useful functions of each.
+description: What ships with Elci — Elm's core modules, written in Elci, and Julc's verified Java libraries as gap fillers — how to import them, and the most useful functions of each.
 sidebar:
   order: 2
 ---
 
-Elci's standard library has two layers: a few modules built into the compiler, and Julc's on-chain Java
-libraries, which you map in `elci.toml`. This page shows what each layer offers, how to import it and
-which functions you will reach for most. It is not the full Elm core library: there is no `String`,
-`Maybe` or `Dict` module, and Elm packages cannot be installed.
+Elci's standard library has two layers. The first is Elci's core library: Elm's core modules, with Elm's
+names, argument orders and edge cases, bundled with the compiler. Reach for it first. The second is
+Julc's on-chain Java libraries, which you map in `elci.toml`. They fill the gaps, such as floor division,
+signature checks and ledger `Value`s. This page shows what each layer offers, how to import it and which
+functions you will reach for most. Elm packages cannot be installed.
 
-## Built into the compiler
+## The core library
 
-These need no configuration:
+As in Elm, every module imports these for you:
+
+| Module | Imported as | What it gives you |
+| --- | --- | --- |
+| `Basics` | `import Basics exposing (..)` | `min`, `max`, `abs`, `negate`, `clamp`, `compare`, `identity`, `always`, `not`, `xor`, `modBy`, `remainderBy`, and the `Order` type |
+| `List` | `import List` | Elm's list functions: `map`, `foldl`, `head`, `range`, `sum`, `member`, `sort`, `sortBy`, `filterMap` and more |
+| `Maybe` | `import Maybe exposing (Maybe(..))` | `withDefault`, `map`, `map2`, `map3`, `andThen` |
+| `Result` | `import Result exposing (Result(..))` | `Ok`, `Err`, `map`, `map2`, `map3`, `andThen`, `withDefault`, `toMaybe`, `fromMaybe`, `mapError` |
+| `Tuple` | `import Tuple` | `pair`, `first`, `second`, `mapFirst`, `mapSecond`, `mapBoth` |
+| `String` | `import String` | `fromInt`, `isEmpty`, `append`, `concat`, `join` |
+| `Debug` | `import Debug` | `trace`, which emits a Plutus trace |
+
+These need an import but no configuration:
 
 | Module | Import | What it gives you |
 | --- | --- | --- |
-| `List` | always available | `map`, `filter`, `foldl`, `foldr`, `all`, `any`, `length`, `reverse`, `append`, `concatMap` |
 | `Map` | `import Map` | typed association maps in the style of Elm's `Dict` |
 | `Array` | `import Array` | arrays with constant-time `get` and `length` |
 | `Bytes` | `import Bytes` | byte-string builtins: slicing, integers, bits, hashes |
 | `Julc.Data` | `import Julc.Data as Data` | explicit `decode`, `encode` and optional/`Maybe` adapters |
-| `Debug` | `import Debug` | `trace`, which emits a Plutus trace |
 | `Julc.Ledger` | `import Julc.Ledger exposing (...)` | ledger types such as `ScriptContext`, `PubKeyHash` and `TxOutRef` |
 
-Three functions are available everywhere without an import: `not`, `modBy` and `remainderBy`. The types
-`Maybe` (with `Just` and `Nothing`), `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Map` and `Array` are
-built in.
+The types `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe` (with `Just` and `Nothing`), `Map` and
+`Array` are built in.
 
-`List`, `Map` and `Array` are written in Elci itself, and compiled with your code. `Map` and `Array` sit on
-top of Julc's typed map and array libraries. Every signature is on the
+`Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String`, `Map` and `Array` are written in Elci itself, and
+compiled with your code; a function you don't call is never compiled into your script. `Map` and `Array`
+sit on top of Julc's typed map and array libraries. Every signature is on the
 [core modules](/reference/core-modules/) reference page, and [lists, maps and arrays](/learn/collections/)
 teaches them. Bytes get their own page: [bytes, hashes and bits](/advanced/bytes-and-crypto/).
 
@@ -103,7 +114,6 @@ import Julc.Contexts as Contexts
 import Julc.Data as Data
 import Julc.Interval as Interval
 import Julc.Ledger exposing (Address, ScriptContext)
-import Julc.Math as Math
 import Julc.Output as Output
 import Julc.Values as Values
 
@@ -125,7 +135,7 @@ spendsOwnInput ctx =
 spend : Listing -> () -> ScriptContext -> Bool
 spend listing _ ctx =
     Address.isPubKeyAddress listing.seller
-        && (Output.lovelacePaidTo ctx.txInfo.outputs listing.seller >= Math.max listing.price 0)
+        && (Output.lovelacePaidTo ctx.txInfo.outputs listing.seller >= max listing.price 0)
         && Interval.contains ctx.txInfo.validRange listing.deadline
         && (Values.lovelaceOf ctx.txInfo.mint == 0)
         && spendsOwnInput ctx
@@ -133,7 +143,7 @@ spend listing _ ctx =
 
 ```text
 $ elci check
-validator market (spend): checked; 1460 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator market (spend): checked; 1446 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 ```
 
 Things to notice:
@@ -142,7 +152,8 @@ Things to notice:
   `Output.lovelacePaidTo outputs address`, `Interval.contains range time`.
 - **Optional results.** `findOwnInput` returns a Julc optional. Convert it with `Data.fromOptional`
   before you match on `Just` and `Nothing`.
-- **Size.** Library code is linked into your script: this validator is 1,460 bytes. Check the size
+- **Core and Java together.** `max` comes from the prelude; the rest are Java library calls.
+- **Size.** Library code is linked into your script: this validator is 1,446 bytes. Check the size
   after adding a library.
 
 ## Most useful functions
@@ -153,14 +164,15 @@ The tables give each export's Elci type. `Ledger.X` means the type `X` from `Jul
 
 | Function | Type | Notes |
 | --- | --- | --- |
-| `max`, `min` | `Int -> Int -> Int` | |
-| `abs` | `Int -> Int` | |
 | `sign` | `Int -> Int` | `-1`, `0` or `1` |
-| `pow` | `Int -> Int -> Int` | `Math.pow 2 10` is `1024` |
 | `expMod` | `Int -> Int -> Int -> Int` | modular exponentiation: `Math.expMod 3 4 5` is `1` |
 | `floorDiv`, `floorMod` | `Int -> Int -> Int` | round towards negative infinity: `Math.floorDiv -7 2` is `-4` and `Math.floorMod -7 2` is `1` |
+| `max`, `min` | `Int -> Int -> Int` | the prelude's `max` and `min` do the same, for any comparable type |
+| `abs` | `Int -> Int` | the prelude has `abs` |
+| `pow` | `Int -> Int -> Int` | like the `^` operator (`2 ^ 10` is `1024`), except that a negative exponent gives `1`, where `^` fails |
 
-Elci's own `//` truncates towards zero, and `modBy` and `remainderBy` are always available.
+Use the prelude's `max`, `min`, `abs` and `^` rather than their `MathLib` versions: they need no mapping.
+Elci's own `//` truncates towards zero, and `modBy` and `remainderBy` are in the prelude.
 
 ### `IntervalLib`
 
@@ -270,8 +282,9 @@ and `foldl` are covered in [Java libraries](/advanced/java-libraries/).
 
 - **BLS12-381** (`BlsLib`) and **native values** (`NativeValueLib`) have no usable exports yet.
 - **`Value` arithmetic** is limited to what `ValuesLib` provides; you cannot inspect a `Value` directly.
-- **Elm's core modules** are not available: no `String`, `Maybe`, `Dict`, `Set`, `Tuple` or `Basics`
-  helpers such as `max` or `identity`. Write small helpers yourself or use the Java libraries above.
+- **Parts of Elm's core** are not available yet: `Dict` and `Set` (use `Map`), `Char`, most of `String`
+  (`length`, `toInt`, `split` and so on), and the `Float` functions. Write small helpers yourself or use
+  the Java libraries above.
 
 ## Your own libraries
 

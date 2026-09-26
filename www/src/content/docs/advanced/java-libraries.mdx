@@ -7,9 +7,11 @@ sidebar:
 
 import { Steps, FileTree } from '@astrojs/starlight/components';
 
-Elci can call on-chain libraries written in Java for Julc. This page shows how to map a Java library to an
-Elm-style module, how to package your own library as a JAR, how Java types appear in Elci, and which
-signatures are rejected and why.
+Elci can call on-chain libraries written in Java for Julc. They complement Elci's
+[core library](/reference/core-modules/): reach for them when the core has no equivalent, such as floor
+division, signature checks or ledger `Value`s. This page shows how to map a Java library to an Elm-style
+module, how to package your own library as a JAR, how Java types appear in Elci, and which signatures are
+rejected and why.
 
 ## How Java imports work
 
@@ -32,23 +34,24 @@ Pick a module name and map it to the Java class in the `[java-modules]` table of
 "Julc.Math" = "org.julclang.stdlib.lib.MathLib"
 ```
 
-Then import it like any Elci module. This is the `threshold` example:
+Then import it like any Elci module. This spend validator, configured as `[validators.offer]` with
+`spend = "Example.Offer.validate"`, accepts an offer of at least the minimum number of whole ada:
 
-```elm title="src/Example/Threshold.elm"
-module Example.Threshold exposing (validate)
+```elm title="src/Example/Offer.elm"
+module Example.Offer exposing (validate)
 
 import Julc.Ledger exposing (ScriptContext)
 import Julc.Math as Math
 
 
 validate : Int -> Int -> ScriptContext -> Bool
-validate minimum offered _ =
-    offered >= Math.max minimum 0
+validate minimumAda offeredLovelace _ =
+    Math.floorDiv offeredLovelace 1000000 >= minimumAda
 ```
 
 ```text
 $ elci check
-validator threshold (spend): checked; 149 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator offer (spend): checked; 264 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 ```
 
 The rules:
@@ -59,8 +62,12 @@ The rules:
 - **Mappings load on import.** An unused mapping is never read. Importing a module that is neither a
   source module nor mapped fails with `ELCI2101: Missing source module: Julc.Nope; add Julc/Nope.elm under
   a source directory, or map a Java library to it under [java-modules]`.
-- **Expose names explicitly.** `import Julc.Math exposing (max)` works; `exposing (..)` is rejected for
-  Java modules (`ELCI2104`). Qualified use through the alias always works.
+- **Expose names explicitly.** `import Julc.Math exposing (floorDiv)` works; `exposing (..)` is rejected
+  for Java modules (`ELCI2104`). Qualified use through the alias always works. A name you expose
+  explicitly takes precedence over a prelude name, so `import Julc.Math exposing (max)` replaces the
+  prelude's `max` in that module.
+- **Core module names are taken.** A `[java-modules]` key can't be `Basics`, `List`, `Maybe`, `Result`,
+  `String`, `Tuple`, `Map`, `Array`, `Dict`, `Set`, `Value` or `Elci`.
 - **Names are checked where you use them.** A misspelled export is reported as
   `ELCI2005: Unknown name 'Math.maximum'; check that the imported module exports it`.
 
@@ -71,7 +78,7 @@ class is in the `org.julclang.stdlib.lib` package:
 
 | Class | Use it for |
 | --- | --- |
-| `MathLib` | `max`, `min`, `abs`, `pow`, `expMod`, floor division and modulus |
+| `MathLib` | `expMod`, `sign`, floor division and modulus (`max`, `min`, `abs` and `pow` are in the prelude as `max`, `min`, `abs` and `^`) |
 | `IntervalLib` | building and testing validity intervals |
 | `ContextsLib` | reading the script context: signers, own input, continuing outputs |
 | `OutputLib` | finding outputs and amounts paid to an address |

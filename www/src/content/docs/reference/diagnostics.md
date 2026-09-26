@@ -40,7 +40,7 @@ parser, `ELCI20` from type checking, `ELCI21` from modules and imports, `ELCI3` 
 | `ELCI1002` | Malformed or unsupported syntax |
 | `ELCI2001` | Invalid pattern or expression form |
 | `ELCI2002` | Type mismatch or infinite type |
-| `ELCI2003` | Unsupported equality or append type |
+| `ELCI2003` | Unsupported equality, ordering or append type; a constrained type variable that is missing or misnamed |
 | `ELCI2004` | Missing required top-level signature |
 | `ELCI2005` | Unknown value name |
 | `ELCI2006` | Duplicate binder or unreachable pattern |
@@ -48,19 +48,19 @@ parser, `ELCI20` from type checking, `ELCI21` from modules and imports, `ELCI3` 
 | `ELCI2008` | Eager recursive value cycle |
 | `ELCI2009` | Non-concrete handler, entrypoint or property |
 | `ELCI2010` | Unknown or unconstrained record field |
-| `ELCI2011` | Duplicate type or constructor |
-| `ELCI2012` | Invalid type, alias, arity or alias cycle |
+| `ELCI2011` | Duplicate type or constructor, or a built-in constructor or type name (`Just`, `Nothing`, `True`, `False`; `Int`, `Maybe`, `List` and the other built-in types) |
+| `ELCI2012` | Invalid type, alias, arity or alias cycle; `Tuple` or `Unit` written as a type name |
 | `ELCI2013` | Unsupported serialized boundary type, or a value without a Data encoding (a function or an `Array`) stored in data |
 | `ELCI2014` | Validator handler signature does not match its purpose, parameters or datum profile |
 | `ELCI2101` | Unknown or missing module or imported export; a source module importing the test library |
-| `ELCI2102` | Ambiguous or conflicting imported name |
+| `ELCI2102` | Ambiguous name: two imports expose different things under it |
 | `ELCI2103` | Entrypoint or handler is not exposed |
-| `ELCI2104` | Module path, ownership or cycle error; reference to an unexposed or unimported name |
+| `ELCI2104` | Module path, ownership or cycle error; a reserved module name or alias; a name a module lacks, an Elm function Elci doesn't have, or a module used without its import |
 | `ELCI2105` | Unsupported Java export signature, with the provider's reason |
-| `ELCI3001` | The inferred program cannot be lowered, such as a generic function used at a type nothing determines |
+| `ELCI3001` | The inferred program cannot be lowered, such as `Julc.Data.decode` or a Java library generic at a type nothing determines |
 | `ELCI3002` | Specialization limit or polymorphic recursion |
 | `ELCI3003` | A generic library type argument or a Data conversion needs a Data encoding |
-| `ELCI4001` | Invalid project configuration or command-line request |
+| `ELCI4001` | Invalid project configuration or command-line request, including a `[java-modules]` key that names a core module |
 | `ELCI4002` | Julc's backend rejected the generated code |
 | `ELCI4003` | The Julc backend lacks a capability the program needs |
 
@@ -110,7 +110,8 @@ first values =
 ```
 
 Other `ELCI1002` messages include `Comparison operators cannot be chained; use && or explicit
-parentheses` (for `1 < 2 < 3`), `Extensible records are unsupported; use a closed record` and
+parentheses` (for `1 < 2 < 3`), `Mixing (<|) and (|>) needs parentheses: they associate in opposite
+directions, as in Elm` (for `f <| x |> g`), `Extensible records are unsupported; use a closed record` and
 `Tuples have two or three elements`.
 
 ### `ELCI2001`: invalid expression form
@@ -125,7 +126,8 @@ main =
 src/Main.elm:6:7: ELCI2001: Float division is unsupported; use // for integer quotient
 ```
 
-**Fix:** `7 // 2`, together with `modBy` or `remainderBy` when you need the rest.
+**Fix:** `7 // 2`, together with `modBy` or `remainderBy` when you need the rest. The function `(/)` is
+rejected the same way, with a suggestion to use `(//)`.
 
 ## Type errors
 
@@ -155,18 +157,18 @@ src/Main.elm:4:1: ELCI2002: Type mismatch: expected Int, found a
 
 **Fix:** make the signature match the body (`increment : Int -> Int`), or the body match the signature.
 
-Operators name the types they accept, and suggest the right function where there is one:
+Arithmetic operators name the types they accept, and suggest the right operator where there is one:
 
 ```text
-src/Main.elm:6:9: ELCI2002: The operator < compares Int values, not String
-src/Main.elm:8:26: ELCI2002: The operator < compares Int values, not Bytes; use Bytes.lessThan for byte strings
-src/Main.elm:6:9: ELCI2002: The operator + works on Int values, not String; use ++ to append
+src/Main.elm:6:7: ELCI2002: The operator + works on Int values, not String; use ++ to append
 ```
+
+Comparisons on a type that has no order are `ELCI2003`, below.
 
 Recursion that would need an infinitely growing type, such as a generic function that calls itself with
 a tuple of its argument, is reported as `ELCI2002: Infinite type`.
 
-### `ELCI2003`: unsupported equality or append
+### `ELCI2003`: unsupported equality, ordering or append
 
 ```elm
 double : Int -> Int
@@ -180,14 +182,64 @@ main =
 ```
 
 ```text
-src/Main.elm:11:12: ELCI2003: Equality is unsupported for (Int -> Int) because it contains a function, opaque Data, or an imported type without verified equality
+src/Main.elm:11:12: ELCI2003: The operator == cannot compare Int -> Int values: functions have no equality
 ```
 
 Equality is rejected for functions, `Data`, `Map`, `Array` and imported types without approved
-equality. `++` needs a concrete `String` or `List`: `1 ++ 2` gives `ELCI2003: Append requires a concrete
-String or List type`.
+equality. When the offending type is inside another, the message names it:
+`The operator == cannot compare List (Int -> Int) values: Int -> Int is part of them, and functions have no
+equality`. `++` needs a `String` or a `List`: `1 ++ 2` gives
+`ELCI2003: The operator ++ appends String or List values, not Int`.
 
 **Fix:** compare the values you care about, such as a map's lookups or a decoded datum.
+
+Ordering (`<`, `compare`, `max`, `List.sort` and the rest) needs a
+[comparable type](/reference/core-modules/#comparable-types). The message names the operation and the part
+of the type that isn't comparable:
+
+```elm
+main : Bool
+main =
+    ( 1, True ) < ( 2, False )
+```
+
+```text
+src/Main.elm:6:17: ELCI2003: The operator < needs comparable values, but Bool, in ( Int, Bool ), is not comparable. Comparable types are Int, String, Bytes, byte-string ledger types such as PubKeyHash, and lists and tuples of comparable types
+```
+
+For records and custom types, the message goes on to suggest a key:
+
+```text
+src/Main.elm:10:5: ELCI2003: `List.sort` needs comparable values, but { age : Int, name : String } is not comparable. Comparable types are Int, String, Bytes, byte-string ledger types such as PubKeyHash, and lists and tuples of comparable types. Compare a comparable field instead, or sort with List.sortBy or List.sortWith
+```
+
+**Fix:** compare a comparable field, or sort with `List.sortBy (\person -> person.age)` or
+`List.sortWith`.
+
+A signature whose type variable is compared or appended must say so with its name, as in Elm
+([constrained type variables](/reference/language/#constrained-type-variables)):
+
+```elm
+larger : a -> a -> a
+larger x y =
+    if x > y then
+        x
+
+    else
+        y
+```
+
+```text
+src/Main.elm:6:10: ELCI2003: The operator > compares values of type `a`, but the annotation of `larger` says `a` can be any type. Rename it `comparable` (as in Elm) to require comparable values
+```
+
+**Fix:** write `larger : comparable -> comparable -> comparable`. For `++`, the message suggests
+`appendable`. A caller that then passes the wrong type is reported at the call:
+``ELCI2003: `twice` appends String or List values, not Int``. Elm's `number` has its own message:
+
+```text
+src/Main.elm:4:1: ELCI2003: The annotation of `total` uses `number`, Elm's type variable for Int or Float. Elci has one number type: write Int
+```
 
 ### `ELCI2004`: missing signature
 
@@ -214,12 +266,15 @@ main =
 src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
 ```
 
-**Fix:** correct the spelling, or import the module that defines the name. Elm's `Basics` helpers such
-as `max`, `identity` and `negate` do not exist in Elci. A misspelled qualified name gets a hint:
+**Fix:** correct the spelling, or import the module that defines the name. A misspelled name from a Java
+library module gets a hint:
 
 ```text
 src/Main.elm:8:5: ELCI2005: Unknown name 'Math.maximum'; check that the imported module exports it
 ```
+
+A qualified name from a core module that doesn't exist is `ELCI2104`, and lists what the module has; see
+[module and import errors](#elci2101-elci2102-and-elci2104).
 
 ### `ELCI2006`: duplicate binder or unreachable pattern
 
@@ -329,10 +384,14 @@ a signature with the record type.
 
 ### `ELCI2011` and `ELCI2012`: invalid type declarations
 
-Two custom types in one module cannot share a constructor name:
+Two custom types in one module cannot share a constructor name. No module may declare the built-in
+constructors `Just`, `Nothing`, `True` or `False`, or a type named `Int`, `Bool`, `String`, `Bytes`,
+`Data`, `List`, `Maybe`, `Map`, `Array` or `Float`:
 
 ```text
 src/Main.elm:9:6: ELCI2011: Duplicate constructor Buy
+src/Main.elm:4:6: ELCI2011: Nothing is a constructor of the built-in Maybe type; choose another name
+src/Main.elm:4:6: ELCI2011: Bytes is a built-in type; choose another name
 ```
 
 A type applied to the wrong number of arguments, and type aliases that refer to each other in a loop,
@@ -343,10 +402,17 @@ src/Main.elm:4:1: ELCI2012: Type List expects 1 arguments, got 2
 src/Main.elm:4:12: ELCI2012: Cyclic type alias: A -> B -> A
 ```
 
-An unknown type name in a signature is also `ELCI2012`, but it is currently reported without a location:
+Tuple and unit types have their own syntax. `Tuple Int Int` and `Unit` are `ELCI2012`:
 
 ```text
-elci: ELCI2012: Type is not declared or imported in this module: Amount
+src/Main.elm:4:8: ELCI2012: Write tuple types as ( a, b ) or ( a, b, c )
+src/Main.elm:4:10: ELCI2012: Write the unit type as ()
+```
+
+An unknown type name in a signature is also `ELCI2012`, reported at the declaration:
+
+```text
+src/Main.elm:4:1: ELCI2012: Type is not declared or imported in this module: Amount
 ```
 
 **Fix:** declare or import the type, or correct its spelling.
@@ -475,8 +541,31 @@ import Map exposing (lookup)
 src/Main.elm:3:1: ELCI2104: Module does not expose 'lookup': Map
 ```
 
-`ELCI2104` also covers a module you use without importing it, `exposing (..)` on a Java module, a file
-whose `module` line does not match its path, and import cycles:
+A qualified name that a core module lacks lists what the module has. For Elm functions that Elci doesn't
+provide, the message says what to use instead:
+
+```text
+src/Main.elm:8:5: ELCI2104: Elci's Map module has no lookup. It has empty, filter, foldl, fromList, get, insert, isEmpty, keys, map, member, remove, singleton, size, toList, update, values
+src/Main.elm:6:5: ELCI2104: Elci has no Debug.log; use Debug.trace message value, which returns value
+src/Main.elm:6:5: ELCI2104: Elci has no String.length; a String is UTF-8 text; Bytes.length (Bytes.fromString s) is its byte length
+src/Main.elm:6:5: ELCI2104: Elci has no Bytes.lessThan; bytes are comparable: write a < b
+```
+
+Using a module that isn't imported by default, such as `Bytes`, `Map`, `Array` or `Julc.Data`, without
+its import names the import to add:
+
+```text
+src/Main.elm:6:5: ELCI2104: Bytes.fromString needs the Bytes module; add `import Bytes`
+```
+
+A module imported with an alias is used through the alias:
+
+```text
+src/Main.elm:8:5: ELCI2104: Map is imported as M; write M.get
+```
+
+`ELCI2104` also covers a source module you use without importing it, `exposing (..)` on a Java module, a
+file whose `module` line does not match its path, and import cycles:
 
 ```text
 src/Main.elm:6:5: ELCI2104: Module Pricing is not imported or does not expose 'fee'
@@ -485,15 +574,30 @@ src/Pricing.elm:1:1: ELCI2104: Module header Finance.Pricing does not match its 
 src/Pricing.elm:3:1: ELCI2104: Import cycle: Main -> Pricing -> Main
 ```
 
-Declaring a name that is already imported, or importing one name from two modules, is `ELCI2102`:
+Core module names are reserved, for modules and for aliases (see
+[reserved names](/reference/language/#reserved-names)):
 
 ```text
-src/Main.elm:4:1: ELCI2102: Declaration conflicts with imported name not
-src/Main.elm:4:1: ELCI2102: Ambiguous name fee
+src/String.elm:1:1: ELCI2104: The module name String is taken by Elci's core library; rename this module
+src/Dict.elm:1:1: ELCI2104: The module name Dict is reserved for Elci's core library; rename this module
+src/Main.elm:3:1: ELCI2104: The alias String names a core module that every module imports; choose another alias for Utils
 ```
 
-**Fix:** import the module, correct the exposed name (`Map.get`, not `lookup`), rename your declaration,
-or use qualified names for one of the imports.
+A name that two imports expose, one of them possibly a default import, is `ELCI2102` where you use it:
+
+```text
+src/Main.elm:8:5: ELCI2102: max is ambiguous: it could be Basics.max or Utils.max. Write the one you mean, like Basics.max, or stop exposing the other
+```
+
+An ambiguous type name is reported at the declaration whose annotation uses it:
+
+```text
+src/Main.elm:6:1: ELCI2102: The type Order is ambiguous: it could be Basics.Order or Shop.Order. Write the one you mean, like Basics.Order, or stop exposing the other
+```
+
+**Fix:** import the module, correct the name (`Map.get`, not `lookup`), rename your module or alias, or
+qualify one of the ambiguous names. Listing the name explicitly, as in `import Utils exposing (max)`, also
+resolves a clash with a default import.
 
 ### `ELCI2105`: unsupported Java export
 
@@ -514,44 +618,47 @@ src/Main.elm:8:10: ELCI2105: org.julclang.stdlib.lib.MathLib.divMod: Unsupported
 
 ## Code generation errors
 
-### `ELCI3001`: type is not concrete where it is used
+### `ELCI3001`: type is not known where it is used
+
+A type that nothing in the program determines, such as the element type of `[]`, is fine for most code:
+`List.length []` is `0` and `Julc.Data.encode []` is an empty list, as in Elm. Operations that create a
+value of the type need to know it. These are `Julc.Data.decode` and generic Java library functions:
 
 ```elm
-count : List a -> Int
-count items =
-    List.length items
+import Julc.Data as Data
 
 
 main : Int
 main =
-    count []
+    List.length (Data.decode (Data.encode [ 1, 2 ]))
 ```
 
 ```text
-src/Main.elm:11:5: ELCI3001: Cannot specialize count at an unconstrained type List t -> Int; add a type annotation so the type is known here
+src/Main.elm:8:18: ELCI3001: Cannot determine the type converted by Julc.Data.decode; add a type annotation
 ```
 
-Nothing tells Elci what the empty list contains, so it cannot pick a specialization. **Fix:** give the
-value a type:
+`List.length` works on any list, so nothing tells Elci what the decoded list contains, and it cannot pick
+a decoder. **Fix:** give the value a type:
 
 ```elm
 main : Int
 main =
     let
-        noAmounts : List Int
-        noAmounts =
-            []
+        amounts : List Int
+        amounts =
+            Data.decode (Data.encode [ 1, 2 ])
     in
-    count noAmounts
+    List.length amounts
 ```
 
-A core function is reported the same way, at your call: `List.length []` gives `ELCI3001: Cannot
-specialize List.length at an unconstrained type List t -> Int; ...`. A `Julc.Data.decode` whose result
-type is never determined is reported at the enclosing declaration:
+A generic Java library function needs its type arguments. When a core module such as `Map` uses one
+at a type nothing in your program determines, the error is reported at your call:
 
 ```text
-src/Main.elm:6:1: ELCI3001: Unresolved source type: t
+src/Main.elm:8:5: ELCI3001: `Map.size` is used here at a type that is not known (Map a b -> Int); add a type annotation, for example to a let binding
 ```
+
+That one comes from `Map.size Map.empty`; annotate the map (`noPrices : Map String Int`).
 
 ### `ELCI3002`: specialization limit
 

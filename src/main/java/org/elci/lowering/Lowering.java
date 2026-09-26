@@ -173,7 +173,7 @@ public final class Lowering {
 
     /** {@code use} locates a failure at the reference rather than at the definition. */
     private PirTerm reference(String name, Ty concrete, Token use) {
-        if (!Types.concrete(concrete))
+        if (!Types.variables(concrete).isEmpty())
             throw new Diagnostic(
                     "ELCI3001",
                     use != null ? use : definitions.get(name).token(),
@@ -187,7 +187,26 @@ public final class Lowering {
             boolean data = message.contains("Data encoding") || message.contains("data fields")
                     || message.contains("serialized containers");
             throw new Diagnostic(data ? "ELCI2013" : "ELCI3001", use != null ? use : definitions.get(name).token(), message);
+        } catch (Diagnostic d) {
+            // A failure inside a bundled module is the caller's to fix, and so is one caused by a
+            // type the call leaves unknown: report it at the call (the outermost such call wins).
+            boolean unknown = d.code().equals("ELCI3001") && mentions(concrete, Types.AMBIGUOUS);
+            if (use == null || bundled(use) || !unknown && !bundled(d.token())) throw d;
+            throw new Diagnostic(d.code(), use, d.code().equals("ELCI3001")
+                    ? "`" + use.text() + "` is used here at a type that is not known (" + Types.show(concrete)
+                            + "); add a type annotation, for example to a let binding"
+                    : "`" + use.text() + "`: " + d.getMessage());
         }
+    }
+
+    private static boolean mentions(Ty type, String name) {
+        return prune(type) instanceof Con c && (c.name().equals(name) || c.args().stream().anyMatch(a -> mentions(a, name)));
+    }
+
+    /** Whether a token belongs to a module bundled with the compiler: the core or the test library. */
+    private static boolean bundled(Token token) {
+        return token.source() != null && (org.elci.modules.Modules.CORE_MODULES.contains(token.source())
+                || Set.of("Expect", "Scenario", "Property").contains(token.source()));
     }
 
     private PirTerm specialize(String name, Ty concrete) {
@@ -204,6 +223,8 @@ public final class Lowering {
         specializedTypes.put(symbol, pir(concrete));
         var d = definitions.get(name);
         var mapping = new HashMap<Var, Ty>();
+        for (var v : inference.foreignVariables.getOrDefault(d, Set.of()))
+            mapping.put(v, new Con(Types.AMBIGUOUS, List.of()));
         Ty instance = copy(inference.declarations.get(d), mapping);
         unify(instance, concrete, d.token());
         PirTerm body = declaration(d, instance, new HashMap<>(), mapping);
@@ -294,7 +315,8 @@ public final class Lowering {
                         String symbol = fresh(localPoly.declaration().name());
                         var placeholder = new PirTerm.Binding(symbol, null);
                         localPoly.instances().put(key, placeholder);
-                        var localMapping = new HashMap<Var, Ty>();
+                        // The enclosing specialization's variables stay bound in the local body.
+                        var localMapping = new HashMap<Var, Ty>(map);
                         Ty instance =
                                 copy(
                                         inference.declarations.get(localPoly.declaration()),
@@ -383,7 +405,7 @@ public final class Lowering {
                     if (scheme == null) yield library(new LibraryRequest.Export(symbol), n.token());
                     yield library(instantiate(scheme, type(n, map), n.token()), n.token());
                 }
-                if (n.name().equals("not")) {
+                if (n.name().equals(org.elci.modules.Modules.BASICS_PREFIX + "not")) {
                     String p = fresh("not");
                     yield new PirTerm.Lam(
                             p,
@@ -393,9 +415,10 @@ public final class Lowering {
                                     bool(false),
                                     bool(true)));
                 }
-                if (n.name().equals("remainderBy") || n.name().equals("modBy")) {
+                if (n.name().equals(org.elci.modules.Modules.BASICS_PREFIX + "remainderBy")
+                        || n.name().equals(org.elci.modules.Modules.BASICS_PREFIX + "modBy")) {
                     // remainderBy takes the dividend's sign, modBy the divisor's (as in Elm).
-                    var fun = n.name().equals("modBy") ? DefaultFun.ModInteger : DefaultFun.RemainderInteger;
+                    var fun = n.name().endsWith("modBy") ? DefaultFun.ModInteger : DefaultFun.RemainderInteger;
                     String a = fresh("divisor"), b = fresh("value");
                     yield new PirTerm.Lam(
                             a,
@@ -562,7 +585,7 @@ public final class Lowering {
             return match(p.arguments().getFirst(), value, type, local, success, failure, mapping);
         }
         if (p.name().equals("$unit")) return success.apply(env);
-        if (p.name().equals("Tuple")) {
+        if (p.name().equals("$tuple")) {
             var tuple = (Con) type;
             return matchDataFields(
                     p.arguments(), tuple.args(), value, env, success, failure, mapping);
@@ -651,15 +674,15 @@ public final class Lowering {
                     failure);
         }
         PirTerm test;
-        if (p.name().equals("True")) test = value;
-        else if (p.name().equals("False"))
-            test = new PirTerm.IfThenElse(value, bool(false), bool(true));
-        else if (p.token().kind() == Token.Kind.STRING)
+        if (p.token().kind() == Token.Kind.STRING)
             test =
                     call(
                             DefaultFun.EqualsString,
                             value,
-                            new PirTerm.Const(Constant.string(p.name())));
+                            new PirTerm.Const(Constant.string(p.name().substring(1, p.name().length() - 1))));
+        else if (p.name().equals("True")) test = value;
+        else if (p.name().equals("False"))
+            test = new PirTerm.IfThenElse(value, bool(false), bool(true));
         else
             test =
                     call(
@@ -806,6 +829,12 @@ public final class Lowering {
             PirTerm eq = new PirTerm.Let(x, a, new PirTerm.Let(y, z, comparison));
             return b.op().equals("/=") ? new PirTerm.IfThenElse(eq, bool(false), bool(true)) : eq;
         }
+        if (b.op().equals("^")) return new PirTerm.App(new PirTerm.App(power(), a), z);
+        if (Set.of("<", "<=", ">", ">=").contains(b.op())) {
+            var t = (Con) prune(type(b.left(), map));
+            // Int keeps its builtins below, so existing scripts are unchanged.
+            if (!t.name().equals("Int")) return ordering(b.op(), t, a, z);
+        }
         DefaultFun op =
                 switch (b.op()) {
                     case "+" -> DefaultFun.AddInteger;
@@ -825,6 +854,143 @@ public final class Lowering {
     }
 
     /**
+     * An ordering operator on a comparable type other than Int (ADR-008): the operands are
+     * evaluated left to right once, then compared. {@code a > b} is {@code b < a}.
+     */
+    private PirTerm ordering(String op, Ty type, PirTerm left, PirTerm right) {
+        String x = fresh("orderLeft"), y = fresh("orderRight");
+        var pt = pir(type);
+        var xv = new PirTerm.Var(x, pt);
+        var yv = new PirTerm.Var(y, pt);
+        PirTerm result = switch (op) {
+            case "<" -> less(type, xv, yv, true);
+            case "<=" -> less(type, xv, yv, false);
+            case ">" -> less(type, yv, xv, true);
+            default -> less(type, yv, xv, false);
+        };
+        return new PirTerm.Let(x, left, new PirTerm.Let(y, right, result));
+    }
+
+    /** {@code x < y} (strict) or {@code x <= y} for comparable {@code type}; x and y are variables. */
+    private PirTerm less(Ty type, PirTerm x, PirTerm y, boolean strict) {
+        var c = (Con) prune(type);
+        if (c.name().equals("Int"))
+            return call(strict ? DefaultFun.LessThanInteger : DefaultFun.LessThanEqualsInteger, x, y);
+        if (inference.orderedBytes(c.name()))
+            return call(strict ? DefaultFun.LessThanByteString : DefaultFun.LessThanEqualsByteString, x, y);
+        // No value of an ambiguous type exists, so this comparison is never evaluated.
+        if (c.name().equals(Types.AMBIGUOUS)) return new PirTerm.Error(new PirType.BoolType());
+        // Strings order by their UTF-8 bytes, which is Unicode code point order.
+        if (c.name().equals("String"))
+            return call(strict ? DefaultFun.LessThanByteString : DefaultFun.LessThanEqualsByteString,
+                    call(DefaultFun.EncodeUtf8, x), call(DefaultFun.EncodeUtf8, y));
+        if (c.name().equals("List") || c.name().equals("Tuple"))
+            return new PirTerm.App(new PirTerm.App(orderingHelper(c, strict), x), y);
+        throw new IllegalArgumentException("Not a comparable type: " + Types.show(type));
+    }
+
+    /**
+     * A shared definition {@code t -> t -> Bool} ordering lists (lexicographically, a proper prefix
+     * first) or tuples (by component), generated once per concrete type and strictness.
+     */
+    private PirTerm orderingHelper(Con type, boolean strict) {
+        String key = (strict ? "$less:" : "$lessOrEqual:") + type;
+        var pt = pir(type);
+        var fnType = new PirType.FunType(pt, new PirType.FunType(pt, new PirType.BoolType()));
+        if (instances.containsKey(key)) return new PirTerm.Var(instances.get(key), fnType);
+        String symbol = fresh(strict ? "less" : "lessOrEqual");
+        instances.put(key, symbol);
+        specialized.put(symbol, null);
+        specializedTypes.put(symbol, fnType);
+        String xs = fresh("left"), ys = fresh("right");
+        var xv = new PirTerm.Var(xs, pt);
+        var yv = new PirTerm.Var(ys, pt);
+        PirTerm body;
+        if (type.name().equals("List")) {
+            var element = type.args().getFirst();
+            var et = pir(element);
+            String hx = fresh("leftHead"), hy = fresh("rightHead");
+            var hxv = new PirTerm.Var(hx, et);
+            var hyv = new PirTerm.Var(hy, et);
+            PirTerm rest = new PirTerm.App(new PirTerm.App(new PirTerm.Var(symbol, fnType),
+                    call(DefaultFun.TailList, xv)), call(DefaultFun.TailList, yv));
+            // Equal heads (neither is less) continue with the tails.
+            PirTerm heads = new PirTerm.Let(hx, PirHelpers.wrapDecode(call(DefaultFun.HeadList, xv), et),
+                    new PirTerm.Let(hy, PirHelpers.wrapDecode(call(DefaultFun.HeadList, yv), et),
+                            new PirTerm.IfThenElse(less(element, hxv, hyv, true), bool(true),
+                                    new PirTerm.IfThenElse(less(element, hyv, hxv, true), bool(false), rest))));
+            body = strict
+                    ? new PirTerm.IfThenElse(call(DefaultFun.NullList, yv), bool(false),
+                            new PirTerm.IfThenElse(call(DefaultFun.NullList, xv), bool(true), heads))
+                    : new PirTerm.IfThenElse(call(DefaultFun.NullList, xv), bool(true),
+                            new PirTerm.IfThenElse(call(DefaultFun.NullList, yv), bool(false), heads));
+        } else {
+            var components = type.args();
+            var lefts = new ArrayList<PirTerm.Var>();
+            var rights = new ArrayList<PirTerm.Var>();
+            var bindings = new ArrayList<Map.Entry<String, PirTerm>>();
+            for (int i = 0; i < components.size(); i++) {
+                var ct = pir(components.get(i));
+                String l = fresh("leftItem"), r = fresh("rightItem");
+                lefts.add(new PirTerm.Var(l, ct));
+                rights.add(new PirTerm.Var(r, ct));
+                bindings.add(Map.entry(l, component(xv, i, ct)));
+                bindings.add(Map.entry(r, component(yv, i, ct)));
+            }
+            // Lexicographic: the last component decides with the requested strictness.
+            int last = components.size() - 1;
+            body = less(components.get(last), lefts.get(last), rights.get(last), strict);
+            for (int i = last - 1; i >= 0; i--)
+                body = new PirTerm.IfThenElse(less(components.get(i), lefts.get(i), rights.get(i), true), bool(true),
+                        new PirTerm.IfThenElse(less(components.get(i), rights.get(i), lefts.get(i), true), bool(false), body));
+            for (int i = bindings.size() - 1; i >= 0; i--)
+                body = new PirTerm.Let(bindings.get(i).getKey(), bindings.get(i).getValue(), body);
+        }
+        var definition = new PirTerm.Lam(xs, pt, new PirTerm.Lam(ys, pt, body));
+        specialized.put(symbol, definition);
+        return new PirTerm.Var(symbol, fnType);
+    }
+
+    /**
+     * The shared definition of {@code base ^ exponent} (ADR-008): exponentiation by squaring, in
+     * O(log exponent) multiplications. A negative exponent fails evaluation, where Elm would
+     * produce a fraction.
+     */
+    private PirTerm power() {
+        var integer = new PirType.IntegerType();
+        var fnType = new PirType.FunType(integer, new PirType.FunType(integer, integer));
+        if (instances.containsKey("$power")) return new PirTerm.Var(instances.get("$power"), fnType);
+        String symbol = fresh("power");
+        instances.put("$power", symbol);
+        specialized.put(symbol, null);
+        specializedTypes.put(symbol, fnType);
+        String base = fresh("base"), exponent = fresh("exponent"), half = fresh("half"), square = fresh("square");
+        var bv = new PirTerm.Var(base, integer);
+        var ev = new PirTerm.Var(exponent, integer);
+        var sv = new PirTerm.Var(square, integer);
+        var hv = new PirTerm.Var(half, integer);
+        PirTerm zero = new PirTerm.Const(Constant.integer(BigInteger.ZERO));
+        PirTerm two = new PirTerm.Const(Constant.integer(BigInteger.TWO));
+        PirTerm squared = new PirTerm.Let(half,
+                new PirTerm.App(new PirTerm.App(new PirTerm.Var(symbol, fnType), bv), call(DefaultFun.QuotientInteger, ev, two)),
+                new PirTerm.Let(square, call(DefaultFun.MultiplyInteger, hv, hv),
+                        new PirTerm.IfThenElse(call(DefaultFun.EqualsInteger, call(DefaultFun.RemainderInteger, ev, two), zero),
+                                sv, call(DefaultFun.MultiplyInteger, sv, bv))));
+        PirTerm body = new PirTerm.IfThenElse(call(DefaultFun.LessThanInteger, ev, zero), new PirTerm.Error(integer),
+                new PirTerm.IfThenElse(call(DefaultFun.EqualsInteger, ev, zero),
+                        new PirTerm.Const(Constant.integer(BigInteger.ONE)), squared));
+        specialized.put(symbol, new PirTerm.Lam(base, integer, new PirTerm.Lam(exponent, integer, body)));
+        return new PirTerm.Var(symbol, fnType);
+    }
+
+    /** Component {@code index} of a tuple value (a tag-zero constructor with positional fields). */
+    private static PirTerm component(PirTerm tuple, int index, PirType type) {
+        PirTerm fields = call(DefaultFun.SndPair, call(DefaultFun.UnConstrData, tuple));
+        for (int i = 0; i < index; i++) fields = call(DefaultFun.TailList, fields);
+        return PirHelpers.wrapDecode(call(DefaultFun.HeadList, fields), type);
+    }
+
+    /**
      * {@code Julc.Data}. {@code decode} and {@code encode} are Julc's strict decoder and encoder
      * for the concrete type; {@code fromOptional} and {@code toOptional} re-tag between Julc's
      * optional ({@code Some} 0, {@code None} 1) and Elci's {@code Maybe} ({@code Nothing} 0,
@@ -833,7 +999,9 @@ public final class Lowering {
     private PirTerm dataIntrinsic(String function, Ty use, Token token) {
         var arrow = (Con) prune(use);
         Ty input = arrow.args().get(0), output = arrow.args().get(1);
-        if (!Types.concrete(use))
+        // Only decoding creates values, so only it needs the type known; an ambiguous type has no
+        // values to encode or re-tag (ADR-008).
+        if (function.equals("decode") ? !Types.concrete(use) : !Types.variables(use).isEmpty())
             throw new Diagnostic("ELCI3001", token, "Cannot determine the type converted by Julc.Data." + function
                     + "; add a type annotation");
         return switch (function) {
@@ -861,8 +1029,6 @@ public final class Lowering {
             case "cons" -> builtin(DefaultFun.ConsByteString, List.of(integer, bytes));
             // replicate count byte
             case "replicate" -> builtin(DefaultFun.ReplicateByte, List.of(integer, integer));
-            case "lessThan" -> builtin(DefaultFun.LessThanByteString, List.of(bytes, bytes));
-            case "lessThanOrEqual" -> builtin(DefaultFun.LessThanEqualsByteString, List.of(bytes, bytes));
             // fromInt… width value: width 0 means as short as possible.
             case "fromIntBigEndian", "fromIntLittleEndian" -> positional(List.of(integer, integer), a ->
                     call(DefaultFun.IntegerToByteString, bool(function.equals("fromIntBigEndian")), a.get(0), a.get(1)));
@@ -1105,7 +1271,7 @@ public final class Lowering {
         }
         return switch (c.name()) {
             case "Bytes" -> new PirType.ByteStringType();
-            case "Data" -> new PirType.DataType();
+            case "Data", Types.AMBIGUOUS -> new PirType.DataType();
             case "Map" -> {
                 var key = pir(c.args().get(0));
                 var value = pir(c.args().get(1));

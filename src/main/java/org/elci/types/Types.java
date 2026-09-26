@@ -74,38 +74,61 @@ public final class Types {
      * {@code { amount : Int }}, {@code ( Int, String )}. Internal names are simplified.
      */
     public static String show(Ty type) {
-        return show(type, false);
+        // Unknown types are named a, b, c… by first appearance, as in Elm, avoiding the names of
+        // annotation variables in the same type.
+        var taken = new HashSet<String>();
+        rigidNames(type, taken);
+        return show(type, false, new IdentityHashMap<>(), taken);
+    }
+
+    private static void rigidNames(Ty type, Set<String> into) {
+        type = prune(type);
+        if (!(type instanceof Con c)) return;
+        if (c.name.startsWith("$") && !c.name.equals(AMBIGUOUS)) into.add(c.name.substring(1));
+        c.args.forEach(a -> rigidNames(a, into));
+    }
+
+    private static String variable(Object key, Map<Object, String> names, Set<String> taken) {
+        return names.computeIfAbsent(key, k -> {
+            for (int i = 0; ; i++) {
+                String name = i < 26 ? String.valueOf((char) ('a' + i)) : "a" + (i - 25);
+                if (taken.add(name)) return name;
+            }
+        });
     }
 
     /** The left side of an arrow needs parentheses only when it is itself a function. */
-    private static String showParameter(Ty type) {
-        return prune(type) instanceof Con c && c.name.equals("->") ? "(" + show(type, false) + ")" : show(type, false);
+    private static String showParameter(Ty type, Map<Object, String> names, Set<String> taken) {
+        return prune(type) instanceof Con c && c.name.equals("->")
+                ? "(" + show(type, false, names, taken) + ")" : show(type, false, names, taken);
     }
 
-    private static String show(Ty type, boolean argument) {
+    private static String show(Ty type, boolean argument, Map<Object, String> names, Set<String> taken) {
         type = prune(type);
-        if (type instanceof Var) return "t";
+        if (type instanceof Var) return variable(type, names, taken);
         var c = (Con) type;
+        // Each ambiguous type is its own unknown.
+        if (c.name.equals(AMBIGUOUS)) return variable(new Object(), names, taken);
         String name = c.name.startsWith("$") ? c.name.substring(1) : c.name;
         if (name.startsWith("org.julclang.ledger.")) name = name.substring("org.julclang.ledger.".length());
         if (name.equals("Elci.Maybe")) name = "Maybe";
         if (name.equals("->")) {
-            String text = showParameter(c.args.get(0)) + " -> " + show(c.args.get(1), false);
+            String text = showParameter(c.args.get(0), names, taken) + " -> " + show(c.args.get(1), false, names, taken);
             return argument ? "(" + text + ")" : text;
         }
         if (name.equals("Unit")) return "()";
         if (name.equals("Tuple"))
-            return "( " + String.join(", ", c.args.stream().map(a -> show(a, false)).toList()) + " )";
+            return "( " + String.join(", ", c.args.stream().map(a -> show(a, false, names, taken)).toList()) + " )";
         if (name.startsWith("Record:")) {
             String fields = name.substring("Record:".length());
             if (fields.isEmpty()) return "{}";
-            var names = fields.split(",");
+            var fieldNames = fields.split(",");
             var shown = new ArrayList<String>();
-            for (int i = 0; i < names.length; i++) shown.add(names[i] + " : " + show(c.args.get(i), false));
+            for (int i = 0; i < fieldNames.length; i++) shown.add(fieldNames[i] + " : " + show(c.args.get(i), false, names, taken));
             return "{ " + String.join(", ", shown) + " }";
         }
         if (c.args.isEmpty()) return name;
-        String text = name + " " + String.join(" ", c.args.stream().map(a -> show(a, true)).toList());
+        String text = name + " " + String.join(" ", c.args.stream().map(a -> show(a, true, names, taken)).toList());
         return argument ? "(" + text + ")" : text;
     }
 
@@ -132,9 +155,17 @@ public final class Types {
         return new Con(c.name, c.args.stream().map(a -> copy(a, vars)).toList());
     }
 
+    /**
+     * The type of an ambiguous variable: one that nothing in the program determines, like the
+     * error type of {@code Ok 5}. No value of it exists, so lowering represents it as Data, but
+     * it is not {@link #concrete}: type-directed operations such as {@code Data.decode} still
+     * require the type to be known.
+     */
+    public static final String AMBIGUOUS = "$Ambiguous";
+
     public static boolean concrete(Ty t) {
         t = prune(t);
-        return t instanceof Con c && c.args.stream().allMatch(Types::concrete);
+        return t instanceof Con c && !c.name.equals(AMBIGUOUS) && c.args.stream().allMatch(Types::concrete);
     }
 
     public static Set<Var> variables(Ty t) {
@@ -149,17 +180,23 @@ public final class Types {
         else ((Con) t).args.forEach(a -> gather(a, vs));
     }
 
-    public record Instantiation(Ty body, List<Ty> equality, List<Ty> append) {}
+    public record Instantiation(Ty body, List<Ty> equality, List<Ty> append, List<Ty> comparable) {}
 
-    public record Scheme(Set<Var> quantified, Ty body, List<Ty> equality, List<Ty> append) {
+    /**
+     * A type scheme with the compiler-known requirements its generic uses carry: types that
+     * must support {@code ==}, {@code ++} and ordering ({@code comparable}). Each is checked
+     * where the scheme is used at a concrete type.
+     */
+    public record Scheme(Set<Var> quantified, Ty body, List<Ty> equality, List<Ty> append, List<Ty> comparable) {
         public Scheme(Set<Var> quantified, Ty body) {
-            this(quantified, body, List.of(), List.of());
+            this(quantified, body, List.of(), List.of(), List.of());
         }
 
         public Scheme {
             quantified = Set.copyOf(quantified);
             equality = List.copyOf(equality);
             append = List.copyOf(append);
+            comparable = List.copyOf(comparable);
         }
 
         public Instantiation instantiateAll() {
@@ -167,12 +204,14 @@ public final class Types {
             var schemeVariables = new HashSet<Var>(variables(body));
             equality.forEach(t -> schemeVariables.addAll(variables(t)));
             append.forEach(t -> schemeVariables.addAll(variables(t)));
+            comparable.forEach(t -> schemeVariables.addAll(variables(t)));
             for (Var variable : schemeVariables)
                 replacements.put(variable, quantified.contains(variable) ? new Var() : variable);
             return new Instantiation(
                     copy(body, replacements),
                     equality.stream().map(t -> copy(t, replacements)).toList(),
-                    append.stream().map(t -> copy(t, replacements)).toList());
+                    append.stream().map(t -> copy(t, replacements)).toList(),
+                    comparable.stream().map(t -> copy(t, replacements)).toList());
         }
 
         public Ty instantiate() {

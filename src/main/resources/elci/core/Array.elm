@@ -14,6 +14,7 @@ with `fromList` when many indexed reads follow.
 -}
 
 import Julc.TypedArray as Typed
+import List
 
 
 empty : Array a

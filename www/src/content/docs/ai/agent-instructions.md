@@ -12,23 +12,33 @@ the Elci documentation site before writing code.
 ## What Elci is
 
 Elci compiles an Elm 0.19 syntax subset (`.elm` files) to Plutus V3 validators for Cardano. It is not
-browser Elm: there is no `Html`, `Cmd`, `port`, `elm.json` or Elm package, and the Elm core modules
-`String`, `Maybe`, `Dict`, `Set`, `Tuple`, `Char` and `Basics` do not exist. Evaluation is strict.
+browser Elm: there is no `Html`, `Cmd`, `port`, `elm.json`, Elm package, `Float`, `Char`, `Dict` or `Set`.
+Elm's core modules `Basics`, `List`, `Maybe`, `Result`, `Tuple` and `String` exist with Elm's names and
+argument orders, but `String` has only a few functions. Evaluation is strict.
 
 ## Must-follow rules
 
 1. Give every top-level declaration a type signature. Module `A.B` lives at `src/A/B.elm`.
-2. Only `List` is imported implicitly. Import `Map`, `Array`, `Bytes`, `Debug` and `Julc.Data as Data`
-   when you use them. `Julc.Ledger` provides ledger types; expose constructors with `Type(..)`.
-3. Do not use Elm core APIs. Replacements: `Dict` → `Map`; `Debug.log` → `Debug.trace`;
-   `Maybe.withDefault`/`List.head` → `case`; `List.sum` → `List.foldl (\v t -> v + t) 0`;
-   `List.member x` → `List.any (\y -> y == x)`; `negate x` → `-x`; `max`/`min`/`abs` →
-   `Julc.Math` (map `org.julclang.stdlib.lib.MathLib`); `String.fromInt` →
-   `Bytes.toString (ByteString.intToDecimalString n)` with `Julc.ByteString` mapped.
-4. No `Float`, `/`, `%`, `^`, char literals, extensible records, operator sections `(+)` or `.field`
-   accessor functions. Use `Int`, `//`, `modBy`, `remainderBy` and lambdas. Tuples have 2 or 3 elements.
-5. `<`, `>`, `<=`, `>=` work on `Int` only. Compare bytes with `Bytes.lessThan`. `==` does not work on
-   functions, `Data`, `Map`, `Array` or `Value`.
+2. Elm's default imports apply: `Basics exposing (..)`, `List`, `Maybe exposing (Maybe(..))`,
+   `Result exposing (Result(..))`, `String`, `Tuple`, `Debug`. Import `Map`, `Array`, `Bytes` and
+   `Julc.Data as Data` when you use them. `Julc.Ledger` provides ledger types; expose constructors with
+   `Type(..)`. Never name a module or alias `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`,
+   `Array`, `Dict`, `Set`, `Value` or `Elci`, a constructor `Just`, `Nothing`, `True` or `False`, or a
+   type `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Map`, `Array` or `Float`.
+3. Use only the core functions that exist (see `/ai/catalog.json`). Prelude: `min`, `max`, `abs`,
+   `negate`, `clamp`, `compare` (`LT`/`EQ`/`GT`), `identity`, `always`, `not`, `xor`, `modBy`,
+   `remainderBy`, `^`. `Maybe`: `withDefault`, `map`, `map2`, `map3`, `andThen`. `Result`: `map`, `map2`,
+   `map3`, `andThen`, `withDefault`, `toMaybe`, `fromMaybe`, `mapError`. `String`: only `fromInt`,
+   `isEmpty`, `append`, `concat`, `join`. `List` has all of Elm's except `map4`/`map5`. Replacements:
+   `Dict` → `Map`; `Debug.log` → `Debug.trace`; `String.length s` → `Bytes.length (Bytes.fromString s)`.
+4. No `Float`, `/`, `%`, `number`, char literals, extensible records or `.field` accessor functions. Use
+   `Int`, `//`, `modBy`, `remainderBy` and lambdas. Operators work as functions: `(+)`, `(::)`. Tuples
+   have 2 or 3 elements.
+5. `<`, `>`, `<=`, `>=`, `compare`, `max` and `List.sort` work on comparable types: `Int`, `String`,
+   `Bytes`, ledger hashes such as `PubKeyHash`, and lists and tuples of these. Sort records with
+   `List.sortBy`. A signature variable used with `<` must be named `comparable`, with `++` `appendable`.
+   `==` does not work on functions, `Data`, `Map`, `Array` or `Value`. Arguments are strict:
+   `Maybe.withDefault` evaluates its default.
 6. Negation is Elm's: `f -1` passes `-1`; write `x - 1` to subtract.
 7. Configure validators in `elci.toml`, never in source: `[validators.<name>]` with
    `boundary = "julc-strict-v1"`, handler keys `spend`/`mint`/`withdraw`/`certify`/`vote`/`propose` =
@@ -37,12 +47,13 @@ browser Elm: there is no `Html`, `Cmd`, `port`, `elm.json` or Elm package, and t
 8. Handler types: parameters first, then the datum (spend only; `Maybe datum` when optional), the
    redeemer, and `ScriptContext`, returning `Bool`. Expose every handler. Use `()` for unused values.
 9. Datum, redeemer and parameter types must be Data-encodable: records, custom types, `Int`, `Bool`,
-   `String`, `Bytes`, `()`, tuples, lists, maps, `Maybe` and ledger types such as `PubKeyHash` and
-   `TxOutRef`. Never functions, `Array`, `Value`, `TxOut` or `ScriptContext`.
+   `String`, `Bytes`, `()`, tuples, lists, maps, `Maybe`, `Result` and ledger types such as `PubKeyHash`
+   and `TxOutRef`. Never functions, `Array`, `Value`, `TxOut` or `ScriptContext`.
 10. Records encode with fields sorted by name; custom types by declaration order; `Maybe` is
-    `Nothing` 0, `Just` 1. Julc optionals differ: convert with `Data.fromOptional`/`Data.toOptional`.
+    `Nothing` 0, `Just` 1; `Result` is `Ok` 0, `Err` 1 (the reverse of PlutusTx `Either`). Julc
+    optionals differ: convert with `Data.fromOptional`/`Data.toOptional`.
 11. Keep `PubKeyHash` and `Bytes` apart; use `.hash` when raw bytes are needed. Signature check:
-    `List.any (\signer -> signer == key) ctx.txInfo.signatories`.
+    `List.member key ctx.txInfo.signatories`.
 12. Every `let` value is evaluated even if unused. Put cheap checks first, inline, in `&&` chains.
     Keep expensive work out of top-level values; they run for every purpose of the script.
 13. `Interval.finiteLowerBound`/`finiteUpperBound` return `-1` for an infinite bound. Handle it.
@@ -73,9 +84,10 @@ parameters with `elci apply --validator <name> --param name='{"bytes": "..."}'`,
 off-chain. Every command exits with status 0 on success and 1 on any error or failing test.
 
 Diagnostics read `path:line:col: ELCIxxxx: message`. Look the code up in the starter pack's error
-table: `ELCI2002` type mismatch, `ELCI2004` missing signature, `ELCI2005` unknown name, `ELCI2007`
-non-exhaustive case, `ELCI2013` type cannot cross the data boundary, `ELCI2014` handler signature does
-not match `elci.toml`, `ELCI2101`/`ELCI2104` import problems.
+table: `ELCI2002` type mismatch, `ELCI2003` equality, ordering or append on a type without it,
+`ELCI2004` missing signature, `ELCI2005` unknown name, `ELCI2007` non-exhaustive case, `ELCI2013` type
+cannot cross the data boundary, `ELCI2014` handler signature does not match `elci.toml`, `ELCI2102`
+ambiguous name, `ELCI2101`/`ELCI2104` import problems or a function Elci lacks.
 
 ## Done means
 

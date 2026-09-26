@@ -346,9 +346,12 @@ compiler's pinned `julcVersion` (`elci --version` prints it). Both projects requ
 concrete signatures are exposed. Arbitrary JVM methods and overloaded methods
 are not automatically available.
 
-**Unresolved source type:** entrypoints must be concrete. Expansive local values
-are deliberately monomorphic; make the helper a local function or move it to a
-top-level function with a signature.
+**Cannot determine a type (`ELCI3001`):** `Julc.Data.decode` and generic Java
+exports must know the type they create; annotate the value, for example with a
+local `amounts : List Int`. Types nothing determines are otherwise fine, as in
+Elm: `List.length []` needs no annotation. Entrypoints must be concrete.
+Expansive local values are deliberately monomorphic; make the helper a local
+function or move it to a top-level function with a signature.
 
 **Truffle regression suite fails under GraalVM:** the existing Julc Truffle
 runtime version may not match the supplied GraalVM's libgraal. Run Julc's

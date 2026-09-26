@@ -279,6 +279,58 @@ Use a `List` when you traverse once (`List.any`, `List.foldl`, `List.filter`) an
 read many positions. An array has no Data encoding, so datums, redeemers and parameters stay lists; call
 `Array.fromList` inside the handler.
 
+## Sorting and comparing
+
+`List.sort`, `List.sortBy` and `List.sortWith` are merge sorts written in Elci, O(n log n). Each
+comparison is a function call, so sorting is one of the more expensive things a script can do. Each row
+includes building its input:
+
+| Program (20 elements) | CPU | Memory |
+| --- | ---: | ---: |
+| `List.range 1 20` | 16,577,300 | 75,673 |
+| `List.sort (List.range 1 20)` | 133,140,808 | 644,693 |
+| `List.map String.fromInt (List.range 1 20)` | 61,921,144 | 261,394 |
+| `List.sort` of those strings | 213,536,764 | 959,078 |
+| The same 20 values as `Bytes` | 62,881,144 | 267,394 |
+| `List.sort` of those byte strings | 190,046,812 | 894,614 |
+
+Sorting cost about 117 million CPU for 20 integers, 152 million for 20 strings and 127 million for 20 byte
+strings. Checking that a list is already sorted is a single pass. When a transaction can supply sorted
+data, have the validator check the order instead of sorting:
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+
+isSorted : List comparable -> Bool
+isSorted items =
+    case items of
+        first :: second :: rest ->
+            first <= second && isSorted (second :: rest)
+
+        _ ->
+            True
+
+
+main : Bool
+main =
+    isSorted (List.range 1 20)
+```
+
+```text
+True
+cpu 33372778, mem 162456
+```
+
+That is about 17 million CPU for the check, against 117 million for the sort.
+
+The cost of one comparison depends on the type. `Int` and `Bytes` use one builtin call. `String` first
+encodes both sides to UTF-8, then compares the bytes. In a fold that compares the same two values 100
+times, `Bytes` values cost about 10 million CPU more than `Int` values, and `String` values about
+24 million more. Keys that are compared many times are cheaper as `Bytes`. Lists and tuples compare
+element by element: `compare [ 1, 2, 3 ] [ 1, 2, 4 ]` cost about 6 million CPU, against 0.5 million for
+`compare 3 7`.
+
 ## Maps
 
 A `Map k v` is the ledger's map representation: a list of key/value pairs compared by their Data
@@ -310,6 +362,7 @@ failure paths.
 - Traverse lists once. Over 100 elements, `List.filter` followed by `List.foldl` cost about 127 million CPU;
   one `List.foldl` with an `if` inside cost about 96 million.
 - Convert to an `Array` once when you read many positions; never rebuild an array to change it.
+- Avoid sorting on-chain. When the transaction can provide sorted data, check the order in one pass.
 - Treat `Map` as a small association list. Avoid `Map.fromList` and repeated `Map.insert` on large inputs.
 - Use each generic helper at as few types as you can, and drop `Debug.trace` from deployed scripts.
 - Library functions are compiled Java code, not builtins: `Julc.ByteString.toHex` over 32 bytes cost

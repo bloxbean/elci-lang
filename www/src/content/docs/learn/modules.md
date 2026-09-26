@@ -107,6 +107,10 @@ A qualified name only works through an import in the current module. After
 .../src/Main.elm:8:5: ELCI2104: Module Pricing is not imported or does not expose 'priceOf'
 ```
 
+Your own declarations take precedence over imported names. If two imports expose different things under
+one name, using that name is an error that lists the qualified alternatives; write the one you mean, such
+as `Pricing.priceOf`.
+
 Imports can't form a cycle. If `Shop.Pricing` imported `Main` while `Main` imports `Shop.Pricing`, the build
 stops with:
 
@@ -118,19 +122,32 @@ Move the shared code into a third module that both import.
 
 ## Modules that come with Elci
 
+As in Elm, every module imports the core modules for you:
+
+| Module | Imported as | Contents |
+| --- | --- | --- |
+| `Basics` | `import Basics exposing (..)` | The prelude: `min`, `max`, `abs`, `negate`, `clamp`, `compare`, `identity`, `always`, `not`, `xor`, `modBy`, `remainderBy` |
+| `List` | `import List` | `map`, `filter`, `foldl`, `head`, `range`, `sum`, `sort` and the rest of Elm's list functions |
+| `Maybe` | `import Maybe exposing (Maybe(..))` | `withDefault`, `map`, `map2`, `map3`, `andThen` |
+| `Result` | `import Result exposing (Result(..))` | `Ok` and `Err`, with `map`, `andThen`, `withDefault`, `toMaybe` and more |
+| `Tuple` | `import Tuple` | `pair`, `first`, `second`, `mapFirst`, `mapSecond`, `mapBoth` |
+| `String` | `import String` | `fromInt`, `isEmpty`, `append`, `concat`, `join` |
+| `Debug` | `import Debug` | `Debug.trace`, which records a message |
+
+The others you import yourself:
+
 | Module | Import | Contents |
 | --- | --- | --- |
-| `List` | Always available | `map`, `filter`, `foldl`, `foldr`, `any`, `all`, `length`, `reverse`, `append`, `concatMap` |
 | `Map` | `import Map` | Key/value maps, like Elm's `Dict` |
 | `Array` | `import Array` | Constant-time indexed arrays |
 | `Bytes` | `import Bytes` | Byte-string builtins: building, slicing, integers, bits and hashes |
-| `Debug` | `import Debug` | `Debug.trace`, which records a message |
 | `Julc.Data` | `import Julc.Data as Data` | `encode` and `decode` to and from Plutus Data, and `Maybe` adapters |
 | `Julc.Ledger` | `import Julc.Ledger exposing (...)` | Ledger types: `ScriptContext`, `PubKeyHash`, `TxOutRef` and more |
 
-`not`, `modBy` and `remainderBy` need no import. Test modules can also import the test library, `Expect`,
-`Scenario` and `Property` (see [Unit tests](/testing/unit-tests/)). Source modules can't, which keeps test
-code out of your scripts.
+[Core modules](/reference/core-modules/) lists every function. Writing a default import yourself, such as
+`import List exposing (head)`, is allowed and adds the names you expose. Test modules can also import the
+test library, `Expect`, `Scenario` and `Property` (see [Unit tests](/testing/unit-tests/)). Source modules
+can't, which keeps test code out of your scripts.
 
 `import Julc.Ledger exposing (..)` exposes the ledger's types but not their constructors. Name the
 constructors you need, as in `exposing (Credential(..))`. [Reading the
@@ -139,7 +156,8 @@ transaction](/contracts/reading-the-transaction/) covers the ledger types.
 ## Julc's Java libraries
 
 Julc ships on-chain libraries written in Java, such as `MathLib`, `IntervalLib`, `ValuesLib` and
-`ByteStringLib`. To use one, give it a module name in `elci.toml`:
+`ByteStringLib`. They fill the gaps in the core modules, such as floor division and ledger `Value`s. To use
+one, give it a module name in `elci.toml`:
 
 ```toml title="elci.toml"
 [java-modules]
@@ -151,18 +169,20 @@ Then import it like any other module:
 ```elm title="src/Main.elm"
 module Main exposing (main)
 
-import Julc.Math as Math exposing (max)
+import Julc.Math as Math exposing (floorDiv)
 
 
-main : Int
+main : ( Int, Int, Int )
 main =
-    max 3 9 + Math.pow 2 10 + Math.abs -6
+    ( floorDiv -7 2, Math.floorMod -7 2, Math.expMod 3 4 5 )
 ```
 
 ```text
-1039
-cpu 31506674, mem 125163
+( -4, 1, 1 )
+cpu 3991568, mem 16175
 ```
+
+`floorDiv` rounds towards negative infinity, where `//` truncates towards zero.
 
 The compiler reads the library's Java source and compiles the functions you call into your script. Two
 rules differ from Elci modules:
@@ -227,7 +247,8 @@ cpu 7570256, mem 30966
 ```
 
 The library is compiled together with each project that uses it. A module name may appear in only one source
-directory, and `List` is reserved for the built-in module. The
+directory. The core module names (`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Array`)
+are taken, and `Dict`, `Set`, `Value` and `Elci` are reserved for the core library. The
 [elci-library example](https://github.com/bloxbean/elci-lang/tree/main/examples/elci-library) is a complete
 project.
 

@@ -62,7 +62,7 @@ Add `--builtins` to also list every Plutus builtin function that the script call
 | --- | --- | --- |
 | `Int` | `42`, `-7`, `1000000` | Whole numbers of any size. There is no `Float`. |
 | `Bool` | `True`, `False` | |
-| `String` | `"GOLD"`, `"line\n"` | Text. Join with `++`, compare with `==`. |
+| `String` | `"GOLD"`, `"line\n"` | Text. Join with `++`, compare with `==` or `<`. The `String` module has `String.fromInt` and more. |
 | `Bytes` | `Bytes.fromString "GOLD"` | Raw byte strings, from `import Bytes` |
 | `()` | `()` | Unit: a type with exactly one value, used for "nothing to say" |
 
@@ -144,6 +144,26 @@ main =
 cpu 1377500, mem 4659
 ```
 
+`^` raises an integer to a power, and the prelude, which every module imports, provides the other everyday
+functions: `negate`, `abs`, `min`, `max` and `clamp`.
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+
+main : List Int
+main =
+    [ 2 ^ 10, negate 5, abs -4, min 3 7, max 3 7, clamp 0 100 250 ]
+```
+
+```text
+[1024, -5, 4, 3, 7, 100]
+cpu 9197162, mem 37659
+```
+
+`clamp low high x` keeps `x` between the bounds. [Core modules](/reference/core-modules/#basics) lists the
+whole prelude.
+
 Dividing by zero (with `//`, `modBy` or `remainderBy`) doesn't return a value: it fails the script, and a
 failing validator rejects the transaction. `/` and fractional literals such as `1.5` are rejected by the
 compiler:
@@ -165,7 +185,7 @@ To work with fractions, scale your integers. For example, store a percentage in 
 | Operator | Meaning |
 | --- | --- |
 | `==`, `/=` | Equal, not equal. Works on numbers, strings, bytes, lists, tuples, records and custom types, but not on functions or maps |
-| `<`, `<=`, `>`, `>=` | Ordering. Only for `Int` |
+| `<`, `<=`, `>`, `>=` | Ordering, for comparable types: numbers, strings, bytes, and lists and tuples of them |
 | `&&`, `\|\|` | And, or. The right side is evaluated only when needed |
 | `not` | Negation: `not True` is `False` |
 
@@ -180,13 +200,17 @@ isValidFee fee =
 
 main : Bool
 main =
-    isValidFee 200000 && not (isValidFee 5) && "ada" /= "lovelace"
+    isValidFee 200000 && not (isValidFee 5) && "ada" < "lovelace"
 ```
 
 ```text
 True
-cpu 941701, mem 4904
+cpu 1051432, mem 5116
 ```
+
+Strings order by their UTF-8 bytes, so `"Zebra" < "apple"`: capital letters come first. `compare a b`
+returns `LT`, `EQ` or `GT`. Booleans, records and custom types have no order, and `True < False` is a
+compile error.
 
 Comparisons can't be chained. Write `low < x && x < high` instead of `low < x < high`:
 
@@ -265,6 +289,9 @@ cpu 6795728, mem 31808
 `addFive` is `add` with its first argument already supplied. `List.map addFive` adds 5 to each element
 (giving `[ 6, 7, 8 ]`), and `List.foldl add 0` sums them.
 
+Operators are functions too. Written in parentheses, `(+)` is the function `\a b -> a + b`, so
+`List.foldl (+) 0` also sums a list, and `(*) 2` doubles a number.
+
 Elci is strict: a partial application evaluates the arguments you give it straight away. `add (10 // 0)`
 fails at that point, not later when the second argument arrives.
 
@@ -311,6 +338,11 @@ identity x =
 ```text
 .../src/Main.elm:4:1: ELCI2002: Type mismatch: expected Int, found a
 ```
+
+To compare values of a type variable with `<`, or to join them with `++`, name the variable
+`comparable` or `appendable`, as in Elm: `largest : comparable -> comparable -> comparable` works for
+numbers, strings and bytes. The [language reference](/reference/language/#constrained-type-variables)
+covers these names.
 
 ## Bytes and unit
 

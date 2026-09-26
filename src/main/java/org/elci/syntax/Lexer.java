@@ -53,7 +53,7 @@ public final class Lexer {
                 for (String candidate : List.of("->","//","==","/=","<=",">=","&&","||","::","++","|>","<|",">>","<<",".."))
                     if (at(candidate)) { op=candidate; break; }
                 if (op == null) {
-                    if ("()[]{},:=|.\\+-*<>/".indexOf(c) < 0) fail("Unsupported character '" + c + "'");
+                    if ("()[]{},:=|.\\+-*<>/^".indexOf(c) < 0) fail("Unsupported character '" + c + "'");
                     op = String.valueOf(c);
                 }
                 for (int i=0;i<op.length();i++) advance();

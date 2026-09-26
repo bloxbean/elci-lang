@@ -22,8 +22,10 @@ This page is optimized for AI ingestion, not for humans. For the tutorial, see
 - **On-chain only.** Elci code is validator logic. Building transactions is done off-chain with other
   tools (for example Cardano Client Lib, reading `validator.plutus.json`).
 - **Not browser Elm.** There is no `Html`, `Browser`, `Cmd`, `Sub`, `port`, JSON decoders or runtime.
-- **No Elm packages.** `elm.json` is not used. There is no package manager. Elm core modules such as
-  `String`, `Maybe`, `Dict`, `Set`, `Tuple`, `Char` and `Basics` **do not exist** (section 3.3).
+- **No Elm packages.** `elm.json` is not used. There is no package manager.
+- **Elm's core library, partly.** `Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String` and `Debug` are
+  imported by default, as in Elm, with Elm's names and argument orders, but `String` has only five
+  functions and `Debug` only `trace`. `Dict`, `Set`, `Char` and `Float` **do not exist** (section 3.3).
 - **Strict, not lazy.** Every `let` value and every function argument is evaluated (section 4).
 - **Configuration decides deployment.** Handlers are ordinary functions; `elci.toml` says which
   function serves which ledger purpose (section 2).
@@ -103,7 +105,8 @@ purpose = "function"
 5. `spend-datum = "required"` (default), `"optional"` or `"absent"`; requires a `spend` handler.
 6. `expected-abi = "path"`: `check`, `build` and `apply` fail if the ABI (`abi.json`) differs.
 7. `[java-modules]`: `"Module.Name" = "fully.qualified.Class"`. You choose the module name. `Julc.TypedMap`
-   and `Julc.TypedArray` are reserved.
+   and `Julc.TypedArray` are reserved, and so are the core module names (`Basics`, `List`, `Maybe`,
+   `Result`, `String`, `Tuple`, `Map`, `Array`, `Dict`, `Set`, `Value`, `Elci`).
 8. `[tests]`: `source-directories`, default `["tests"]`.
 9. TOML subset: one `key = value` per line; values are quoted strings without escapes or single-line
    arrays of quoted strings; comments are whole lines starting with `#` (no trailing comments); unknown
@@ -114,18 +117,29 @@ purpose = "function"
 ### 3.1 Allowed
 
 - Modules: `module A.B exposing (f, T, U(..))` or `exposing (..)`; `import M as N exposing (x, T(..))`.
-  `List` is imported everywhere automatically. Imports must be acyclic.
+  Imports must be acyclic. Every module has Elm's default imports (section 8). Own declarations shadow
+  imports; a name two imports expose is ambiguous where used, except that a name listed in `exposing`
+  beats a default import.
 - **Every top-level declaration needs a type signature.** Local (`let`) definitions may have one.
-- Functions, lambdas `\a b -> ...`, currying, partial application, `|>`, `<|`, `>>`, `<<`.
+- Functions, lambdas `\a b -> ...`, currying, partial application, `|>`, `<|`, `>>`, `<<`. Operators as
+  functions: `(+)`, `(::)`, `(<)`, as in `List.foldl (+) 0 xs`. `^` is integer power.
 - Rank-1 generics (`a -> a`), specialized per concrete use. Local helpers may be used at several types.
+  Elm's constrained variables: a signature variable compared with `<`/`compare` must be named
+  `comparable…`, one appended with `++` `appendable…`, both `compappend…`.
+- Types nothing determines need no annotation (`[] == []`, `List.length []`, `Data.encode Nothing`),
+  except where a value is created: `Data.decode` and generic Java functions (`ELCI3001`).
 - Self-recursion and mutually recursive functions (top-level or local).
 - Types: `Int` (arbitrary precision), `Bool`, `String`, `()`, `Bytes`, `Data`, `List a`, `Maybe a`,
-  `Map k v`, `Array a`, tuples of 2 or 3, closed records, custom types (generic, recursive).
+  `Result error value`, `Order`, `Map k v`, `Array a`, tuples of 2 or 3, closed records, custom types
+  (generic, recursive).
 - `type alias R = { x : Int }` (also a constructor `R 1`); `type T a = A a | B`.
 - Records: `{ x = 1 }`, `r.x`, `{ r | x = 2 }`, destructuring `{ x, y }` in parameters and `let`.
 - `case` with nested patterns: constructors, `[]`, `[ a, b ]`, `a :: rest`, tuples, record fields, `as`,
   `_`, `()`, `True`/`False`, Int and String literals. Exhaustive and no unreachable branches.
 - `if c then a else b` (else required), `let ... in`, `++` on `String` and `List`, `::`.
+- `<`, `<=`, `>`, `>=`, `compare`, `min`, `max`, `List.sort` on **comparable** types: `Int`, `String`
+  (UTF-8 byte order), `Bytes`, ledger hashes (`PubKeyHash`, `ScriptHash`, `PolicyId`, `TokenName`,
+  `TxId`, …), and lists and tuples of these.
 - Comments `--`, `{- nested {- ok -} -}`, doc comments `{-| -}`.
 
 ### 3.2 Rejected by the compiler
@@ -133,82 +147,74 @@ purpose = "function"
 | Construct | Result |
 | --- | --- |
 | `Float`, `1.5`, `/` | `ELCI1001`/`ELCI2001`; use scaled `Int` and `//` |
-| Typeclass-like variables (`comparable`, `number`, `appendable`) | ordinary type variables; `a > b` on them is `ELCI2002` |
+| `number` in a signature | `ELCI2003`; write `Int` |
+| `a > b` or `a ++ b` on a signature variable not named `comparable…`/`appendable…` | `ELCI2003`; rename it |
 | Extensible records `{ r \| x : Int }` | `ELCI1002` |
 | Refutable patterns in function or lambda arguments (`f (x :: _) = ...`) | `ELCI1002`; use `case` |
 | Chained comparisons `a < b < c` | `ELCI1002`; use `a < b && b < c` |
 | Tuples of 4 or more | `ELCI1002` |
-| Operator sections `(+)`, record accessors `.field` | `ELCI1002` / `ELCI2104`; use lambdas |
-| Char literals `'a'`, `^`, `%`, hex `0xFF`, `1_000` | `ELCI1001` / `ELCI2005` |
+| Record accessors `.field` | use lambdas `\r -> r.field` |
+| `(/)` | `ELCI2001`; use `(//)` |
+| Char literals `'a'`, `%`, hex `0xFF`, `1_000` | `ELCI1001` |
 | `port module`, `import Html` | `ELCI1002` / `ELCI2101` |
 | Polymorphic recursion, recursive values (`a = b + 1`, `b = a + 1`) | `ELCI2002` / `ELCI2008` |
 | `==` on functions, `Data`, `Map`, `Array`, `Value` | `ELCI2003` |
-| `<`, `>`, `<=`, `>=` on anything but `Int` | `ELCI2002` |
+| `<`, `compare`, `List.sort` on `Bool`, records, custom types, `Maybe`, `Map`, `Data`, `TxOutRef` | `ELCI2003`; use `List.sortBy` with a key |
+| Module or alias named `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Array`, `Dict`, `Set`, `Value`, `Elci` | `ELCI2104` |
+| Constructors named `Just`, `Nothing`, `True`, `False`; types named `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Map`, `Array`, `Float` | `ELCI2011` |
+| `f <\| x \|> g`, `f << g >> h` (opposite associativity mixed) | `ELCI1002`; add parentheses |
+| `Tuple a b`, `Unit` as type names | `ELCI2012`; write `( a, b )`, `()` |
 
 ### 3.3 Elm idioms that do NOT exist in Elci, and what to write instead
 
 | Elm | Elci |
 | --- | --- |
-| `String.fromInt n` | map `"Julc.ByteString" = "org.julclang.stdlib.lib.ByteStringLib"`, then `Bytes.toString (ByteString.intToDecimalString n)` (non-negative `n` only) |
 | `String.length s` | `Bytes.length (Bytes.fromString s)` (UTF-8 byte count) |
-| any other `String.*`, `String.toInt` | none; keep numbers as `Int` and bytes as `Bytes` |
+| `String.toInt`, `split`, `slice`, `toUpper` and other `String.*` | none; keep numbers as `Int` and bytes as `Bytes`. `String` has only `fromInt`, `isEmpty`, `append`, `concat`, `join` |
+| `String.fromFloat`, `toFloat`, `round`, `sqrt`, `pi` | none; no `Float`: use scaled `Int` |
 | `Dict` | `Map` (`import Map`) |
 | `Set` | `Map k Bool` or a `List` (`Map k ()` is rejected: `()` has no Data encoding) |
-| `Maybe.withDefault`, `Maybe.map` | `case maybe of Just v -> ...; Nothing -> ...` |
-| `List.head`, `List.take`, `List.drop`, `List.isEmpty`, `List.member`, `List.sum`, `List.range`, `List.map2`, `List.filterMap`, `List.indexedMap`, `List.concat`, `List.maximum`, `List.sortBy` | not in `List`; write with `case`/recursion/`foldl`, or `Array.fromList` + `Array.get`/`indexedMap` |
-| `Tuple.first`, `Tuple.second` | pattern `( a, _ )` |
-| `Debug.log`, `Debug.toString`, `Debug.todo` | `Debug.trace : String -> a -> a` |
-| `negate x` | `-x` |
-| `abs`, `min`, `max` | map `"Julc.Math" = "org.julclang.stdlib.lib.MathLib"`: `Math.abs`, `Math.min`, `Math.max` |
-| `identity`, `always`, `compare`, `clamp`, `xor`, `toFloat`, `round`, `truncate` | none; use lambdas, `<`, `/=` on `Bool`, scaled `Int` |
-| `Result`, `Ok`, `Err` | define your own custom type |
-| `(+)`, `.price` | `\a b -> a + b`, `\r -> r.price` |
+| `Char`, `'a'` | none |
+| `List.map4`, `Maybe.map4`, `Result.map5`, … | nest `map3`, or `case` |
+| `Debug.log`, `Debug.toString`, `Debug.todo` | `Debug.trace : String -> a -> a`; `String.fromInt` for numbers |
+| `.price` | `\r -> r.price` |
+| `Bytes.lessThan` (removed) | `a < b` |
 
-These replacements compile and run:
+Everything else in Elm's `Basics`, `List`, `Maybe`, `Result`, `Tuple` exists with Elm's signature
+(section 8). This program uses them; it compiles and runs:
 
-```elm
-withDefault : a -> Maybe a -> a
-withDefault fallback maybe =
-    case maybe of
-        Just value ->
-            value
-
-        Nothing ->
-            fallback
+```elm title="src/Main.elm"
+module Main exposing (main)
 
 
-head : List a -> Maybe a
-head items =
-    case items of
-        first :: _ ->
-            Just first
-
-        [] ->
-            Nothing
+type alias Payout =
+    { beneficiary : String
+    , amount : Int
+    }
 
 
-range : Int -> Int -> List Int
-range from to =
-    if from > to then
-        []
-
-    else
-        from :: range (from + 1) to
+payouts : List Payout
+payouts =
+    [ Payout "carol" 30, Payout "alice" 50, Payout "bob" 30 ]
 
 
-member : Int -> List Int -> Bool
-member x items =
-    List.any (\y -> y == x) items
+main : ( ( Int, Maybe Int, List String ), ( String, Int, Result String Int ) )
+main =
+    ( ( List.sum (List.map (\p -> p.amount) payouts)
+      , List.maximum (List.map (\p -> p.amount) payouts)
+      , List.map (\p -> p.beneficiary) (List.sortBy (\p -> p.amount) payouts)
+      )
+    , ( String.join ", " (List.map (\p -> p.beneficiary ++ "=" ++ String.fromInt p.amount) payouts)
+      , Maybe.withDefault 0 (List.head (List.range 5 9))
+      , Result.fromMaybe "no payouts" (Maybe.map (\p -> p.amount) (List.head payouts))
+      )
+    )
+```
 
-
-sum : List Int -> Int
-sum items =
-    List.foldl (\value total -> value + total) 0 items
-
-
-fromInt : Int -> String
-fromInt n =
-    Bytes.toString (ByteString.intToDecimalString n)
+```text
+$ elci eval
+( ( 110, Just 50, ["carol", "bob", "alice"] ), ( "carol=30, alice=50, bob=30", 5, Ok 30 ) )
+cpu 65205046, mem 276517
 ```
 
 ## 4. Evaluation rules
@@ -219,6 +225,8 @@ fromInt n =
    likely-false checks first **inline**; a check bound in `let` is always paid for.
 3. **Order:** function, then arguments left to right; `let` bindings in dependency order, ties in source
    order; record fields, list and tuple elements in source order; record update: base, then new fields.
+   Arguments are always evaluated: `Maybe.withDefault expensive m` computes `expensive` even for a
+   `Just`, and `(&&) a b` as a function evaluates `b`. Use `case` or the `&&` operator to skip work.
 4. **Top-level values** (zero-argument declarations) reachable from any handler run once per script
    execution **before** purpose dispatch, so every purpose pays for them. Make expensive ones functions
    (`limit : () -> Int`).
@@ -232,6 +240,12 @@ fromInt n =
 8. **Equality** (`==`, `/=`): Int, Bool, String, `()`, Bytes, ledger hashes of the same type, lists, tuples,
    records, `Maybe` and custom types of these; imported types with approved equality. Both operands are
    evaluated once, left to right.
+9. **Ordering** (`<`, `<=`, `>`, `>=`, `compare`, `min`, `max`, `List.sort`): Int numerically; String by
+   UTF-8 bytes (`"Zebra" < "apple"`); Bytes and ledger hashes lexicographically by unsigned byte, a
+   proper prefix first (`#ff` > `#0001`); lists lexicographically; tuples by component. Every order agrees
+   with `==`.
+10. **Integer power:** `2 ^ 10` is `1024`; `^` binds tighter than `*` and groups right; a negative
+    exponent fails the script.
 
 ## 5. Data encoding and `Julc.Data`
 
@@ -249,6 +263,8 @@ Datums, redeemers and parameters cross the script boundary as Plutus Data and ar
 | tuple | constructor 0, fields in position order |
 | custom type | constructor tag = variant's declaration position from 0, fields in order |
 | `Maybe a` | `Nothing` = constructor 0; `Just x` = constructor 1 `[x]` |
+| `Result e a` | `Ok x` = constructor 0 `[x]`; `Err e` = constructor 1 `[e]` (the **reverse** of PlutusTx `Either`) |
+| `Order` | `LT`, `EQ`, `GT` = constructors 0, 1, 2 |
 | `JulcOptional a` (Java `Optional`) | `Some x` = constructor 0 `[x]`; `None` = constructor 1 |
 | `List a` / `Map k v` | list / map |
 | `Array a`, functions | **no encoding**; cannot be stored in data (`ELCI2013`) |
@@ -283,8 +299,9 @@ cpu 5878521, mem 25242
 ```
 
 `Julc.Data` (`import Julc.Data as Data`): `decode : Data -> a`, `encode : a -> Data`,
-`fromOptional : JulcOptional a -> Maybe a`, `toOptional : Maybe a -> JulcOptional a`. The converted type
-must be known where the call is used; annotate otherwise (`ELCI3001: Unresolved source type: t`).
+`fromOptional : JulcOptional a -> Maybe a`, `toOptional : Maybe a -> JulcOptional a`. The decoded type
+must be known where `decode` is used; annotate otherwise
+(`ELCI3001: Cannot determine the type converted by Julc.Data.decode; add a type annotation`).
 `Data` has no `==`. Tests build datums and redeemers with `Data.encode`.
 
 ## 6. Handler signatures
@@ -372,7 +389,9 @@ Rules:
 
 - `PubKeyHash`, `ScriptHash`, `PolicyId`, `TxId`, `DatumHash` are **distinct from `Bytes`**; compare like with
   like, or use `.hash`. `Bytes` vs `PubKeyHash` is `ELCI2002: Type mismatch: expected Bytes, found PubKeyHash`.
-- Signature check: `List.any (\signer -> signer == key) ctx.txInfo.signatories`.
+- Signature check: `List.member key ctx.txInfo.signatories`.
+- Ledger hashes order like bytes: `List.sort` sorts a `List PubKeyHash`. `TxOutRef` and other ledger
+  records are not comparable.
 - Construct ledger values qualified: `import Julc.Ledger as Ledger` then `Ledger.PubKeyHash bytes`,
   `Ledger.TxOutRef (Ledger.TxId bytes) 0`.
 - `Value` (and `TxOut`, `TxInInfo`, `TxInfo`, which contain it) has no equality and cannot cross the boundary.
@@ -381,23 +400,125 @@ Rules:
 
 ## 8. Core modules and test library (exact signatures)
 
-Always in scope: `not : Bool -> Bool`, `modBy : Int -> Int -> Int`, `remainderBy : Int -> Int -> Int`,
-constructors `Just`, `Nothing`, `True`, `False`. Machine-readable signatures of the modules without Elci
-source (`Bytes`, `Julc.Data`, `Debug`, built-ins) are in the site's `intrinsics.json` data file.
+Every source and test module implicitly has, as in Elm:
 
-**List** (implicit; element first, accumulator second in folds):
+```elm
+import Basics exposing (..)
+import List
+import Maybe exposing (Maybe(..))
+import Result exposing (Result(..))
+import String
+import Tuple
+import Debug
+```
+
+`Bytes`, `Map`, `Array` and `Julc.Data` need explicit imports. Using one without its import is
+`` ELCI2104: Bytes.fromString needs the Bytes module; add `import Bytes` ``. Machine-readable signatures of
+every module are in `/ai/catalog.json`.
+
+**Basics** (unqualified everywhere):
 
 ```text
+negate : Int -> Int
+abs : Int -> Int
+min : comparable -> comparable -> comparable
+max : comparable -> comparable -> comparable
+clamp : Int -> Int -> Int -> Int                -- clamp low high x
+compare : comparable -> comparable -> Order     -- type Order = LT | EQ | GT
+identity : a -> a
+always : a -> b -> a
+not : Bool -> Bool
+xor : Bool -> Bool -> Bool
+modBy : Int -> Int -> Int                        -- modBy divisor value; divisor's sign
+remainderBy : Int -> Int -> Int                  -- value's sign
+(^) : Int -> Int -> Int                          -- negative exponent fails
+```
+
+Built-in constructors: `Just`, `Nothing`, `True`, `False`. Every binary operator is also a function:
+`(+)`, `(::)`, `(<)`, `(++)`.
+
+**List** (element first, accumulator second in folds; `map2`/`map3` stop at the shortest list; sorts are
+stable):
+
+```text
+singleton : a -> List a
+repeat : Int -> a -> List a                      -- [] when n <= 0
+range : Int -> Int -> List Int                   -- range 1 3 == [ 1, 2, 3 ]; range 5 1 == []
 map : (a -> b) -> List a -> List b
+indexedMap : (Int -> a -> b) -> List a -> List b
 filter : (a -> Bool) -> List a -> List a
+filterMap : (a -> Maybe b) -> List a -> List b
 foldl : (a -> b -> b) -> b -> List a -> b
 foldr : (a -> b -> b) -> b -> List a -> b
-all : (a -> Bool) -> List a -> Bool
-any : (a -> Bool) -> List a -> Bool
+concat : List (List a) -> List a
+concatMap : (a -> List b) -> List a -> List b
+intersperse : a -> List a -> List a
+map2 : (a -> b -> result) -> List a -> List b -> List result
+map3 : (a -> b -> c -> result) -> List a -> List b -> List c -> List result
 length : List a -> Int
 reverse : List a -> List a
+member : a -> List a -> Bool
+all : (a -> Bool) -> List a -> Bool
+any : (a -> Bool) -> List a -> Bool
+maximum : List comparable -> Maybe comparable
+minimum : List comparable -> Maybe comparable
+sum : List Int -> Int
+product : List Int -> Int
 append : List a -> List a -> List a
-concatMap : (a -> List b) -> List a -> List b
+isEmpty : List a -> Bool
+head : List a -> Maybe a
+tail : List a -> Maybe (List a)
+take : Int -> List a -> List a                   -- [] when n <= 0
+drop : Int -> List a -> List a                   -- unchanged when n <= 0
+partition : (a -> Bool) -> List a -> ( List a, List a )   -- ( passing, failing )
+unzip : List ( a, b ) -> ( List a, List b )
+sort : List comparable -> List comparable
+sortBy : (a -> comparable) -> List a -> List a
+sortWith : (a -> a -> Order) -> List a -> List a
+```
+
+**Maybe** (`Maybe`, `Just`, `Nothing` built in):
+
+```text
+withDefault : a -> Maybe a -> a                  -- evaluates the default even for Just
+map : (a -> b) -> Maybe a -> Maybe b
+map2 : (a -> b -> value) -> Maybe a -> Maybe b -> Maybe value
+map3 : (a -> b -> c -> value) -> Maybe a -> Maybe b -> Maybe c -> Maybe value
+andThen : (a -> Maybe b) -> Maybe a -> Maybe b
+```
+
+**Result** (`type Result error value = Ok value | Err error`):
+
+```text
+map : (a -> value) -> Result x a -> Result x value
+map2 : (a -> b -> value) -> Result x a -> Result x b -> Result x value     -- first Err wins
+map3 : (a -> b -> c -> value) -> Result x a -> Result x b -> Result x c -> Result x value
+andThen : (a -> Result x b) -> Result x a -> Result x b
+withDefault : a -> Result x a -> a
+toMaybe : Result x a -> Maybe a
+fromMaybe : x -> Maybe a -> Result x a
+mapError : (x -> y) -> Result x a -> Result y a
+```
+
+**Tuple** (pairs only):
+
+```text
+pair : a -> b -> ( a, b )
+first : ( a, b ) -> a
+second : ( a, b ) -> b
+mapFirst : (a -> x) -> ( a, b ) -> ( x, b )
+mapSecond : (b -> y) -> ( a, b ) -> ( a, y )
+mapBoth : (a -> x) -> (b -> y) -> ( a, b ) -> ( x, y )
+```
+
+**String** (UTF-8 text; these five only):
+
+```text
+fromInt : Int -> String                          -- fromInt -42 == "-42"
+isEmpty : String -> Bool
+append : String -> String -> String
+concat : List String -> String
+join : String -> List String -> String           -- join ", " [ "a", "b" ] == "a, b"
 ```
 
 **Map** (`import Map` or `import Map exposing (Map)`; association list by key's Data encoding; O(n)
@@ -443,7 +564,8 @@ filter : (a -> Bool) -> Array a -> Array a
 slice : Int -> Int -> Array a -> Array a
 ```
 
-**Bytes** (`import Bytes`; builtins; the byte string is the last argument):
+**Bytes** (`import Bytes`; builtins; the byte string is the last argument; compare with `==`, `<`,
+`compare`):
 
 ```text
 empty : Bytes
@@ -457,8 +579,6 @@ drop : Int -> Bytes -> Bytes
 at : Int -> Bytes -> Int                      -- fails out of range
 cons : Int -> Bytes -> Bytes
 replicate : Int -> Int -> Bytes               -- count, byte
-lessThan : Bytes -> Bytes -> Bool
-lessThanOrEqual : Bytes -> Bytes -> Bool
 fromIntBigEndian : Int -> Int -> Bytes        -- width (0 = minimal), value
 fromIntLittleEndian : Int -> Int -> Bytes
 toIntBigEndian : Bytes -> Int
@@ -480,7 +600,7 @@ keccak256 : Bytes -> Bytes
 ripemd160 : Bytes -> Bytes
 ```
 
-**Debug** (`import Debug`): `trace : String -> a -> a`. Both arguments are evaluated first, so the
+**Debug** (imported by default): `trace : String -> a -> a`. Both arguments are evaluated first, so the
 message is not emitted if the value fails. Traces cost budget and bytes.
 
 **Expect** (tests only; `import Expect exposing (Expectation)`):
@@ -491,10 +611,10 @@ fail : String -> Expectation
 onFail : String -> Expectation -> Expectation
 equal : a -> a -> Expectation                 -- expected, actual
 notEqual : a -> a -> Expectation
-atMost : Int -> Int -> Expectation            -- bound, actual: actual <= bound
-atLeast : Int -> Int -> Expectation           -- actual >= bound
-lessThan : Int -> Int -> Expectation          -- actual < bound
-greaterThan : Int -> Int -> Expectation       -- actual > bound
+atMost : comparable -> comparable -> Expectation       -- bound, actual: actual <= bound
+atLeast : comparable -> comparable -> Expectation      -- actual >= bound
+lessThan : comparable -> comparable -> Expectation     -- actual < bound
+greaterThan : comparable -> comparable -> Expectation  -- actual > bound
 every : List Expectation -> Expectation
 ```
 
@@ -543,9 +663,10 @@ Unexposed declarations are helpers. Test modules live in `tests/`, may import `s
 
 ## 9. Java libraries (Julc stdlib)
 
-Map a class, then import the module. Nothing is mapped by default. Use explicit exposing lists
-(`exposing (..)` is rejected for Java modules). Java argument order: the collection or subject comes
-**first**.
+Java libraries fill gaps in the core library; prefer a core function when one exists (`max`, `abs`,
+`^`, `List.member`). Map a class, then import the module. Nothing is mapped by default. Use explicit
+exposing lists (`exposing (..)` is rejected for Java modules). Java argument order: the collection or
+subject comes **first**.
 
 ```toml
 [java-modules]
@@ -563,8 +684,9 @@ Map a class, then import the module. Nothing is mapped by default. Use explicit 
 | `Values.assetOf` | `Value -> Bytes -> Bytes -> Int` (policy bytes, token name) |
 | `Values.geq`, `leq`, `eq` | `Value -> Value -> Bool` |
 | `Values.flatten` | `Value -> List Data` (each a `( Bytes, Bytes, Int )` triple; decode with `Data.decode`) |
-| `Math.max`, `min`, `pow`, `floorDiv`, `floorMod` | `Int -> Int -> Int` |
-| `Math.abs`, `sign` | `Int -> Int` |
+| `Math.floorDiv`, `floorMod` | `Int -> Int -> Int` (round towards negative infinity; `//` truncates) |
+| `Math.expMod` | `Int -> Int -> Int -> Int` |
+| `Math.sign` | `Int -> Int` |
 | `Contexts.findOwnInput` (`ContextsLib`) | `ScriptContext -> JulcOptional TxInInfo` (convert with `Data.fromOptional`) |
 | `Contexts.signedBy` | `TxInfo -> Bytes -> Bool` (pass `pkh.hash`) |
 | `Output.lovelacePaidTo` (`OutputLib`) | `List TxOut -> Address -> Int` |
@@ -580,7 +702,7 @@ Run from the project directory (or pass it as the first argument). Exit status i
 `1` on any error, failing test, failed evaluation or when no tests are found.
 
 1. `elci check`: compile every validator (or the entrypoint); prints one line each:
-   `validator badge (mint): checked; 652 FLAT bytes; plutus-v3-pv11-uplc-1.1.0`. Fix every error first.
+   `validator badge (mint): checked; 649 FLAT bytes; plutus-v3-pv11-uplc-1.1.0`. Fix every error first.
 2. `elci test`: run tests; prints `PASS`/`FAIL Module.test (cpu N, mem M)` then
    `N passed, M failed (seed S)`. Options: `--match <substring>` (case-insensitive on `Module.test`),
    `--seed <n>` (reproduce), `--fuzz <runs>` (property runs, default 100).
@@ -600,10 +722,10 @@ Error format: `path:line:col: ELCIxxxx: message`; for a validator the first line
 | Code | Typical message | Fix |
 | --- | --- | --- |
 | `ELCI1001` | `Float is unsupported; ...`, `Unsupported character '%'` | scaled `Int`; `modBy` |
-| `ELCI1002` | `Function parameters require irrefutable patterns; use case ...`, `Comparison operators cannot be chained` | `case`; `&&` |
+| `ELCI1002` | `Function parameters require irrefutable patterns; use case ...`, `Comparison operators cannot be chained`, `Mixing (<\|) and (\|>) needs parentheses ...` | `case`; `&&`; parentheses |
 | `ELCI2001` | `Float division is unsupported; use // for integer quotient` | `//` |
-| `ELCI2002` | `Type mismatch: expected Int, found a`, `The operator + works on Int values, not String; use ++ to append`, `The operator < compares Int values, not Bytes; use Bytes.lessThan ...` | fix the types or signature |
-| `ELCI2003` | `Equality is unsupported for Data because ...`, `Append requires a concrete String or List type` | compare decoded values / lookups |
+| `ELCI2002` | `Type mismatch: expected Int, found a`, `The operator + works on Int values, not String; use ++ to append` | fix the types or signature |
+| `ELCI2003` | `The operator == cannot compare Data values: Data is opaque; decode it and compare the values`, `The operator < needs comparable values, but Bool, in ( Int, Bool ), is not comparable. ...`, `` The operator > compares values of type `a`, but the annotation of `larger` says `a` can be any type. Rename it `comparable` ... ``, `The operator ++ appends String or List values, not Int` | compare decoded values or keys; `List.sortBy`; rename to `comparable`/`appendable` |
 | `ELCI2004` | `Top-level declarations require a type signature` | add the signature |
 | `ELCI2005` | `Unknown name 'lenght'`, `Unknown name 'Math.maximum'; check that the imported module exports it` | spelling; section 3.3 |
 | `ELCI2006` | `Unreachable pattern`, `Duplicate pattern variable x` | remove the branch; rename |
@@ -611,16 +733,16 @@ Error format: `path:line:col: ELCIxxxx: message`; for a validator the first line
 | `ELCI2008` | `Cyclic eager values are unsupported; recursion requires functions` | break the cycle |
 | `ELCI2009` | `Entrypoints require concrete types`, `Handler Main.mint requires a concrete type` | no type variables in handlers |
 | `ELCI2010` | `Missing field 'price'; available fields: [amount]` | correct field; annotate the record type |
-| `ELCI2011` | `Duplicate constructor Buy` | rename a constructor |
-| `ELCI2012` | `Type List expects 1 arguments, got 2`, `Type is not declared or imported in this module: Result` (no location) | declare/import the type |
+| `ELCI2011` | `Duplicate constructor Buy`, `Nothing is a constructor of the built-in Maybe type; choose another name`, `Bytes is a built-in type; choose another name` | rename |
+| `ELCI2012` | `Type List expects 1 arguments, got 2`, `Type is not declared or imported in this module: Amount`, `Write tuple types as ( a, b ) or ( a, b, c )` | declare/import the type |
 | `ELCI2013` | `Functions cannot be serialized as datum or redeemer`, `Arrays have no Data encoding ...`, `... TxOut has no approved strict Data boundary` | Data-encodable boundary types; `List` in data |
 | `ELCI2014` | `Handler Main.spend does not have the spend signature datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (0 parameters); its type is ...` | section 6 |
 | `ELCI2101` | `Missing source module: X; add X.elm under a source directory, or map a Java library to it under [java-modules]`, `Expect is part of the test library; only test modules can import it` | add module / mapping; move to `tests/` |
-| `ELCI2102` | `Declaration conflicts with imported name not`, `Ambiguous name fee` | rename; qualify |
+| `ELCI2102` | `max is ambiguous: it could be Basics.max or Utils.max. Write the one you mean, like Basics.max, or stop exposing the other` | qualify, or expose the name explicitly |
 | `ELCI2103` | `Handler Main.mint must be exposed by its module` | expose it |
-| `ELCI2104` | `Module String is not imported or does not expose 'fromInt'`, `Import cycle: Main -> Pricing -> Main`, `Java modules cannot be imported with exposing (..); ...` | import it; section 3.3; break cycles |
+| `ELCI2104` | ``Bytes.fromString needs the Bytes module; add `import Bytes` ``, `Elci's List module has no find. It has all, any, ...`, `Elci has no Debug.log; use Debug.trace message value, which returns value`, `Map is imported as M; write M.get`, `The module name String is taken by Elci's core library; rename this module`, `Import cycle: Main -> Pricing -> Main`, `Java modules cannot be imported with exposing (..); ...` | add the import; section 3.3; rename; break cycles |
 | `ELCI2105` | `...MathLib.divMod: Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>` | use another export |
-| `ELCI3001` | `Cannot specialize List.length at an unconstrained type List t -> Int; add a type annotation ...`, `Unresolved source type: t` | annotate (`let xs : List Int`) |
+| `ELCI3001` | `Cannot determine the type converted by Julc.Data.decode; add a type annotation` | annotate (`let xs : List Int`) |
 | `ELCI3002` | specialization limit (256) | remove polymorphic recursion |
 | `ELCI3003` | `Type argument T = Unit of firstOr must have a Plutus Data encoding`, `No strict decoder for ...Value` | Data-encodable type |
 | `ELCI4001` | `unknown validator 'x'`, `eval runs an [entrypoint] function; test validators with elci test`, `ABI drift from ...` | fix config or command |
@@ -632,10 +754,12 @@ A failing scenario that was never run prints `cannot prepare validator 'badge': 
 
 ## 12. Anti-patterns agents get wrong
 
-1. **Using Elm core APIs** (`String.fromInt`, `Maybe.withDefault`, `List.head`, `Dict`, `Debug.log`,
-   `max`). They do not exist; use section 3.3.
-2. **Forgetting imports.** `Map`, `Array`, `Bytes`, `Debug`, `Julc.Data` must be imported; only `List` is
-   implicit. `Julc.*` Java modules also need a `[java-modules]` mapping.
+1. **Using Elm APIs Elci lacks** (`Dict`, `Set`, `Debug.log`, `String.length`, `String.toInt`,
+   `List.map4`, `.field`). Use section 3.3. The core functions in section 8 do exist; use them rather than
+   writing your own or mapping `Julc.Math`.
+2. **Forgetting imports.** `Map`, `Array`, `Bytes`, `Julc.Data` must be imported; `Basics`, `List`,
+   `Maybe`, `Result`, `String`, `Tuple` and `Debug` are implicit. `Julc.*` Java modules also need a
+   `[java-modules]` mapping.
 3. **Omitting type signatures** on top-level declarations (`ELCI2004`).
 4. **Wrong handler shape.** Parameters first, then datum (spend only), redeemer, `ScriptContext`, returning
    `Bool`. Use `()` for unused datum/redeemer. Expose the handler.
@@ -651,10 +775,16 @@ A failing scenario that was never run prints `cannot prepare validator 'badge': 
 13. **Missing `Scenario.parameters`**: a scenario must pass every validator parameter, in order.
 14. **Importing `Expect`/`Scenario`/`Property` from `src`** (`ELCI2101`). They are for `tests/` only.
 15. **`x -1` meaning subtraction.** It is an application; write `x - 1`.
-16. **Float, `/`, `%`, `^`**: integers only; `//`, `modBy`, `remainderBy`, `Math.pow`.
+16. **Float, `/`, `%`**: integers only; `//`, `modBy`, `remainderBy`, `^` (non-negative exponents).
 17. **`exposing (..)` on Java modules** or relying on Java overloads (rejected).
 18. **Trusting parameters on-chain**: they are not validated; validate with `elci apply` before deployment.
 19. **Very large integer literals with elm-format**: elm-format 0.8.8 corrupts literals beyond 64 bits.
+20. **Plain type variables with `<` or `++`.** Name them `comparable` or `appendable` (`ELCI2003`).
+21. **Sorting records with `List.sort`.** Records and custom types are not comparable: use
+    `List.sortBy (\r -> r.key)` or `List.sortWith`.
+22. **Reading a PlutusTx `Either` as `Result`.** `Ok` is constructor 0 and `Err` 1, the reverse of
+    `Left`/`Right`.
+23. **Expensive `Maybe.withDefault` defaults.** The default is always evaluated; use `case` instead.
 
 ## 13. Canonical examples
 
@@ -712,7 +842,7 @@ spend lock action ctx =
 
 signedBy : PubKeyHash -> ScriptContext -> Bool
 signedBy key ctx =
-    List.any (\signer -> signer == key) ctx.txInfo.signatories
+    List.member key ctx.txInfo.signatories
 ```
 
 ```elm title="tests/EscrowTest.elm"
@@ -812,14 +942,14 @@ claimsOpenExactlyAtTheDeadline offset =
 
 ```text
 $ elci check
-validator escrow (spend): checked; 554 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator escrow (spend): checked; 551 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 $ elci test --seed 42
-PASS EscrowTest.beneficiaryClaimsAtTheDeadline (cpu 15777840, mem 60450)
-PASS EscrowTest.earlyClaimFails (cpu 15761840, mem 60350)
-PASS EscrowTest.ownerRefunds (cpu 13034425, mem 51979)
-PASS EscrowTest.strangerCannotRefund (cpu 13412858, mem 53911)
+PASS EscrowTest.beneficiaryClaimsAtTheDeadline (cpu 15729840, mem 60150)
+PASS EscrowTest.earlyClaimFails (cpu 15713840, mem 60050)
+PASS EscrowTest.ownerRefunds (cpu 12986425, mem 51679)
+PASS EscrowTest.strangerCannotRefund (cpu 13364858, mem 53611)
 PASS EscrowTest.lockRoundTrips (cpu 8484615, mem 30707)
-PASS EscrowTest.claimsOpenExactlyAtTheDeadline (100 runs, max cpu 15777840, mem 60450)
+PASS EscrowTest.claimsOpenExactlyAtTheDeadline (100 runs, max cpu 15729840, mem 60150)
 6 passed, 0 failed (seed 42)
 ```
 
@@ -864,7 +994,7 @@ mint admin quantity ctx =
     case ctx.scriptInfo of
         MintingScript policy ->
             (quantity /= 0)
-                && List.any (\signer -> signer == admin) ctx.txInfo.signatories
+                && List.member admin ctx.txInfo.signatories
                 && (Values.assetOf ctx.txInfo.mint policy.hash badgeName == quantity)
 
         _ ->
@@ -936,16 +1066,16 @@ onlyTheDeclaredQuantity declared actual =
 
 ```text
 $ elci check
-validator badge (mint): checked; 652 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator badge (mint): checked; 649 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 $ elci test --seed 42
-PASS BadgeTest.adminMints (cpu 22263329, mem 76746)
-PASS BadgeTest.adminBurns (cpu 22263329, mem 76746)
-PASS BadgeTest.strangerCannotMint (cpu 7760762, mem 29491)
+PASS BadgeTest.adminMints (cpu 22215329, mem 76446)
+PASS BadgeTest.adminBurns (cpu 22215329, mem 76446)
+PASS BadgeTest.strangerCannotMint (cpu 7712762, mem 29191)
 PASS BadgeTest.zeroIsRejected (cpu 4768002, mem 18814)
-PASS BadgeTest.onlyTheDeclaredQuantity (100 runs, max cpu 22263329, mem 76746)
+PASS BadgeTest.onlyTheDeclaredQuantity (100 runs, max cpu 22215329, mem 76446)
 5 passed, 0 failed (seed 42)
 $ elci apply --validator badge --param 'admin={"bytes": "a2c20c77887ace1cd986193e4e75babd8993cfd56995cd5cfce609c2"}'
-validator badge: applied 1 parameter(s); hash 9e705b96f6d1439a58adbcff1329dbba5d4c9e7eeb985cb9227db981; wrote .../badge/build/validators/badge/applied.plutus.json
+validator badge: applied 1 parameter(s); hash d051482496116cc565cc69bfeae7b970dced562246fbc674d8d76891; wrote .../badge/build/validators/badge/applied.plutus.json
 ```
 
 ### 13.3 Function project for `elci eval`
@@ -955,11 +1085,10 @@ validator badge: applied 1 parameter(s); hash 9e705b96f6d1439a58adbcff1329dbba5d
 ```elm title="src/Main.elm"
 module Main exposing (main)
 
-import Debug
 import Map exposing (Map)
 
 
-type alias Order =
+type alias Purchase =
     { item : String
     , quantity : Int
     }
@@ -970,29 +1099,24 @@ prices =
     Map.fromList [ ( "apple", 3 ), ( "pear", 5 ) ]
 
 
-lineTotal : Order -> Maybe Int
-lineTotal order =
-    case Map.get order.item prices of
-        Just price ->
-            Just (price * order.quantity)
-
-        Nothing ->
-            Nothing
+lineTotal : Purchase -> Maybe Int
+lineTotal purchase =
+    Maybe.map (\price -> price * purchase.quantity) (Map.get purchase.item prices)
 
 
-total : List Order -> Int
-total orders =
+total : List Purchase -> Int
+total purchases =
     List.foldl
-        (\order sum ->
-            case lineTotal order of
+        (\purchase sum ->
+            case lineTotal purchase of
                 Just amount ->
                     sum + amount
 
                 Nothing ->
-                    Debug.trace ("no price for " ++ order.item) sum
+                    Debug.trace ("no price for " ++ purchase.item) sum
         )
         0
-        orders
+        purchases
 
 
 main : ( Int, Maybe Int )
@@ -1005,14 +1129,14 @@ main =
 ```text
 $ elci eval
 ( 11, Nothing )
-cpu 48992067, mem 162896
+cpu 49328067, mem 164996
 trace: no price for kiwi
 ```
 
 ## 14. Checklist before generating Elci code
 
 1. Is every top-level declaration annotated, and every module name equal to its file path?
-2. Did I avoid every Elm API in section 3.3 and import `Map`/`Array`/`Bytes`/`Debug`/`Julc.Data` where used?
+2. Did I avoid every Elm API in section 3.3 and import `Map`/`Array`/`Bytes`/`Julc.Data` where used?
 3. Does each handler match section 6, with parameters first, and is it exposed and listed in `elci.toml`?
 4. Are datum, redeemer and parameter types Data-encodable (no functions, `Array`, `Value`, `TxOut`)?
 5. Do I compare `PubKeyHash` with `PubKeyHash` (or `.hash` with `Bytes`), never mixed?

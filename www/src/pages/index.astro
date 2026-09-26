@@ -172,19 +172,19 @@ mint = "Badge.mint"`,
   {
     id: 'java',
     label: 'Java libraries',
-    file: 'src/Example/Threshold.elm',
+    file: 'src/Example/Offer.elm',
     lang: 'elm',
     caption:
       "Map a Julc on-chain Java library in elci.toml and import it like an Elm module. Elci compiles the library's real Java source into your script.",
-    code: `module Example.Threshold exposing (validate)
+    code: `module Example.Offer exposing (validate)
 
 import Julc.Ledger exposing (ScriptContext)
 import Julc.Math as Math
 
 
 validate : Int -> Int -> ScriptContext -> Bool
-validate minimum offered _ =
-    offered >= Math.max minimum 0`,
+validate minimumAda offeredLovelace _ =
+    Math.floorDiv offeredLovelace 1000000 >= minimumAda`,
   },
 ];
 

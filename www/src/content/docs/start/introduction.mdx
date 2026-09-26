@@ -189,8 +189,9 @@ Be aware of these limits before you start:
   Maven repository. [Installation](/start/installation/) walks you through it.
 - **It is not browser Elm.** There is no `Html`, no ports, no commands or subscriptions, and no `Float`.
   A contract is a pure function that returns `Bool`.
-- **No Elm packages.** Elci has its own small core (`List`, `Map`, `Array`, `Bytes`, `Debug`, `Julc.Data`)
-  plus Julc's Java libraries. `elm.json` and the Elm package registry are not used.
+- **No Elm packages.** Elci has Elm's core modules (`Basics`, `List`, `Maybe`, `Result`, `Tuple` and part of
+  `String`), its own `Map`, `Array`, `Bytes` and `Julc.Data` modules, and Julc's Java libraries. `elm.json`
+  and the Elm package registry are not used.
 - **Some tooling is missing.** There is no language server, and no CIP-57 blueprint generation yet. The
   build writes Julc's `validator.plutus.json` format and Elci's own `abi.json`.
 

@@ -55,7 +55,7 @@ notEqual unexpected actual =
         Fail "Expect.notEqual" [ Data.encode actual ]
 
 
-compare : String -> (Int -> Int -> Bool) -> Int -> Int -> Expectation
+compare : String -> (comparable -> comparable -> Bool) -> comparable -> comparable -> Expectation
 compare name holds bound actual =
     if holds actual bound then
         Pass
@@ -66,28 +66,28 @@ compare name holds bound actual =
 
 {-| `atMost bound actual` passes when `actual <= bound`.
 -}
-atMost : Int -> Int -> Expectation
+atMost : comparable -> comparable -> Expectation
 atMost =
     compare "Expect.atMost" (\actual bound -> actual <= bound)
 
 
 {-| `atLeast bound actual` passes when `actual >= bound`.
 -}
-atLeast : Int -> Int -> Expectation
+atLeast : comparable -> comparable -> Expectation
 atLeast =
     compare "Expect.atLeast" (\actual bound -> actual >= bound)
 
 
 {-| `lessThan bound actual` passes when `actual < bound`.
 -}
-lessThan : Int -> Int -> Expectation
+lessThan : comparable -> comparable -> Expectation
 lessThan =
     compare "Expect.lessThan" (\actual bound -> actual < bound)
 
 
 {-| `greaterThan bound actual` passes when `actual > bound`.
 -}
-greaterThan : Int -> Int -> Expectation
+greaterThan : comparable -> comparable -> Expectation
 greaterThan =
     compare "Expect.greaterThan" (\actual bound -> actual > bound)
 

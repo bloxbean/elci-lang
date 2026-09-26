@@ -140,6 +140,16 @@ async function elciModule(file) {
   return { module: name, types, functions };
 }
 
+/** Elm's default imports (ADR-008): every project and test module has them. */
+const DEFAULT_IMPORTS = {
+  Basics: '(imported by default: import Basics exposing (..))',
+  List: '(imported by default: import List)',
+  Maybe: '(imported by default: import Maybe exposing (Maybe(..)))',
+  Result: '(imported by default: import Result exposing (Result(..)))',
+  String: '(imported by default: import String)',
+  Tuple: '(imported by default: import Tuple)',
+};
+
 async function catalog() {
   const bundled = [];
   for (const [dir, kind] of [['core', 'core'], ['test', 'test-library']]) {
@@ -149,7 +159,7 @@ async function catalog() {
       bundled.push({
         ...module,
         kind,
-        import: module.module === 'List' ? '(always available; no import needed)' : `import ${module.module}`,
+        import: DEFAULT_IMPORTS[module.module] ?? `import ${module.module}`,
         availableIn: kind === 'core' ? 'all modules' : 'test modules only',
       });
     }

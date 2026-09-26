@@ -15,18 +15,20 @@ consume Elm packages, and is not a production-ready contract toolchain. See the
 module Example.Threshold exposing (validate)
 
 import Julc.Ledger exposing (ScriptContext)
-import Julc.Math as Math
 
 
 validate : Int -> Int -> ScriptContext -> Bool
 validate minimum offered _ =
-    offered >= Math.max minimum 0
+    offered >= max minimum 0
 ```
 
 Configured as `[validators.threshold]` with `spend = "Example.Threshold.validate"`,
-this becomes one script. `Math.max` is compiled from the actual bundled Julc Java
-on-chain library source. The source's three logical arguments become **one Plutus
-V3 ledger context argument**, with purpose dispatch, strict datum/redeemer
+this becomes one script. `max` comes from Elci's prelude: as in Elm, every module
+imports `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple` and `Debug`, and
+these core modules are Elci source compiled with your code. Julc's on-chain Java
+libraries fill the gaps: mapped in `elci.toml`, they are compiled from their
+actual bundled Java source. The source's three logical arguments become **one
+Plutus V3 ledger context argument**, with purpose dispatch, strict datum/redeemer
 decoding and Bool-to-success/failure wrapping.
 
 ```sh
@@ -54,7 +56,7 @@ blueprint generation is not implemented yet.
 - [Release workflow](docs/RELEASING.md): versioning, native binaries and GitHub Releases.
 - [Getting started](docs/GETTING_STARTED.md): build, first project, JVM/native CLI.
 - [Testing](docs/TESTING.md): `elci test`, expectations, transaction scenarios, property tests and JUnit.
-- [Standard library guide](docs/STDLIB.md): verified Java exports, limitations and writing Elci libraries.
+- [Standard library guide](docs/STDLIB.md): the core modules, verified Java exports, limitations and writing Elci libraries.
 - [Language guide](docs/LANGUAGE.md): syntax, semantics, types, libraries and limits.
 - [Compiler architecture](docs/ARCHITECTURE.md): frontend/backend API and invariants.
 - [Testing and review](docs/VALIDATION.md): reproducible checks and evidence.

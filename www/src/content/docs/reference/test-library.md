@@ -50,14 +50,14 @@ A failure carries a message and the Data encodings of the values involved, which
 | `fail` | `String -> Expectation` | never |
 | `equal` | `a -> a -> Expectation` | `expected == actual`, for `equal expected actual` |
 | `notEqual` | `a -> a -> Expectation` | `unexpected /= actual`, for `notEqual unexpected actual` |
-| `atMost` | `Int -> Int -> Expectation` | `actual <= bound`, for `atMost bound actual` |
-| `atLeast` | `Int -> Int -> Expectation` | `actual >= bound`, for `atLeast bound actual` |
-| `lessThan` | `Int -> Int -> Expectation` | `actual < bound`, for `lessThan bound actual` |
-| `greaterThan` | `Int -> Int -> Expectation` | `actual > bound`, for `greaterThan bound actual` |
+| `atMost` | `comparable -> comparable -> Expectation` | `actual <= bound`, for `atMost bound actual` |
+| `atLeast` | `comparable -> comparable -> Expectation` | `actual >= bound`, for `atLeast bound actual` |
+| `lessThan` | `comparable -> comparable -> Expectation` | `actual < bound`, for `lessThan bound actual` |
+| `greaterThan` | `comparable -> comparable -> Expectation` | `actual > bound`, for `greaterThan bound actual` |
 | `every` | `List Expectation -> Expectation` | every expectation in the list passes; otherwise the first failure is the result |
 | `onFail` | `String -> Expectation -> Expectation` | the expectation passes; otherwise its message is replaced, keeping its values |
 
-`equal` and `notEqual` require the same structural equality as `==`. Types without it, such as `Data`, functions and imported types without approved equality, are rejected at compile time with `ELCI2003`.
+`equal` and `notEqual` require the same structural equality as `==`. Types without it, such as `Data`, functions and imported types without approved equality, are rejected at compile time with `ELCI2003`. `atMost`, `atLeast`, `lessThan` and `greaterThan` take any [comparable type](/reference/core-modules/#comparable-types), as in elm-test: integers, strings, bytes, ledger hashes, and lists and tuples of these.
 
 ### Failure reports
 

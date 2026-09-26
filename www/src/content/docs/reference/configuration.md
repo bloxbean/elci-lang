@@ -110,7 +110,9 @@ Maps Elm-style module names to on-chain Java library classes:
 The key is the module name you import; the value is the fully qualified class name. A mapping is only
 read when a module imports it. A module name cannot be both a source module and a Java module.
 `Julc.TypedMap` and `Julc.TypedArray` are reserved by the core `Map` and `Array` modules and cannot be
-remapped. See [standard library](/advanced/standard-library/) for the bundled classes.
+remapped. The core module names `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map` and `Array`,
+and the reserved names `Dict`, `Set`, `Value` and `Elci`, cannot be keys. See
+[standard library](/advanced/standard-library/) for the bundled classes.
 
 ## `[tests]`
 
@@ -215,6 +217,7 @@ purpose = "function"
 | Multi-line array | `elci.toml:3: expected key = value` |
 | Missing source directory | `Source directory not found: my-project/lib` |
 | Remapping a core library | `ELCI4001: [java-modules] may not remap Julc.TypedMap, which the Elci core library uses for org.julclang.stdlib.lib.TypedMapLib` |
+| Mapping a core module name | `ELCI4001: [java-modules] may not map Value, a module name of Elci's core library` |
 | ABI changed | `ELCI4001: my-project/elci.toml:9: [validators.main]: ABI drift from abi/main.json; compare constructor tags, field order, handler roles and parameters` |
 
 Each message is printed after `elci: ` and the command exits with status 1.

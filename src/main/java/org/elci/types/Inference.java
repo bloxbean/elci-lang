@@ -12,6 +12,11 @@ public final class Inference {
     public final IdentityHashMap<Expr, Ty> expressions = new IdentityHashMap<>();
     public final IdentityHashMap<Decl, Ty> declarations = new IdentityHashMap<>();
     public final IdentityHashMap<Decl, Scheme> declarationSchemes = new IdentityHashMap<>();
+    /**
+     * For a member of a recursive group: the variables other members quantify and it doesn't.
+     * In its body they are ambiguous, like the element type of the `[]` in `g [] n` (ADR-008).
+     */
+    public final IdentityHashMap<Decl, Set<Var>> foreignVariables = new IdentityHashMap<>();
     public final Map<String, Scheme> globals = new LinkedHashMap<>();
     public final Map<String, Union> unions = new LinkedHashMap<>();
     public final Map<String, Union> constructors = new LinkedHashMap<>();
@@ -178,11 +183,16 @@ public final class Inference {
 
     private final List<Map.Entry<Ty, Token>> append = new ArrayList<>();
     private final List<Map.Entry<Ty, Token>> equality = new ArrayList<>();
+    /** Types that must be comparable (ordered by {@code <}), with the use that requires it. */
+    private final List<Map.Entry<Ty, Token>> comparable = new ArrayList<>();
+    /** Variables some declaration's scheme quantifies; every other unresolved variable is ambiguous. */
+    private final Set<Var> generalizedVariables = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private Ty instantiate(Scheme scheme, Token token) {
         var instance = scheme.instantiateAll();
         instance.equality().forEach(type -> equality.add(Map.entry(type, token)));
         instance.append().forEach(type -> append.add(Map.entry(type, token)));
+        instance.comparable().forEach(type -> comparable.add(Map.entry(type, token)));
         return instance.body();
     }
 
@@ -266,44 +276,142 @@ public final class Inference {
                     recordConstraints.getFirst().token(),
                     "Field access requires a known closed record; add a concrete record"
                             + " annotation");
-        for (var constraint : append) {
-            Ty t = prune(constraint.getKey());
-            if (!(t instanceof Con c) || !Set.of("String", "List").contains(c.name()))
-                throw new Diagnostic(
-                        "ELCI2003",
-                        constraint.getValue(),
-                        "Append requires a concrete String or List type");
-        }
-        for (var constraint : equality) {
-            Ty t = prune(constraint.getKey());
-            if (t instanceof Var)
-                throw new Diagnostic(
-                        "ELCI2003",
-                        constraint.getValue(),
-                        "Equality requires a concrete supported type");
-            if (!equalityCapable(t, new HashSet<>()))
-                throw new Diagnostic(
-                        "ELCI2003",
-                        constraint.getValue(),
-                        "Equality is unsupported for "
-                                + t
-                                + " because it contains a function, opaque Data, or an imported"
-                                + " type without verified equality");
-        }
+        // Requirements left here are at concrete uses. A variable still unknown is ambiguous: nothing
+        // determines it, so no value of it exists (the element type of `[] == []`).
+        append.forEach(constraint -> checkAppend(constraint, true));
+        comparable.forEach(this::checkComparable);
+        equality.forEach(this::checkEquality);
+        // Decided once, here: a variable no scheme quantifies is ambiguous (ADR-008). Lowering
+        // represents it as Data and never defaults any other variable.
+        var ambiguous = new Con(Types.AMBIGUOUS, List.of());
+        for (var types : List.of(expressions.values(), declarations.values()))
+            for (Ty type : types)
+                for (Var v : variables(type))
+                    if (!generalizedVariables.contains(v)) v.link = ambiguous;
     }
 
-    private boolean equalityCapable(Ty type, Set<String> visiting) {
+    /**
+     * {@code ++} needs String or List values. At a concrete use the type must be known; in a
+     * generic definition a variable is left to its callers.
+     */
+    private void checkAppend(Map.Entry<Ty, Token> constraint, boolean atUse) {
+        Ty t = prune(constraint.getKey());
+        if (t instanceof Var) {
+            if (atUse)
+                throw new Diagnostic(
+                        "ELCI2003",
+                        constraint.getValue(),
+                        describeUse(constraint.getValue())
+                                + " cannot tell here whether it appends String or List values; add a type annotation");
+            return;
+        }
+        if (!(t instanceof Con c) || !Set.of("String", "List").contains(c.name()))
+            throw new Diagnostic(
+                    "ELCI2003",
+                    constraint.getValue(),
+                    describeUse(constraint.getValue()) + " appends String or List values, not " + Types.show(t));
+    }
+
+    /** Ordering needs a comparable type; a variable is comparable here (ambiguous, or left to callers). */
+    private void checkComparable(Map.Entry<Ty, Token> constraint) {
+        Ty t = prune(constraint.getKey());
+        Ty offending = notComparable(t);
+        if (offending == null) return;
+        boolean custom = offending instanceof Con c && !c.name().equals("Elci.Maybe")
+                && (c.name().startsWith("Record:") || unions.values().stream()
+                        .anyMatch(u -> nominal(u.name()).equals(c.name())));
+        throw new Diagnostic(
+                "ELCI2003",
+                constraint.getValue(),
+                describeUse(constraint.getValue())
+                        + " needs comparable values, but "
+                        + part(offending, t)
+                        + " not comparable. Comparable types are Int, String, Bytes, byte-string"
+                        + " ledger types such as PubKeyHash, and lists and tuples of comparable types"
+                        + (custom ? ". Compare a comparable field instead, or sort with List.sortBy or"
+                                + " List.sortWith" : ""));
+    }
+
+    /** Equality needs a type without functions, opaque Data or unapproved imported types. */
+    private void checkEquality(Map.Entry<Ty, Token> constraint) {
+        Ty t = prune(constraint.getKey());
+        Ty offending = notEquatable(t, new HashSet<>());
+        if (offending == null) return;
+        String name = offending instanceof Con c ? c.name() : "";
+        String reason = name.equals("->") ? "functions have no equality"
+                : name.equals("Data") ? "Data is opaque; decode it and compare the values"
+                : importedRepresentations.containsKey(name) ? "its library does not approve equality"
+                : "it has no equality";
+        throw new Diagnostic(
+                "ELCI2003",
+                constraint.getValue(),
+                describeUse(constraint.getValue()) + " cannot compare " + Types.show(t) + " values: "
+                        + (offending == t ? "" : Types.show(offending) + " is part of them, and ") + reason);
+    }
+
+    /** {@code offending} as the subject of a sentence, located in {@code whole} when it is part of it. */
+    private static String part(Ty offending, Ty whole) {
+        return offending == whole ? Types.show(whole) + " is"
+                : Types.show(offending) + ", in " + Types.show(whole) + ", is";
+    }
+
+    /**
+     * Whether values of {@code type} are ordered: Int, String, byte strings (including byte-backed
+     * ledger types such as PubKeyHash), and lists and tuples of comparable types, as in Elm plus
+     * byte strings.
+     */
+    public boolean comparableCapable(Ty type) {
+        return notComparable(type) == null;
+    }
+
+    /** The part of {@code type} that is not comparable, or null; an ambiguous variable is (no value of it exists). */
+    private Ty notComparable(Ty type) {
         type = prune(type);
-        if (!(type instanceof Con c)) return false;
+        if (!(type instanceof Con c)) return null;
+        if (c.name().equals("Int") || c.name().equals("String") || orderedBytes(c.name())) return null;
+        if (c.name().equals("List") || c.name().equals("Tuple")) {
+            for (Ty argument : c.args()) {
+                Ty offending = notComparable(argument);
+                if (offending != null) return offending;
+            }
+            return null;
+        }
+        return type;
+    }
+
+    /**
+     * Byte strings ordered by their bytes: {@code Bytes} and the ledger's byte-string types, such as
+     * hashes, policy ids and token names. Other imported byte-backed types are not comparable: the
+     * order of their bytes need not mean anything.
+     */
+    public boolean orderedBytes(String name) {
+        return name.equals("Bytes") || name.startsWith("org.julclang.ledger.") && byteEquality(name);
+    }
+
+    /** How a requirement's source token reads in a message: an operator or a function name. */
+    private static String describeUse(Token token) {
+        return token.kind() == Token.Kind.SYMBOL ? "The operator " + token.text() : "`" + token.text() + "`";
+    }
+
+    /** The part of {@code type} without equality, or null; an ambiguous variable has it (no value of it exists). */
+    private Ty notEquatable(Ty type, Set<String> visiting) {
+        type = prune(type);
+        if (!(type instanceof Con c)) return null;
         if (Set.of("Int", "Bool", "String", "Unit").contains(c.name()) || byteEquality(c.name()))
-            return true;
+            return null;
         if (c.name().equals("->") || c.name().equals("Data") || c.name().equals("ScriptContext"))
-            return false;
-        if (c.name().equals("List") || c.name().equals("Tuple") || c.name().startsWith("Record:"))
-            return c.args().stream().allMatch(a -> equalityCapable(a, visiting));
+            return type;
+        if (c.name().equals("List") || c.name().equals("Tuple") || c.name().startsWith("Record:")) {
+            for (Ty argument : c.args()) {
+                Ty offending = notEquatable(argument, visiting);
+                if (offending != null) return offending;
+            }
+            return null;
+        }
         if (importedRepresentations.containsKey(c.name()))
-            return approves(c.name(), org.julclang.compiler.backend.LibraryType.Operation.EQUALS);
-        if (!visiting.add(c.toString())) return true;
+            return approves(c.name(), org.julclang.compiler.backend.LibraryType.Operation.EQUALS) ? null : type;
+        // A polymorphically recursive type never repeats; lowering reports it if it is used.
+        if (!visiting.add(c.toString()) || visiting.size() > 64) return null;
         try {
             for (var union : unions.values())
                 if (nominal(union.name()).equals(c.name())) {
@@ -311,12 +419,13 @@ public final class Inference {
                     for (int i = 0; i < union.parameters().size(); i++)
                         variables.put(union.parameters().get(i), c.args().get(i));
                     for (var variant : union.variants())
-                        for (var field : variant.fields())
-                            if (!equalityCapable(annotated(field, variables), visiting))
-                                return false;
-                    return true;
+                        for (var field : variant.fields()) {
+                            Ty offending = notEquatable(annotated(field, variables), visiting);
+                            if (offending != null) return offending;
+                        }
+                    return null;
                 }
-            return false;
+            return type;
         } finally {
             visiting.remove(c.toString());
         }
@@ -379,16 +488,20 @@ public final class Inference {
             }
             var declarationEquality = new IdentityHashMap<Decl, List<Map.Entry<Ty, Token>>>();
             var declarationAppend = new IdentityHashMap<Decl, List<Map.Entry<Ty, Token>>>();
+            var declarationComparable = new IdentityHashMap<Decl, List<Map.Entry<Ty, Token>>>();
             for (var d : group) {
                 int equalityStart = equality.size();
                 int appendStart = append.size();
+                int comparableStart = comparable.size();
                 var local = new LinkedHashMap<>(env);
                 var params = new ArrayList<Ty>();
-                if (d.annotation() != null)
+                if (d.annotation() != null) {
+                    rejectNumber(d);
                     unify(
                             monotypes.get(d.name()),
                             annotated(d.annotation(), new HashMap<>()),
                             d.token());
+                }
                 Ty parameterShape = monotypes.get(d.name());
                 for (String p : d.parameters()) {
                     Ty t = new Var(), next = new Var();
@@ -405,6 +518,8 @@ public final class Inference {
                         d, new ArrayList<>(equality.subList(equalityStart, equality.size())));
                 declarationAppend.put(
                         d, new ArrayList<>(append.subList(appendStart, append.size())));
+                declarationComparable.put(
+                        d, new ArrayList<>(comparable.subList(comparableStart, comparable.size())));
             }
             solveFields();
             if (top && !recordConstraints.isEmpty())
@@ -413,6 +528,17 @@ public final class Inference {
                         recordConstraints.getFirst().token(),
                         "Field access needs a concrete closed record type; an unconstrained generic"
                                 + " signature is insufficient");
+            // Members of a recursive group share type variables, so a requirement one member's
+            // body imposes can constrain every member's type.
+            var groupEquality = new ArrayList<Map.Entry<Ty, Token>>();
+            var groupAppend = new ArrayList<Map.Entry<Ty, Token>>();
+            var groupComparable = new ArrayList<Map.Entry<Ty, Token>>();
+            for (var d : group) {
+                groupEquality.addAll(declarationEquality.getOrDefault(d, List.of()));
+                groupAppend.addAll(declarationAppend.getOrDefault(d, List.of()));
+                groupComparable.addAll(declarationComparable.getOrDefault(d, List.of()));
+            }
+            var rigidCopies = new IdentityHashMap<Decl, Map<Var, Ty>>();
             for (var d : group) {
                 var t = monotypes.get(d.name());
                 if (top && d.annotation() == null)
@@ -424,9 +550,35 @@ public final class Inference {
                     // Skolems prevent accepting 'a -> a' for an Int-only implementation.
                     var rigid = new HashMap<String, Ty>();
                     collectRigid(d.annotation(), rigid);
-                    unify(copy(t, new HashMap<>()), annotated(d.annotation(), rigid), d.token());
-                    unify(t, annotated(d.annotation(), new HashMap<>()), d.token());
+                    var copies = new HashMap<Var, Ty>();
+                    unify(copy(t, copies), annotated(d.annotation(), rigid), d.token());
+                    rigidCopies.put(d, copies);
+                    var named = new HashMap<String, Ty>();
+                    unify(t, annotated(d.annotation(), named), d.token());
+                    // As in Elm, a variable named `comparable…`, `appendable…` or `compappend…`
+                    // requires such values of callers.
+                    named.forEach((name, variable) -> {
+                        var requirement = Map.entry(variable, d.token());
+                        if (comparableName(name)) {
+                            comparable.add(requirement);
+                            groupComparable.add(requirement);
+                        }
+                        if (appendableName(name)) {
+                            append.add(requirement);
+                            groupAppend.add(requirement);
+                        }
+                    });
                 }
+            }
+            // Every member's named requirements are known now, so the naming rule doesn't depend on
+            // declaration order. The inferred variables are linked to the annotation's by now.
+            for (var entry : rigidCopies.entrySet()) {
+                var copies = new HashMap<Var, Ty>();
+                entry.getValue().forEach((v, r) -> {
+                    if (prune(v) instanceof Var linked) copies.put(linked, r);
+                });
+                requireConstrainedNames(entry.getKey(), groupComparable, copies, true);
+                requireConstrainedNames(entry.getKey(), groupAppend, copies, false);
             }
             solveFields();
             var environmentVars = new HashSet<Var>();
@@ -444,6 +596,8 @@ public final class Inference {
                     Collections.newSetFromMap(new IdentityHashMap<Map.Entry<Ty, Token>, Boolean>());
             var generalizedAppend =
                     Collections.newSetFromMap(new IdentityHashMap<Map.Entry<Ty, Token>, Boolean>());
+            var generalizedComparable =
+                    Collections.newSetFromMap(new IdentityHashMap<Map.Entry<Ty, Token>, Boolean>());
             for (var d : group) {
                 var t = monotypes.get(d.name());
                 var vs = variables(t);
@@ -455,24 +609,43 @@ public final class Inference {
                                         && independent(d, ds)
                                         && nonExpansive(d);
                 var quantified = eligible ? vs : Set.<Var>of();
+                generalizedVariables.addAll(quantified);
                 var equalityRequirements = new ArrayList<Ty>();
-                for (var requirement : declarationEquality.getOrDefault(d, List.of()))
+                // A requirement no instantiation can meet is reported at its definition, as in Elm.
+                for (var requirement : groupEquality)
                     if (!Collections.disjoint(variables(requirement.getKey()), quantified)) {
+                        checkEquality(requirement);
                         equalityRequirements.add(requirement.getKey());
                         generalizedEquality.add(requirement);
                     }
                 var appendRequirements = new ArrayList<Ty>();
-                for (var requirement : declarationAppend.getOrDefault(d, List.of()))
+                for (var requirement : groupAppend)
                     if (!Collections.disjoint(variables(requirement.getKey()), quantified)) {
+                        checkAppend(requirement, false);
                         appendRequirements.add(requirement.getKey());
                         generalizedAppend.add(requirement);
                     }
-                var scheme = new Scheme(quantified, t, equalityRequirements, appendRequirements);
+                var comparableRequirements = new ArrayList<Ty>();
+                for (var requirement : groupComparable)
+                    if (!Collections.disjoint(variables(requirement.getKey()), quantified)) {
+                        checkComparable(requirement);
+                        comparableRequirements.add(requirement.getKey());
+                        generalizedComparable.add(requirement);
+                    }
+                var scheme = new Scheme(quantified, t, equalityRequirements, appendRequirements, comparableRequirements);
                 env.put(d.name(), scheme);
                 declarationSchemes.put(d, scheme);
             }
+            if (group.size() > 1)
+                for (var d : group) {
+                    var foreign = Collections.newSetFromMap(new IdentityHashMap<Var, Boolean>());
+                    for (var other : group) if (other != d) foreign.addAll(declarationSchemes.get(other).quantified());
+                    foreign.removeAll(declarationSchemes.get(d).quantified());
+                    if (!foreign.isEmpty()) foreignVariables.put(d, foreign);
+                }
             equality.removeIf(generalizedEquality::contains);
             append.removeIf(generalizedAppend::contains);
+            comparable.removeIf(generalizedComparable::contains);
         }
     }
 
@@ -514,6 +687,70 @@ public final class Inference {
         siblings.remove(d.name());
         refs.retainAll(siblings);
         return refs.isEmpty();
+    }
+
+    private static boolean comparableName(String variable) {
+        return variable.startsWith("comparable") || variable.startsWith("compappend");
+    }
+
+    private static boolean appendableName(String variable) {
+        return variable.startsWith("appendable") || variable.startsWith("compappend");
+    }
+
+    /**
+     * Elm's rule: a type variable whose values are compared must be named {@code comparable…}, and
+     * one whose values are appended {@code appendable…} ({@code compappend…} allows both).
+     * {@code copies} maps the declaration's inferred variables to their rigid annotation
+     * variables ({@code $name}).
+     */
+    private void requireConstrainedNames(
+            Decl d, List<Map.Entry<Ty, Token>> requirements, Map<Var, Ty> copies, boolean ordering) {
+        for (var requirement : requirements)
+            for (Var v : constrainedVariables(requirement.getKey(), ordering)) {
+                var rigid = copies.containsKey(v) ? prune(copies.get(v)) : null;
+                if (!(rigid instanceof Con c) || !c.name().startsWith("$")) continue;
+                String name = c.name().substring(1);
+                if (ordering ? comparableName(name) : appendableName(name)) continue;
+                String declaration = d.name().substring(d.name().lastIndexOf('.') + 1);
+                throw new Diagnostic(
+                        "ELCI2003",
+                        requirement.getValue(),
+                        describeUse(requirement.getValue())
+                                + (ordering ? " compares" : " appends") + " values of type `" + name
+                                + "`, but the annotation of `" + declaration + "` says `" + name
+                                + "` can be any type. Rename it `" + (ordering ? "comparable" : "appendable")
+                                + "` (as in Elm) to require " + (ordering ? "comparable values" : "String or List values"));
+            }
+    }
+
+    /**
+     * The variables a requirement constrains: {@code ++} on {@code List a} constrains nothing,
+     * and ordering reaches variables only through lists and tuples (a {@code Maybe a} can never be
+     * ordered, which the structural check reports).
+     */
+    private static Set<Var> constrainedVariables(Ty type, boolean ordering) {
+        var result = new LinkedHashSet<Var>();
+        type = prune(type);
+        if (type instanceof Var v) result.add(v);
+        else if (ordering && type instanceof Con c && (c.name().equals("List") || c.name().equals("Tuple")))
+            for (Ty argument : c.args()) result.addAll(constrainedVariables(argument, true));
+        return result;
+    }
+
+    /** Elm's {@code number} stands for Int or Float; Elci has one number type. */
+    private static void rejectNumber(Decl d) {
+        var variables = new LinkedHashSet<String>();
+        typeVariables(d.annotation(), variables);
+        for (String variable : variables)
+            if (variable.startsWith("number"))
+                throw new Diagnostic("ELCI2003", d.token(), "The annotation of `"
+                        + d.name().substring(d.name().lastIndexOf('.') + 1) + "` uses `" + variable
+                        + "`, Elm's type variable for Int or Float. Elci has one number type: write Int");
+    }
+
+    private static void typeVariables(Type t, Set<String> into) {
+        if (Character.isLowerCase(t.name().charAt(0))) into.add(t.name());
+        t.arguments().forEach(a -> typeVariables(a, into));
     }
 
     private void collectRigid(Type t, Map<String, Ty> rigid) {
@@ -632,19 +869,23 @@ public final class Inference {
                             equality.add(Map.entry(a, b.token()));
                             yield con("Bool");
                         }
+                        if (Set.of("<", ">", "<=", ">=").contains(op)) {
+                            // Both operands have one comparable type; checked where it is concrete.
+                            unify(a, z, b.token());
+                            comparable.add(Map.entry(a, b.token()));
+                            yield con("Bool");
+                        }
+                        // Arithmetic is on Int only.
                         for (Ty operand : List.of(a, z)) {
                             if (prune(operand) instanceof Con c && !c.name().equals("Int")) {
-                                boolean ordering = Set.of("<", ">", "<=", ">=").contains(op);
-                                String hint = ordering
-                                        ? (c.name().equals("Bytes") ? "; use Bytes.lessThan for byte strings" : "")
-                                        : op.equals("+") && (c.name().equals("String") || c.name().equals("List"))
-                                                ? "; use ++ to append" : "";
-                                throw new Diagnostic("ELCI2002", b.token(), "The operator " + op + (ordering ? " compares" : " works on")
-                                        + " Int values, not " + Types.show(operand) + hint);
+                                String hint = op.equals("+") && (c.name().equals("String") || c.name().equals("List"))
+                                        ? "; use ++ to append" : "";
+                                throw new Diagnostic("ELCI2002", b.token(), "The operator " + op
+                                        + " works on Int values, not " + Types.show(operand) + hint);
                             }
                             unify(operand, con("Int"), b.token());
                         }
-                        yield Set.of("<", ">", "<=", ">=").contains(op) ? con("Bool") : con("Int");
+                        yield con("Int");
                     }
                     case Let l -> {
                         var local = new LinkedHashMap<>(env);
@@ -773,7 +1014,7 @@ public final class Inference {
             }
             return;
         }
-        if (p.name().equals("Tuple")) {
+        if (p.name().equals("$tuple")) {
             var fields = new ArrayList<Ty>();
             for (var part : p.arguments()) {
                 Ty field = new Var();
@@ -820,12 +1061,12 @@ public final class Inference {
             for (int i = 0; i < fields.size(); i++) bindPattern(p.arguments().get(i), fields.get(i), env);
             return;
         }
-        if (Set.of("True", "False").contains(p.name())) unify(t, con("Bool"), p.token());
+        if (p.token().kind() == Token.Kind.STRING) unify(t, con("String"), p.token());
+        else if (Set.of("True", "False").contains(p.name())) unify(t, con("Bool"), p.token());
         else if (p.token().kind() == Token.Kind.INT
                 || p.name().startsWith("-")
                         && p.name().length() > 1
                         && Character.isDigit(p.name().charAt(1))) unify(t, con("Int"), p.token());
-        else if (p.token().kind() == Token.Kind.STRING) unify(t, con("String"), p.token());
         else
             throw new Diagnostic(
                     "ELCI2001", p.token(), "Unsupported constructor pattern " + p.name());
@@ -1001,7 +1242,7 @@ public final class Inference {
             return List.of(
                     new PatternCtor("[]", List.of()),
                     new PatternCtor("::", List.of(c.args().getFirst(), type)));
-        if (c.name().equals("Tuple")) return List.of(new PatternCtor("Tuple", c.args()));
+        if (c.name().equals("Tuple")) return List.of(new PatternCtor("$tuple", c.args()));
         if (c.name().equals("Unit")) return List.of(new PatternCtor("$unit", List.of()));
         var imported = importedTypes.get(c.name());
         if (imported != null && !imported.constructors().isEmpty()

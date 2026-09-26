@@ -210,13 +210,11 @@ cpu 276441, mem 1001
 ```
 
 `Debug.trace message value` returns `value` and records `message`, and `elci eval` prints each message on a
-`trace:` line, so you can watch the order. Both values are computed here, in source order, although the `if`
-only returns one of them:
+`trace:` line, so you can watch the order. `Debug`, like `List`, is imported into every module. Both values
+are computed here, in source order, although the `if` only returns one of them:
 
 ```elm title="src/Main.elm"
 module Main exposing (main)
-
-import Debug
 
 
 main : Int
@@ -272,6 +270,8 @@ cpu 962315, mem 4005
 The other rules follow the same idea:
 
 - A function call evaluates the function, then its arguments from left to right, before the body runs.
+  So `Maybe.withDefault fallback m` evaluates `fallback` even when `m` is a `Just`, and `(&&) a b`, the
+  operator used as a function, evaluates `b` even when `a` is `False`.
 - A partial application such as `add (10 // 0)` evaluates its argument immediately.
 - In a validator, top-level values the handlers use are evaluated once per script run, before the handler
   is chosen. A failing top-level value therefore fails every purpose of the script.

@@ -335,7 +335,7 @@ class CoreCompletionTest {
         integer(
                 4,
                 """
-                join : a -> a -> a
+                join : appendable -> appendable -> appendable
                 join left right = left ++ right
 
                 main : Int

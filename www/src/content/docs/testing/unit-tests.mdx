@@ -187,7 +187,7 @@ A test can also fail at runtime, for example by dividing by zero. It is then rep
 | `Expect.every [ e1, e2 ]` | every expectation passes; the first failure is reported |
 | `Expect.onFail message expectation` | `expectation` passes; otherwise its message is replaced |
 
-The comparisons take the bound first and the actual value last, so they read well in a pipeline. When one fails, the report lists the bound and then the actual value:
+The comparisons work on any comparable values, such as integers, strings and bytes. They take the bound first and the actual value last, so they read well in a pipeline. When one fails, the report lists the bound and then the actual value:
 
 ```elm
 feesAreCapped : Expectation
