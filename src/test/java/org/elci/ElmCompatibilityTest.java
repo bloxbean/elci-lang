@@ -254,7 +254,7 @@ class ElmCompatibilityTest {
         assertEquals(1, missing.status());
         // The failure-expecting scenario no longer passes because the script could not decode.
         assertTrue(missing.out().contains("FAIL MainTest.othersAreRejected"), missing.out());
-        assertTrue(missing.out().contains("it takes 2 parameter(s) [owner, guardian], but the scenario gives 1"), missing.out());
+        assertTrue(missing.out().contains("it takes 2 parameters [owner, guardian], but the scenario gives 1"), missing.out());
 
         Files.writeString(main, Files.readString(main).replace("import Julc.Ledger", "import Expect\nimport Julc.Ledger"));
         var leak = NamedValidatorCliTest.run("test", project.toString());

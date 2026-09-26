@@ -101,18 +101,23 @@ qualified (`Main.Value`, `Julc.Ledger.Value`).
 A non-exhaustive `case` lists up to three patterns it does not cover, written as source:
 `Nothing`, `Just (Err _)`, `( True, False )`, `[]`, `[ _ ]`, `_ :: _ :: _`. A literal
 pattern's type is open, so what it leaves out is `_`. It adds `and N more` when there are
-more, or `and more` beyond fifty. A constructor of a project module other than the root is
-qualified by its module.
+more, or `and more` beyond fifty. Constructors are written by their own names, as a
+module that exposes them writes them; library constructors too (`ScriptCredential _`).
 
-The list is complete: adding a branch for each pattern makes the case exhaustive. The same
-usefulness algorithm that decides exhaustiveness produces it. It is Maranget's, as in Elm,
-extended to find every missing vector:
+The list is complete: adding a branch for each pattern makes the case exhaustive. One
+usefulness algorithm decides exhaustiveness and produces the list. It is Maranget's, as in
+Elm, extended to find every missing vector:
 
-- When a column's default rows cover the remaining columns, the column is exhaustive.
-- Otherwise what the default rows leave uncovered is missing for every constructor the
-  column never names, or for "any other value" when the type has no fixed constructors.
-- Each constructor or literal the column names is split on as well, since a named
-  constructor can itself be partly covered.
+- A row of wildcards covers everything.
+- Otherwise what the column's default rows leave uncovered is missing for every constructor
+  the column never names, or for "any other value" when the type has no fixed constructors.
+  The literals a column names are covered by that "any other value".
+- Each constructor the column names is split on as well, since a named constructor can
+  itself be partly covered.
+
+The search is depth first and stops at fifty, so it stays quick even for a case whose
+missing patterns are exponentially many, such as pairs of `Bool` columns that each exclude
+the equal values.
 
 The message is `This case does not cover every possibility; it is missing …`, with the hint
 `add a branch for each missing pattern`.
@@ -164,7 +169,14 @@ ELCI4001.
   value. A qualified name is written without spaces and ends at its first lowercase
   segment. Before, `List.map .amount` was read as the name `List.map.amount`.
 - **A record pattern on a library record**, such as `{ fee }` against a `TxInfo`, crashed
-  the compiler. It is now ELCI2001, which says to read the field instead.
+  the compiler. It is now ELCI2001, which says to read the field instead. An empty record
+  pattern still matches anything.
+- **A module names its own declarations without a qualifier.** `Main.other` inside `Main`
+  says so, instead of advising `import Main`.
+- **A local annotation's type arity is checked**, as a top-level one is.
+- **A named validator's diagnostic comes first.** The line naming the
+  `[validators.<name>]` group follows the diagnostic, so its first line is the diagnostic's,
+  as for every other failure.
 - **A source file that is not UTF-8** is named in an ELCI4001 message, instead of
   `Input length = 1`.
 

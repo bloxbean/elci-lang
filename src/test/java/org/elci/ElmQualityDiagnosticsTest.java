@@ -224,6 +224,17 @@ class ElmQualityDiagnosticsTest {
                 + " ".repeat(3 + 19) + "^^^^\n"));
         Files.writeString(main, "module Main exposing (main)\n\n\nmain : Int\nmain =\n    ( 1, 2\n");
         assertTrue(NamedValidatorCliTest.run("check", project.toString()).err().contains("\n6|     ( 1, 2\n" + " ".repeat(3 + 10) + "^\n"));
+        // A qualified argument and a field are underlined whole.
+        Files.writeString(main, "module Main exposing (main)\n\n\nmain : Int\nmain =\n    List.length List.range\n");
+        assertTrue(NamedValidatorCliTest.run("check", project.toString()).err().contains("\n6|     List.length List.range\n"
+                + " ".repeat(3 + 16) + "^^^^^^^^^^\n"));
+        Files.writeString(main, "module Main exposing (main)\n\n\nmain : Int\nmain =\n    { owner = \"a\" }.owner + 1\n");
+        var field = NamedValidatorCliTest.run("check", project.toString()).err();
+        assertTrue(field.contains("\n6|     { owner = \"a\" }.owner + 1\n" + " ".repeat(3 + 19) + "^^^^^^\n"), field);
+        // Comments after the last code do not move the caret.
+        Files.writeString(main, "module Main exposing (main)\n\n\nmain : Int\nmain =\n    ( 1, 2 -- note\n{- a\n   block -}\n");
+        assertTrue(NamedValidatorCliTest.run("check", project.toString()).err().contains("\n6|     ( 1, 2 -- note\n"
+                + " ".repeat(3 + 10) + "^\n"));
         // A source that is not UTF-8 is named.
         Files.write(main, new byte[] {'m', 'o', 'd', (byte) 0xff});
         assertTrue(NamedValidatorCliTest.run("check", project.toString()).err()
@@ -250,7 +261,7 @@ class ElmQualityDiagnosticsTest {
         assertTrue(main("Int", "case Just True of\n        Just True ->\n            1")
                 .contains("it is missing `Nothing` and `Just False`"));
         assertTrue(main("Int", "case ( 1, True ) of\n        ( 1, True ) ->\n            1\n\n        ( 2, False ) ->\n            2\n\n"
-                + "        ( _, True ) ->\n            3").contains("it is missing `( _, False )` and `( 1, False )`"));
+                + "        ( _, True ) ->\n            3").contains("it is missing `( _, False )`\n"));
         assertTrue(main("Int", "case [ [ 1 ] ] of\n        [] ->\n            0\n\n        [ [] ] ->\n            1")
                 .contains("it is missing `(_ :: _) :: _` and `[] :: _ :: _`"));
         assertTrue(main("Int", "case [ [ 1 ] ] of\n        [] ->\n            0\n\n        [ [] ] ->\n            1\n\n"
@@ -285,10 +296,79 @@ class ElmQualityDiagnosticsTest {
                 main("Int", "Lsit.length [ 1 ]"));
         // A record pattern cannot take apart a library record.
         assertEquals("12:9: ELCI2001: TxOutRef is a library record, which a pattern cannot take apart; read its fields"
-                        + " instead, as in `value.index`",
+                        + " with `.index` instead",
                 report("index : Julc.Ledger.TxOutRef -> Int\nindex ref =\n    case ref of\n        { index } ->\n            index\n\n\n"
                         + "main : Int\nmain =\n    index (Julc.Ledger.TxOutRef (Julc.Ledger.TxId Bytes.empty) 0)\n"));
         assertTrue(reportWithImport("import Julc.Ledger exposing (Credentail(..))").endsWith("\nHint: did you mean `Credential`?"));
+    }
+
+    @Test
+    void secondReviewFindings() {
+        // Library constructors are written as source, and literal columns list only `_`.
+        assertTrue(report("check : Julc.Ledger.Credential -> Int\ncheck c =\n    case c of\n        Julc.Ledger.PubKeyCredential _ ->\n"
+                + "            1\n\n\nmain : Int\nmain =\n    1\n").contains("it is missing `ScriptCredential _`\n"));
+        assertTrue(main("Int", "case ( 1, True ) of\n        ( 1, True ) ->\n            0").contains("it is missing `( _, _ )`\n"));
+        // A qualified constructor pattern is named whole.
+        assertTrue(main("Int", "case Just 1 of\n        Maybe.Just ->\n            0\n\n        _ ->\n            1")
+                .startsWith("12:9: ELCI2001: The constructor Maybe.Just takes 1 argument, but this pattern gives it 0"));
+        // No hint converts a comparison into one of an uncomparable type.
+        assertEquals("11:22: ELCI2002: The two sides of < have different types: the left is `Value`, but the right is `Int`",
+                main("Bool", "Value.lovelace 5 < 5"));
+        // A name spelt right in several modules names them all.
+        assertEquals("11:5: ELCI2005: Unknown name 'withDefault'\nHint: write `Maybe.withDefault` or `Result.withDefault`,"
+                + " or expose `withDefault` in its import", main("Int", "withDefault 0 (Just 1)"));
+        assertTrue(reportWithImport("import Julc.Ledgr").endsWith("\nHint: did you mean `Julc.Ledger`?"));
+        // A module names its own declarations without a qualifier.
+        assertTrue(main("Int", "Main.other").startsWith("11:5: ELCI2104: A module names its own declarations without a qualifier"));
+        // A string's field is a field access, not an accessor argument.
+        assertEquals("11:10: ELCI2010: `String` has no fields, so it has no field 'a'", main("Int", "\"abc\".a"));
+        assertEquals("11:14: ELCI2010: `Int` has no fields, so it has no field 'a'", main("List Int", "List.map .a [ 1 ]"));
+        // A number has one spelling in patterns: 01 repeats 1.
+        assertEquals("15:9: ELCI2006: Unreachable pattern",
+                main("Int", "case 1 of\n        1 ->\n            1\n\n        01 ->\n            2\n\n        _ ->\n            0"));
+    }
+
+    @Test
+    void polishedMessages() {
+        // Under one module only the last part is compared: toInt is not join.
+        assertEquals("11:5: ELCI2104: Elci's String module has no toInt. It has append, concat, fromInt, isEmpty, join",
+                main("Int", "String.toInt \"4\""));
+        String selfApplied = report("f : a -> a\nf x =\n    x x\n\n\nmain : Int\nmain =\n    1\n");
+        assertTrue(selfApplied.startsWith("11:7: ELCI2002: This needs a type that contains itself: `a` would have to be `a -> b`"),
+                selfApplied);
+        assertTrue(report("x : List Int Int\nx =\n    []\n\n\nmain : Int\nmain =\n    1\n")
+                .contains("ELCI2012: The type List takes 1 argument, but it is given 2"));
+        // A local annotation is checked as a top-level one is.
+        assertEquals("12:9: ELCI2012: The type List takes 1 argument, but it is given 2",
+                main("Int", "let\n        x : List Int Int\n        x =\n            []\n    in\n    1"));
+    }
+
+    @Test
+    void validatorGroupsFollowTheDiagnostic() throws Exception {
+        Files.writeString(project.resolve("elci.toml"), """
+                [project]
+                source-directories = ["src"]
+                target = "plutus-v3-pv11-uplc-1.1.0"
+                julc-version = "0.1.0-gb-5a3378b"
+
+                [validators.v]
+                boundary = "julc-strict-v1"
+                spend = "V.spend"
+                """);
+        Files.createDirectories(project.resolve("src"));
+        Path source = project.resolve("src/V.elm");
+        Files.writeString(source, "module V exposing (spend)\n\nimport Julc.Ledger exposing (ScriptContext)\n\n\n"
+                + "spend : () -> () -> ScriptContext -> Bool\nspend _ _ _ =\n    1\n");
+        var text = NamedValidatorCliTest.run("check", project.toString());
+        assertTrue(text.err().startsWith(source + ":6:1: ELCI2002: The annotation of `spend` says it returns `Bool`, but its body is `Int`"),
+                text.err());
+        assertTrue(text.err().endsWith("\n\nIn " + project.resolve("elci.toml") + ":6: [validators.v]\n"), text.err());
+        var json = NamedValidatorCliTest.run("check", project.toString(), "--report=json");
+        assertTrue(json.err().endsWith(",\"context\":" + Diagnostic.quote(project.resolve("elci.toml") + ":6: [validators.v]") + "}\n"),
+                json.err());
+        // A configuration that is not UTF-8 is named too.
+        Files.write(project.resolve("elci.toml"), new byte[] {'[', (byte) 0xff, ']'});
+        assertTrue(NamedValidatorCliTest.run("check", project.toString()).err().contains("elci.toml is not valid UTF-8 text"));
     }
 
     @Test

@@ -320,7 +320,7 @@ public final class Parser {
     private Expr expression(int min, int floor, String rightOf) {
         Expr left = prefix(floor);
         while (!boundary(floor)) {
-            if (is(".") && peek().offset() == previous().offset() + previous().text().length()) {
+            if (is(".") && peek().offset() == end(previous())) {
                 Token dot = next();
                 left = new Field(left, lower().text(), dot);
                 continue;
@@ -587,15 +587,18 @@ public final class Parser {
         }
         if (t.text().equals("-") && peek().kind() == Token.Kind.INT) {
             Token value = next();
-            return new Pattern("-" + value.text(), List.of(), t);
+            // One spelling per number, so 01 and 1 are the same pattern.
+            return new Pattern("-" + new BigInteger(value.text()), List.of(), t);
         }
         if (t.kind() == Token.Kind.NAME
                 || t.kind() == Token.Kind.INT
                 || t.kind() == Token.Kind.STRING) {
-            String name = t.text();
+            String name = t.kind() == Token.Kind.INT ? new BigInteger(t.text()).toString() : t.text();
             if (t.kind() == Token.Kind.NAME && Character.isUpperCase(name.charAt(0)))
                 while (take(".")) name += "." + upper().text();
-            return new Pattern(name, List.of(), t);
+            // The token spells the whole qualified name, as written, for diagnostics.
+            return new Pattern(name, List.of(), name.equals(t.text()) ? t
+                    : new Token(name, t.kind(), t.offset(), t.line(), t.column(), t.source()));
         }
         throw new Diagnostic("ELCI1002", t, "Unsupported pattern");
     }
@@ -683,12 +686,19 @@ public final class Parser {
                 || accessor();
     }
 
+    /** Where a token ends in the source; a string's text is decoded, so its closing quote is found. */
+    private int end(Token t) {
+        if (t.kind() != Token.Kind.STRING) return t.offset() + t.text().length();
+        int i = t.offset() + 1;
+        while (i < source.length() && source.charAt(i) != '"') i += source.charAt(i) == '\\' ? 2 : 1;
+        return i + 1;
+    }
+
     /** {@code .field}, an accessor function: a dot not attached to what precedes it, then a field. */
     private boolean accessor() {
         if (!is(".") || pos + 1 >= tokens.size()) return false;
         Token dot = peek(), field = tokens.get(pos + 1);
-        boolean attached = pos > 0 && tokens.get(pos - 1).offset() + tokens.get(pos - 1).text().length() == dot.offset()
-                && tokens.get(pos - 1).kind() != Token.Kind.STRING;
+        boolean attached = pos > 0 && end(tokens.get(pos - 1)) == dot.offset();
         return !attached && field.kind() == Token.Kind.NAME && field.offset() == dot.offset() + 1
                 && Character.isLowerCase(field.text().charAt(0));
     }

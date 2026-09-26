@@ -42,7 +42,8 @@ final class Scenarios {
             // A missing parameter would fail the script while decoding, and so vacuously satisfy
             // expectFailure: reject the scenario instead.
             if (parameters.size() != build.parameters().size())
-                throw new IllegalArgumentException("it takes " + build.parameters().size() + " parameter(s) "
+                throw new IllegalArgumentException("it takes " + build.parameters().size()
+                        + (build.parameters().size() == 1 ? " parameter " : " parameters ")
                         + build.parameters().stream().map(ElciCompiler.ParameterInfo::name).toList()
                         + ", but the scenario gives " + parameters.size() + "; set them with Scenario.parameters");
             applied = parameters.isEmpty() ? build.program()

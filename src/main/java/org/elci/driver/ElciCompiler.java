@@ -242,9 +242,15 @@ public final class ElciCompiler {
             Ty expected=fn(redeemer,fn(con("ScriptContext"),con("Bool")));
             if(hasDatum)expected=fn(datum,expected);
             for(int i=parameterTypes.size()-1;i>=0;i--)expected=fn(parameterTypes.get(i),expected);
-            try {unify(copy(type,new HashMap<>()),expected,declaration.token());}
-            catch(Diagnostic e){throw new Diagnostic("ELCI2014",declaration.token(),"Handler "+handler.symbol()+" does not have the "+purpose(handler.purpose())+" signature "+signature(spec,handler.purpose())
-                    +" that [validators."+spec.name()+"] needs ("+spec.parameters().size()+" parameter"+(spec.parameters().size()==1?"":"s")+"); its type is "+Types.show(type)+" ("+e.getMessage()+")");}
+            Ty actual=copy(type,new HashMap<>());
+            try {unify(actual,expected,declaration.token());}
+            catch(Diagnostic e){
+                // Name the first pair that differs: what the handler has where the configuration needs another type.
+                var pair=Types.conflict(actual,expected);
+                String differs="";
+                if(pair!=null){var shown=Types.showAll(pair);differs="; it has `"+shown.get(0)+"` where the configuration needs `"+shown.get(1)+"`";}
+                throw new Diagnostic("ELCI2014",declaration.token(),"Handler "+handler.symbol()+" does not have the "+purpose(handler.purpose())+" signature "+signature(spec,handler.purpose())
+                    +" that [validators."+spec.name()+"] needs ("+spec.parameters().size()+" parameter"+(spec.parameters().size()==1?"":"s")+"); its type is "+Types.show(type)+differs);}
             if(hasDatum&&spec.spendDatum()==DatumProfile.OPTIONAL) {
                 var maybe=prune(datum);
                 if(!(maybe instanceof Con c)||!c.name().equals("Elci.Maybe"))throw new Diagnostic("ELCI2014",declaration.token(),"Handler "+handler.symbol()+" uses spend-datum = \"optional\", so its datum must have type Maybe d, not "+maybe);

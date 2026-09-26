@@ -149,12 +149,8 @@ public final class Inference {
                 throw new Diagnostic(
                         "ELCI2012",
                         alias.token(),
-                        "Type "
-                                + type.name()
-                                + " expects "
-                                + alias.parameters().size()
-                                + " arguments, got "
-                                + type.arguments().size());
+                        "The type " + type.name() + " takes " + arguments(alias.parameters().size())
+                                + ", but it is given " + type.arguments().size());
             var replacements = new HashMap<String, Type>();
             for (int i = 0; i < alias.parameters().size(); i++)
                 replacements.put(alias.parameters().get(i), type.arguments().get(i));
@@ -474,11 +470,7 @@ public final class Inference {
             throw new Diagnostic(
                     "ELCI2012",
                     token,
-                    "Type "
-                            + name
-                            + " expects "
-                            + expected
-                            + " arguments, got "
+                    "The type " + Types.show(con(name)) + " takes " + arguments(expected) + ", but it is given "
                             + type.arguments().size());
         type.arguments().forEach(a -> validateType(a, token));
     }
@@ -825,10 +817,22 @@ public final class Inference {
                                     "The provider of "
                                             + importedConstructors.get(n.name()).type().identity()
                                             + " does not approve construction (CONSTRUCT)");
-                        if (scheme == null)
+                        if (scheme == null) {
+                            String shown = n.name().replaceFirst("^[A-Za-z0-9_.]*\\$", "");
+                            // A library export under the import's alias: suggest the ones it has.
+                            var hints = List.<String>of();
+                            int dot = n.name().lastIndexOf('.');
+                            if (n.name().contains("$") && dot > 0) {
+                                String prefix = n.name().substring(0, dot + 1);
+                                hints = org.elci.syntax.Suggestions.hint(shown, env.keySet().stream()
+                                        .filter(k -> k.startsWith(prefix))
+                                        .map(k -> k.replaceFirst("^[A-Za-z0-9_.]*\\$", "")).toList());
+                            }
                             throw new Diagnostic(
-                                    "ELCI2005", n.token(), "Unknown name '" + n.name().replaceFirst("^[A-Za-z0-9_.]*\\$", "")
-                                            + "'" + (n.name().contains("$") ? "; check that the imported module exports it" : ""));
+                                    "ELCI2005", n.token(), "Unknown name '" + shown
+                                            + "'" + (n.name().contains("$") ? "; check that the imported module exports it" : ""),
+                                    hints);
+                        }
                         yield instantiate(scheme, n.token());
                     }
                     case Apply a -> {
@@ -842,7 +846,9 @@ public final class Inference {
                         Ty f = infer(head, env);
                         for (int i = 0; i < spine.size(); i++) {
                             var node = spine.get(i);
-                            f = apply(f, infer(node.argument(), env), head, i, spine.size(), node.token());
+                            // A qualified argument is reported under its whole name.
+                            Token at = node.argument() instanceof Name argument ? argument.token() : node.token();
+                            f = apply(f, infer(node.argument(), env), head, i, spine.size(), at);
                             if (node != a) expressions.put(node, f);
                         }
                         yield f;
@@ -950,6 +956,9 @@ public final class Inference {
                     }
                     case Let l -> {
                         var local = new LinkedHashMap<>(env);
+                        // A local annotation is checked as a top-level one is.
+                        for (var d : l.declarations())
+                            if (d.annotation() != null) validateType(expand(d.annotation(), new HashSet<>()), d.token());
                         inferDeclarations(l.declarations(), local, false);
                         yield infer(l.body(), local);
                     }
@@ -1000,7 +1009,7 @@ public final class Inference {
                                     + ordinal(position) + " branch of this case is `" + found + "`, but "
                                     + (position == 2 ? "the first branch is `" : "the branches before it are `") + needed + "`");
                         }
-                        var missing = missing(previous.stream().map(List::of).toList(), List.of(scrutinee));
+                        var missing = missing(previous.stream().map(List::of).toList(), List.of(scrutinee), WITNESS_LIMIT);
                         if (!missing.isEmpty()) {
                             var shown = missing.stream().limit(3).map(w -> "`" + render(w.getFirst(), false) + "`").toList();
                             String list = missing.size() > 3
@@ -1055,6 +1064,8 @@ public final class Inference {
                                             org.elci.syntax.Suggestions.hint(name,
                                                     recordType.fields().stream().map(f -> f.name()).toList())));
         }
+        if (type instanceof Con known && !known.name().startsWith("Record:") && !known.name().startsWith("$"))
+            throw new Diagnostic("ELCI2010", token, "`" + Types.show(known) + "` has no fields, so it has no field '" + name + "'");
         if (!(type instanceof Con c) || !c.name().startsWith("Record:"))
             throw new Diagnostic(
                     "ELCI2010", token, "Field access requires a known closed record type");
@@ -1137,7 +1148,8 @@ public final class Inference {
             var imported = importedConstructors.get(p.name());
             String type = imported.type().identity();
             if (imported.constructor() == null)
-                throw new Diagnostic("ELCI2001", p.token(), type + " is a record; read its fields instead of matching it");
+                throw new Diagnostic("ELCI2001", p.token(), Types.show(con(type)) + " is a record; read its fields instead of"
+                        + " matching it");
             if (!imported.type().supports(org.julclang.compiler.backend.LibraryType.Operation.MATCH))
                 throw new Diagnostic("ELCI2001", p.token(), "The provider of " + type + " does not approve pattern matching (MATCH)");
             var fields = constructorFields(imported);
@@ -1154,9 +1166,16 @@ public final class Inference {
                 || p.name().startsWith("-")
                         && p.name().length() > 1
                         && Character.isDigit(p.name().charAt(1))) unify(t, con("Int"), p.token());
-        else
+        else {
+            // A library record in scope by its type name only: it has no constructor to match.
+            for (var entry : importedTypes.entrySet())
+                if (entry.getKey().endsWith("." + p.name()) && entry.getValue().constructors().isEmpty()
+                        && !entry.getValue().fields().isEmpty())
+                    throw new Diagnostic("ELCI2001", p.token(), p.name() + " is a record; read its fields instead of"
+                            + " matching it");
             throw new Diagnostic(
                     "ELCI2001", p.token(), "Unknown constructor " + p.name() + " in this pattern");
+        }
     }
 
     public static List<List<Decl>> groups(List<Decl> ds) {
@@ -1284,83 +1303,73 @@ public final class Inference {
 
     private record PatternCtor(String name, List<Ty> fields) {}
 
-    /**
-     * A value no pattern matches, as a pattern: a constructor and its arguments, a literal
-     * (already written as source), or {@code _}.
-     */
-    private record Witness(String name, List<Witness> arguments, boolean literal) {
-        static final Witness ANY = new Witness("_", List.of(), false);
-
-        Witness(String name, List<Witness> arguments) {
-            this(name, arguments, false);
-        }
+    /** A value no pattern matches, as a pattern: a constructor and its arguments, or {@code _}. */
+    private record Witness(String name, List<Witness> arguments) {
+        static final Witness ANY = new Witness("_", List.of());
     }
 
     /** Enough missing patterns to list three and count the rest; beyond it, "and more". */
     private static final int WITNESS_LIMIT = 50;
 
     /**
-     * Pattern vectors, one pattern per column, that no row matches; empty when the rows are
-     * exhaustive. This is Maranget's usefulness algorithm, as Elm uses it, extended to list every
-     * missing vector (up to {@link #WITNESS_LIMIT}): each constructor a column names is split on,
-     * and what the column's default rows leave uncovered is missing for every constructor the
-     * column does not name, or for "any other value" when the type has no fixed constructors.
+     * Up to {@code limit} pattern vectors, one pattern per column, that no row matches; empty
+     * when the rows are exhaustive. Maranget's usefulness algorithm, as Elm uses it, extended to
+     * list the missing vectors:
+     *
+     * <ul>
+     *   <li>A row of wildcards covers everything.
+     *   <li>Otherwise what the default rows leave uncovered is missing for every constructor the
+     *       column never names, or for "any other value" when the type has no fixed constructors.
+     *   <li>Each constructor the column names is split on, since it can itself be partly covered.
+     * </ul>
+     *
+     * The search is depth first and stops at the limit, so it stays quick even when the missing
+     * vectors are exponentially many.
      */
-    private List<List<Witness>> missing(List<List<Pattern>> rows, List<Ty> types) {
+    private List<List<Witness>> missing(List<List<Pattern>> rows, List<Ty> types, int limit) {
         if (rows.isEmpty()) return List.of(Collections.nCopies(types.size(), Witness.ANY));
         if (types.isEmpty()) return List.of();
-        Ty first = prune(types.getFirst());
         var restTypes = types.subList(1, types.size());
         var defaults = defaultRows(rows);
-        // Rows that match anything in this column cover every value when they cover the rest.
-        var rest = missing(defaults, restTypes);
-        if (!defaults.isEmpty() && rest.isEmpty()) return List.of();
-        var seen = new LinkedHashMap<String, Pattern>();
+        // A row of wildcards covers everything: a catch-all branch ends the search at once.
+        for (var row : defaults)
+            if (row.stream().allMatch(Inference::irrefutable)) return List.of();
+        var seen = new LinkedHashSet<String>();
         for (var row : rows) {
             Pattern head = unwrap(row.getFirst());
-            if (!irrefutable(head)) seen.putIfAbsent(head.name(), head);
+            if (!irrefutable(head)) seen.add(head.name());
         }
-        var constructors = seen.isEmpty() ? null : patternConstructors(first);
+        var constructors = seen.isEmpty() ? null : patternConstructors(prune(types.getFirst()));
         boolean complete = constructors != null
-                && seen.keySet().containsAll(constructors.stream().map(PatternCtor::name).toList());
+                && seen.containsAll(constructors.stream().map(PatternCtor::name).toList());
         var result = new ArrayList<List<Witness>>();
-        // What no constructor-specific row covers: the constructors the column never names.
         if (!complete) {
             var heads = new ArrayList<Witness>();
             if (constructors == null) heads.add(Witness.ANY);
             else
                 for (var constructor : constructors)
-                    if (!seen.containsKey(constructor.name()))
+                    if (!seen.contains(constructor.name()))
                         heads.add(new Witness(constructor.name(), Collections.nCopies(constructor.fields().size(), Witness.ANY)));
-            for (var head : heads)
-                for (var vector : rest) {
-                    if (result.size() >= WITNESS_LIMIT) return result;
+            for (var vector : missing(defaults, restTypes, limit))
+                for (var head : heads) {
+                    if (result.size() >= limit) return result;
                     var witness = new ArrayList<Witness>();
                     witness.add(head);
                     witness.addAll(vector);
                     result.add(witness);
                 }
+            // A literal's type is open: "any other value" with the rest covers every literal row too.
+            if (constructors == null) return result;
         }
-        // Then each named constructor or literal, split on.
-        var split = new ArrayList<Map.Entry<Witness, List<Ty>>>();
-        if (constructors != null) {
-            for (var constructor : constructors)
-                if (complete || seen.containsKey(constructor.name()))
-                    split.add(Map.entry(new Witness(constructor.name(), List.of()), constructor.fields()));
-        } else
-            for (var literal : seen.values())
-                split.add(Map.entry(new Witness(literalSource(literal), List.of(), true), List.of()));
-        for (var entry : split) {
-            if (result.size() >= WITNESS_LIMIT) return result;
-            var head = entry.getKey();
-            int arity = entry.getValue().size();
-            var nextTypes = new ArrayList<>(entry.getValue());
+        for (var constructor : constructors) {
+            if (result.size() >= limit) return result;
+            if (!complete && !seen.contains(constructor.name())) continue;
+            int arity = constructor.fields().size();
+            var nextTypes = new ArrayList<>(constructor.fields());
             nextTypes.addAll(restTypes);
-            String name = head.literal() ? unwrapLiteral(seen, head.name()) : head.name();
-            for (var vector : missing(specialize(rows, name, arity), nextTypes)) {
-                if (result.size() >= WITNESS_LIMIT) return result;
+            for (var vector : missing(specialize(rows, constructor.name(), arity), nextTypes, limit - result.size())) {
                 var witness = new ArrayList<Witness>();
-                witness.add(new Witness(head.name(), List.copyOf(vector.subList(0, arity)), head.literal()));
+                witness.add(new Witness(constructor.name(), List.copyOf(vector.subList(0, arity))));
                 witness.addAll(vector.subList(arity, vector.size()));
                 result.add(witness);
             }
@@ -1368,35 +1377,13 @@ public final class Inference {
         return result;
     }
 
-    /** A literal pattern as source: a string with its quotes and escapes, or a number. */
-    private static String literalSource(Pattern literal) {
-        if (literal.token().kind() != Token.Kind.STRING) return literal.name();
-        var out = new StringBuilder("\"");
-        for (char c : literal.name().toCharArray())
-            switch (c) {
-                case '"' -> out.append("\\\"");
-                case '\\' -> out.append("\\\\");
-                case '\n' -> out.append("\\n");
-                case '\t' -> out.append("\\t");
-                default -> out.append(c);
-            }
-        return out.append('"').toString();
-    }
-
-    /** The pattern name behind a literal witness. */
-    private static String unwrapLiteral(Map<String, Pattern> seen, String source) {
-        for (var entry : seen.entrySet()) if (literalSource(entry.getValue()).equals(source)) return entry.getKey();
-        return source;
-    }
-
     /**
-     * A missing pattern as Elci source: {@code Just (Err _)}, {@code [ _ ]}, {@code _ :: _}. A
-     * constructor of a project module other than the root is qualified by its module.
+     * A missing pattern as Elci source: {@code Just (Err _)}, {@code [ _ ]}, {@code _ :: _}.
+     * Constructors are written by their own names, as a module that exposes them writes them.
      */
     private static String render(Witness witness, boolean argument) {
         String name = witness.name();
         var arguments = witness.arguments();
-        if (witness.literal()) return argument && name.startsWith("-") ? "(" + name + ")" : name;
         switch (name) {
             case "_", "[]" -> {
                 return name;
@@ -1425,10 +1412,7 @@ public final class Inference {
                 return argument ? "(" + text + ")" : text;
             }
             default -> {
-                int dot = name.lastIndexOf('.');
-                String module = dot < 0 ? "" : name.substring(0, dot);
-                String text = module.isEmpty() || org.elci.modules.Modules.CORE_MODULES.contains(module)
-                        ? name.substring(dot + 1) : name;
+                String text = name.substring(name.lastIndexOf('.') + 1);
                 for (var a : arguments) text += " " + render(a, true);
                 return argument && !arguments.isEmpty() ? "(" + text + ")" : text;
             }
@@ -1459,7 +1443,7 @@ public final class Inference {
                     total < 0 ? List.of() : List.of("a missing comma or missing parentheses can make values look like extra arguments"));
         }
         Ty out = new Var();
-        unify(function, fn(arg, out), at);
+        expect(function, fn(arg, out), at, (found, needed) -> "This function cannot take this argument", Hints.NONE);
         return out;
     }
 
@@ -1494,15 +1478,11 @@ public final class Inference {
             if (d.getMessage().equals("Infinite type")) {
                 var shown = showAll(List.of(found, needed));
                 throw new Diagnostic("ELCI2002", at, "This needs a type that contains itself: `" + shown.get(1)
-                        + "` would have to be `" + shown.get(0) + "`",
-                        List.of("a value may be used both as a list or other container and as its own element"));
+                        + "` would have to be `" + shown.get(0) + "`");
             }
             if (!d.getMessage().startsWith("Type mismatch")) throw d;
             var shown = showAll(List.of(found, needed));
-            var list = hints == Hints.NONE ? List.<String>of() : mismatchHints(found, needed);
-            if (hints == Hints.COMPARABLE)
-                list = list.stream().filter(h -> !h.contains("Maybe") && !h.contains("Just") && !h.contains("Result")
-                        && !h.contains("Data")).toList();
+            var list = hints == Hints.NONE ? List.<String>of() : mismatchHints(found, needed, hints == Hints.COMPARABLE);
             throw new Diagnostic("ELCI2002", at, message.apply(shown.get(0), shown.get(1)), list);
         }
     }
@@ -1562,15 +1542,22 @@ public final class Inference {
 
     /** Hints for the usual confusions: at the whole types, then at the first pair that differs. */
     private List<String> mismatchHints(Ty found, Ty needed) {
+        return mismatchHints(found, needed, false);
+    }
+
+    /** @param comparable whether the result must be comparable: no conversion to another kind of type helps */
+    private List<String> mismatchHints(Ty found, Ty needed, boolean comparable) {
         var hints = new ArrayList<String>();
-        hint(prune(found), prune(needed), hints);
+        hint(prune(found), prune(needed), hints, comparable);
         var inner = conflict(found, needed);
-        if (inner != null) hint(inner.get(0), inner.get(1), hints);
+        if (inner != null) hint(inner.get(0), inner.get(1), hints, comparable);
         return hints.stream().distinct().limit(2).toList();
     }
 
-    private void hint(Ty found, Ty needed, List<String> hints) {
+    private void hint(Ty found, Ty needed, List<String> hints, boolean comparable) {
         if (!(found instanceof Con f) || !(needed instanceof Con n) || f.name().equals(n.name())) return;
+        // Converting to a type that cannot be compared would not help a comparison.
+        if (comparable && !Set.of("Int", "String", "Bytes").contains(n.name()) && bytesField(n.name()) == null) return;
         String from = f.name(), to = n.name();
         if (from.equals("->")) hints.add("this is a function: is an argument missing?");
         else if (from.equals("Int") && to.equals("String")) hints.add("`String.fromInt` turns an Int into a String");

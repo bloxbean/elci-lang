@@ -53,7 +53,7 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
     public static Project read(Path root) throws IOException {
         var sections=new LinkedHashMap<String,Map<String,String>>();var headers=new HashMap<String,Integer>();var lines=new HashMap<String,Integer>();
         String section="";int line=0;
-        for(String raw:Files.readAllLines(root.resolve("elci.toml"))) {
+        for(String raw:source(root.resolve("elci.toml")).lines().toList()) {
             line++;String text=raw.strip();if(text.isEmpty()||text.startsWith("#"))continue;
             if(text.startsWith("[")&&text.endsWith("]")) {
                 section=text.substring(1,text.length()-1).strip();

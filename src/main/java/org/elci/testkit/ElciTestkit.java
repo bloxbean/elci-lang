@@ -31,7 +31,8 @@ public final class ElciTestkit {
         var build = build(project, name);
         if (build.parameters().size() != parameters.length)
             throw new IllegalArgumentException("Validator " + name + " takes " + build.parameters().size()
-                    + " parameter(s) " + build.parameters().stream().map(ElciCompiler.ParameterInfo::name).toList()
+                    + (build.parameters().size() == 1 ? " parameter " : " parameters ")
+                    + build.parameters().stream().map(ElciCompiler.ParameterInfo::name).toList()
                     + ", not " + parameters.length);
         return parameters.length == 0 ? build.program() : build.program().applyParams(parameters);
     }

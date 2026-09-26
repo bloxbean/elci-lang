@@ -73,7 +73,7 @@ final class ParameterApplication {
         // The default location is owned (the next build removes it), however it was named.
         ValidatorOutputs.writeApplied(project.root().resolve("build"), build.name(), target, artifact.toJson(),
                 target.equals(owned));
-        System.out.println("validator " + build.name() + ": applied " + values.size() + " parameter(s); hash " + hash
+        System.out.println("validator " + build.name() + ": applied " + values.size() + (values.size() == 1 ? " parameter" : " parameters") + "; hash " + hash
                 + "; wrote " + target);
         return 0;
     }

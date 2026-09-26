@@ -595,9 +595,9 @@ public final class Lowering {
         }
         if (p.name().equals("$record")) {
             var record = (Con) type;
-            if (!record.name().startsWith("Record:"))
+            if (!record.name().startsWith("Record:") && !p.arguments().isEmpty())
                 throw new Diagnostic("ELCI2001", p.token(), Types.show(type) + " is a library record, which a pattern cannot"
-                        + " take apart; read its fields instead, as in `value." + p.arguments().getFirst().name() + "`");
+                        + " take apart; read its fields with `." + p.arguments().getFirst().name() + "` instead");
             var names = Arrays.asList(record.name().substring(7).split(","));
             var fieldTypes = new ArrayList<Ty>();
             var indexes = new ArrayList<Integer>();

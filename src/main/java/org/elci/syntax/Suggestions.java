@@ -18,19 +18,34 @@ public final class Suggestions {
      * {@code Helper.double}.
      */
     public static List<String> closest(String name, Collection<String> candidates) {
-        int limit = name.length() <= 2 ? 0 : name.length() <= 5 ? 1 : 2;
+        // Under one module, only the last part can be misspelt: String.toInt is not String.join.
+        int dot = name.lastIndexOf('.');
+        String module = dot < 0 ? null : name.substring(0, dot + 1), last = name.substring(dot + 1);
+        int limit = limit(module == null ? name : last);
         record Scored(String candidate, int distance) {}
         var scored = new ArrayList<Scored>();
         for (String candidate : new TreeSet<>(candidates)) {
             if (candidate.equals(name) || candidate.isEmpty() || candidate.contains("$")) continue;
-            int distance = distance(name, candidate);
-            if (!name.contains(".") && candidate.contains("."))
-                distance = Math.min(distance, distance(name, candidate.substring(candidate.lastIndexOf('.') + 1)));
+            int distance;
+            if (module != null && candidate.startsWith(module) && candidate.indexOf('.', module.length()) < 0)
+                distance = distance(last, candidate.substring(module.length()));
+            else if (module != null)
+                distance = distance(name, candidate);
+            else {
+                distance = distance(name, candidate);
+                if (candidate.contains("."))
+                    distance = Math.min(distance, distance(name, candidate.substring(candidate.lastIndexOf('.') + 1)));
+            }
             if (candidate.equalsIgnoreCase(name)) distance = 0;
             if (distance <= limit) scored.add(new Scored(candidate, distance));
         }
         scored.sort(Comparator.comparingInt(Scored::distance));
         return scored.stream().limit(3).map(Scored::candidate).toList();
+    }
+
+    /** How many edits a name of this length may be from a suggestion. */
+    private static int limit(String name) {
+        return name.length() <= 2 ? 0 : name.length() <= 5 ? 1 : 2;
     }
 
     /** A "did you mean" hint, or none. */

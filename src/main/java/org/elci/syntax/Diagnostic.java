@@ -79,10 +79,11 @@ public final class Diagnostic extends RuntimeException {
         int row = token.line();
         int start = Math.max(0, token.column() - 1);
         if (token.kind() == Token.Kind.EOF) {
-            // The end of the file: point just past its last code, above blank and comment lines.
-            while (row > lines.size() || row > 1 && (lines.get(row - 1).isBlank() || lines.get(row - 1).strip().startsWith("--"))) row--;
-            if (row < 1 || row > lines.size()) return null;
-            start = lines.get(row - 1).length();
+            // The end of the file: point just past its last code, before any comments after it.
+            int[] end = lastCode(String.join("\n", lines));
+            if (end == null) return null;
+            row = end[0];
+            start = end[1];
         }
         if (row > lines.size()) return null;
         String line = lines.get(row - 1);
@@ -94,6 +95,10 @@ public final class Diagnostic extends RuntimeException {
             width = 1;
         } else if (line.startsWith(token.text(), start)) {
             width = token.text().length();
+            // A field access is reported at its dot: underline the field too.
+            if (token.text().equals("."))
+                while (start + width < line.length() && (Character.isLetterOrDigit(line.charAt(start + width))
+                        || line.charAt(start + width) == '_')) width++;
         } else {
             // A position the compiler made up (a module's first line): find the name on the line.
             int found = line.indexOf(token.text());
@@ -104,6 +109,44 @@ public final class Diagnostic extends RuntimeException {
         width = Math.max(1, Math.min(width, line.length() - start));
         String number = row + "| ";
         return number + line + "\n" + " ".repeat(number.length() + start) + "^".repeat(width);
+    }
+
+    /** The row (from 1) and the column (from 0) just past the last code in a source, or null. */
+    private static int[] lastCode(String text) {
+        int row = 1, column = 0, lastRow = 0, lastColumn = 0, depth = 0;
+        boolean string = false, line = false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '\n') {
+                row++;
+                column = 0;
+                line = false;
+                continue;
+            }
+            column++;
+            if (line) continue;
+            if (depth > 0) {
+                if (text.startsWith("{-", i)) depth++;
+                else if (text.startsWith("-}", i)) depth--;
+                if (text.startsWith("{-", i) || text.startsWith("-}", i)) { i++; column++; }
+                continue;
+            }
+            if (string) {
+                if (c == '\\') { i++; column++; }
+                else if (c == '"') string = false;
+                lastRow = row;
+                lastColumn = column;
+                continue;
+            }
+            if (text.startsWith("--", i)) { line = true; continue; }
+            if (text.startsWith("{-", i)) { depth = 1; i++; column++; continue; }
+            if (c == '"') string = true;
+            if (!Character.isWhitespace(c)) {
+                lastRow = row;
+                lastColumn = column;
+            }
+        }
+        return lastRow == 0 ? null : new int[] {lastRow, lastColumn};
     }
 
     /** The width of the string literal starting at {@code start}, quotes and escapes included. */

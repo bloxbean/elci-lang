@@ -81,7 +81,8 @@ public final class Main {
             }
             System.out.println(result.module()+"."+result.function()+": checked; "+flat.length+" FLAT bytes; "+result.target().profileId());return 0;
         } catch(Diagnostic e) {System.err.println(json?e.json(files,source):e.explain(files,source));return 1;}
-        catch(ValidatorDiagnostic e) {System.err.println(json?e.diagnostic.json(e.files,e.fallback,e.where):"elci: "+e.where+"\n"+e.diagnostic.explain(e.files,e.fallback));return 1;}
+        // The diagnostic's own line comes first, as for every diagnostic; the validator group follows.
+        catch(ValidatorDiagnostic e) {System.err.println(json?e.diagnostic.json(e.files,e.fallback,e.where):e.diagnostic.explain(e.files,e.fallback)+"\n\nIn "+e.where);return 1;}
         catch(Exception e){System.err.println(json?failure(e.getMessage()):"elci: "+e.getMessage());return 1;}
     }
 

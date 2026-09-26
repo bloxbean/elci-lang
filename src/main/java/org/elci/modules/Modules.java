@@ -385,6 +385,9 @@ public final class Modules {
         return resolve(List.copyOf(new TreeSet<>(roots)), null);
     }
 
+    /** The module whose names are being resolved. */
+    private String current;
+
     /** "Did you mean" hints for names left unresolved here, used if inference rejects them (ADR-011). */
     private final Map<Token, java.util.function.Supplier<List<String>>> nameHints = new HashMap<>();
 
@@ -410,12 +413,18 @@ public final class Modules {
         if (!name.contains(".")) {
             if (plain.contains(name)) return List.of();
             // The name is right but not exposed: say how to reach it.
-            for (String key : qualified)
-                if (key.substring(key.lastIndexOf('.') + 1).equals(name))
-                    return List.of("write `" + key + "`, or expose `" + name + "` in its import");
+            var reach = qualified.stream().filter(key -> key.substring(key.lastIndexOf('.') + 1).equals(name))
+                    .limit(3).map(key -> "`" + key + "`").toList();
+            if (!reach.isEmpty())
+                return List.of("write " + (reach.size() == 1 ? reach.getFirst()
+                        : String.join(", ", reach.subList(0, reach.size() - 1)) + " or " + reach.getLast())
+                        + ", or expose `" + name + "` in its import");
             var hint = Suggestions.hint(name, plain);
             if (!hint.isEmpty()) return hint;
         }
+        // Imported without an alias: `Pricing.priceOf` for `Shop.Pricing.priceOf`.
+        for (String key : qualified)
+            if (name.contains(".") && key.endsWith("." + name)) return List.of("did you mean `" + key + "`?");
         return Suggestions.hint(name, qualified);
     }
 
@@ -455,6 +464,7 @@ public final class Modules {
         var aliases = new LinkedHashMap<String, Alias>();
         var unions = new ArrayList<Union>();
         for (var module : ordered.values()) {
+            current = module.name();
             boolean isRoot = root != null && module.name().equals(root);
             String prefix = isRoot ? "" : module.name() + ".";
             var scope = new Scope();
@@ -610,7 +620,7 @@ public final class Modules {
                         throw new Diagnostic(
                                 "ELCI2104",
                                 imp.token(),
-                                "Module does not expose '" + n + "': " + dependency.name(),
+                                dependency.name() + " does not expose '" + n + "'",
                                 Suggestions.hint(n, exposedNames(dependency)));
                 }
                 if (BUILTIN_TYPES.containsKey(dependency.name()))
@@ -710,6 +720,8 @@ public final class Modules {
             if (via != null) {
                 var known = new ArrayList<>(available.keySet());
                 known.addAll(javaModules.keySet());
+                known.addAll(INTRINSICS.keySet());
+                known.add("Julc.Ledger");
                 throw new Diagnostic("ELCI2101", via, missing, Suggestions.hint(name, known));
             }
             throw new IllegalArgumentException("ELCI2101: " + missing);
@@ -810,6 +822,9 @@ public final class Modules {
         int dot = n.lastIndexOf('.');
         if (dot <= 0 || !Character.isUpperCase(n.charAt(0))) return n;
         String module = n.substring(0, dot), name = n.substring(dot + 1);
+        if (module.equals(current))
+            throw new Diagnostic("ELCI2104", token, "A module names its own declarations without a qualifier; write " + name
+                    + (names.containsKey(name) ? "" : ", once " + module + " declares it"));
         if (ELM_ALTERNATIVES.containsKey(n))
             throw new Diagnostic("ELCI2104", token, "Elci has no " + n + "; " + ELM_ALTERNATIVES.get(n));
         // The module is imported under another alias: `import Map as M`, then `Map.get`.
