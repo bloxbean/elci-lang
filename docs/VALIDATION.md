@@ -22,6 +22,14 @@ build/native/elci test examples/treasury --seed 42
 build/native/elci test examples/vesting --fuzz 300
 ```
 
+With a Yaci DevKit devnet at protocol version 11 running, the end-to-end suite
+deploys the example contracts and submits their success paths and attacks to the
+node:
+
+```sh
+./gradlew :e2e-test:e2eTest
+```
+
 The Java test suite covers parsing and diagnostics, inference, generic
 specialization and retained requirements, strictness, general recursion groups,
 nested patterns, generic aliases, structural equality, modules, records, tuples,

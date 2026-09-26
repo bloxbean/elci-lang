@@ -1,1 +1,4 @@
 rootProject.name = 'elci-lang'
+
+// End-to-end tests against a local Yaci DevKit devnet; they run only with :e2e-test:e2eTest.
+include 'e2e-test'

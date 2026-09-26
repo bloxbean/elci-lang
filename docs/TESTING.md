@@ -372,6 +372,22 @@ The facade has four entry points:
 
 The scripts are the ones `elci build` publishes.
 
+### End-to-end tests on a devnet
+
+The `e2e-test` module deploys the example contracts on a local Yaci DevKit devnet
+and submits real transactions with Cardano Client Lib. The node decides every
+outcome: each success path is accepted on chain, and each attack is submitted and
+rejected with a `PlutusFailure`. `BudgetE2ETest` also shows that the node charges
+exactly the budget `elci test`'s VM computes. With a devnet at protocol version 11
+running:
+
+```sh
+./gradlew :e2e-test:e2eTest
+```
+
+Without a devnet the tests are skipped, and `./gradlew test` never runs them. See
+`e2e-test/README.md` for what each test checks.
+
 ### Properties with jqwik
 
 For property tests in JUnit, add `org.julclang:julc-testkit-jqwik` and

@@ -1,0 +1,36 @@
+plugins {
+    id 'java'
+}
+repositories { mavenLocal(); mavenCentral() }
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+
+def cclVersion = '0.8.0-pre5'
+dependencies {
+    // The Elci compiler, as `elci build` runs it (ElciTestkit).
+    testImplementation rootProject
+    testImplementation "org.julclang:julc-core:${julcVersion}"
+    testImplementation "org.julclang:julc-cardano-client-lib:${julcVersion}"
+    testImplementation "com.bloxbean.cardano:cardano-client-lib:${cclVersion}"
+    testImplementation "com.bloxbean.cardano:cardano-client-backend-blockfrost:${cclVersion}"
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// These tests submit transactions to a running devnet, so the ordinary `test` task, which
+// `./gradlew test` runs in every project, leaves them out.
+test { enabled = false }
+
+tasks.register('e2eTest', Test) {
+    description = 'Deploys and exercises Elci contracts on a local Yaci DevKit devnet.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    systemProperty 'elci.examples', rootProject.file('examples').absolutePath
+    systemProperty 'yaci.store.url', providers.gradleProperty('yaciStoreUrl').getOrElse('http://localhost:8080/api/v1/')
+    systemProperty 'yaci.admin.url', providers.gradleProperty('yaciAdminUrl').getOrElse('http://localhost:10000/local-cluster/api/')
+    testLogging { events 'passed', 'failed', 'skipped'; exceptionFormat 'full'; showStandardStreams = true }
+    outputs.upToDateWhen { false }
+}
+tasks.withType(JavaCompile).configureEach { options.compilerArgs += ['-Xlint:deprecation'] }
