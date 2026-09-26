@@ -5,8 +5,9 @@ POSIX milliseconds.
 
 A script cannot read the clock; the ledger accepts a transaction only inside its validity
 range. To require that something happens after a time, check that the whole range is after
-it; before a time, that the whole range is before it. An unbounded side never satisfies a
-check that needs it.
+it; before a time, that the whole range is before it. A check needs a finite bound on its
+side: an unbounded side never satisfies it, and neither does an infinite bound on the wrong
+side, which only an empty range has. This follows Aiken.
 
 -}
 
@@ -27,14 +28,12 @@ isEntirelyAfter time range =
             else
                 time <= low
 
-        NegInf ->
+        _ ->
             False
 
-        PosInf ->
-            True
 
-
-{-| Whether every time in the range is before `time`.
+{-| Whether every time in the range is before `time`: `isEntirelyBefore deadline
+ctx.txInfo.validRange` holds only when the transaction cannot run at or after the deadline.
 -}
 isEntirelyBefore : Int -> Interval -> Bool
 isEntirelyBefore time range =
@@ -46,11 +45,8 @@ isEntirelyBefore time range =
             else
                 high <= time
 
-        PosInf ->
+        _ ->
             False
-
-        NegInf ->
-            True
 
 
 {-| Whether `time` is in the range.
@@ -107,7 +103,9 @@ start range =
             Nothing
 
 
-{-| The range's finite end, or `Nothing` when it has none.
+{-| The range's finite end, or `Nothing` when it has none. Whether the end itself is included
+is in `range.to.isInclusive`: a transaction's validity range excludes its end, so the end is
+the first time outside it.
 -}
 end : Interval -> Maybe Int
 end range =

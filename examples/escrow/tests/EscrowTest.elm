@@ -4,9 +4,11 @@ module EscrowTest exposing
     , paymentWithoutTagRejected
     , refundBeforeTheDeadlineRejected
     , refundIsLateEnough
+    , refundWithoutBuyerRejected
     , releasePaysTheSeller
     , releaseWithoutBuyerRejected
     , underpaymentRejected
+    , wrongTagRejected
     )
 
 import Escrow exposing (Action(..), Deal)
@@ -73,14 +75,27 @@ paymentWithoutTagRejected =
         |> Scenario.expectFailure
 
 
-{-| One payment tagged for another escrow cannot also settle this one.
+{-| A payment tagged for another escrow does not settle this one.
 -}
-doubleSatisfactionRejected : Scenario
-doubleSatisfactionRejected =
+wrongTagRejected : Scenario
+wrongTagRejected =
     escrow 0
         |> Scenario.redeemer (Data.encode Release)
         |> Scenario.signedBy deal.buyer
         |> Scenario.output (Scenario.toKey deal.seller deal.price |> Scenario.withDatum (tag 1))
+        |> Scenario.expectFailure
+
+
+{-| Two escrows for the same seller released together with one payment, tagged for the
+first: the second is not paid for.
+-}
+doubleSatisfactionRejected : Scenario
+doubleSatisfactionRejected =
+    escrow 1
+        |> Scenario.input (Scenario.outRef "escrow" 0) (Scenario.toScript deal.price |> Scenario.withDatum (Data.encode deal))
+        |> Scenario.redeemer (Data.encode Release)
+        |> Scenario.signedBy deal.buyer
+        |> Scenario.output (Scenario.toKey deal.seller deal.price |> Scenario.withDatum (tag 0))
         |> Scenario.expectFailure
 
 
@@ -95,6 +110,15 @@ refund validFrom =
 buyerRefundsAfterTheDeadline : Scenario
 buyerRefundsAfterTheDeadline =
     refund (deal.deadline + 1)
+
+
+refundWithoutBuyerRejected : Scenario
+refundWithoutBuyerRejected =
+    escrow 0
+        |> Scenario.redeemer (Data.encode Refund)
+        |> Scenario.signedBy deal.seller
+        |> Scenario.validFrom (deal.deadline + 1)
+        |> Scenario.expectFailure
 
 
 refundBeforeTheDeadlineRejected : Scenario

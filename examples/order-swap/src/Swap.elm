@@ -1,12 +1,14 @@
 module Swap exposing (Action(..), Order, spend)
 
 {-| A limit order. A maker locks tokens and asks for other tokens at a fixed price. A taker
-fills all or part of it by paying the maker; a partial fill must return the rest to the
-script under the same order. The maker may cancel.
+fills all or part of it by paying the maker; a partial fill must return everything else in
+the order, lovelace and other tokens included, to the script under the same order. A full
+fill pays the maker the price and everything the order held besides the offered tokens.
+The maker may cancel.
 
   - The maker's payment carries the order's output reference as its inline datum, so one
     payment cannot fill two orders.
-  - The transaction may spend only one output of this script, so one returned output
+  - The transaction may spend only one input of this script, so one returned output
     cannot stand for two orders either.
 
 -}
@@ -14,7 +16,7 @@ script under the same order. The maker may cancel.
 import Julc.Data as Data
 import Julc.Ledger exposing (Credential(..), PolicyId, PubKeyHash, ScriptContext, TokenName, TxInInfo, TxOutRef)
 import Tx
-import Value
+import Value exposing (Value)
 
 
 {-| The maker offers one token and asks `price` of another for each unit.
@@ -55,37 +57,44 @@ fill order amount own ctx =
         offered =
             Value.quantityOf order.offerPolicy order.offerName own.resolved.value
 
-        left =
-            offered - amount
+        rest =
+            Value.subtract own.resolved.value (Value.singleton order.offerPolicy order.offerName amount)
+
+        payment =
+            Value.singleton order.askPolicy order.askName (amount * order.price)
     in
     (amount > 0)
         && (amount <= offered)
         && onlyScriptInput own ctx
-        && makerPaid order (amount * order.price) own.outRef ctx
-        && (left == 0 || restReturned order left ctx)
+        && (if amount == offered then
+                makerPaid order (Value.add payment rest) own.outRef ctx
+
+            else
+                makerPaid order payment own.outRef ctx && restReturned order rest ctx
+           )
 
 
+{-| Whether this is the only input from the script.
+-}
 onlyScriptInput : TxInInfo -> ScriptContext -> Bool
 onlyScriptInput own ctx =
-    List.length (List.filter (\input -> input.resolved.address == own.resolved.address) ctx.txInfo.inputs) == 1
+    List.length (List.filter (\input -> input.resolved.address.credential == own.resolved.address.credential) ctx.txInfo.inputs) == 1
 
 
-makerPaid : Order -> Int -> TxOutRef -> ScriptContext -> Bool
+makerPaid : Order -> Value -> TxOutRef -> ScriptContext -> Bool
 makerPaid order owed ref ctx =
     List.any
-        (\output ->
-            (Value.quantityOf order.askPolicy order.askName output.value >= owed)
-                && (Tx.inlineDatum output == Just (Data.encode ref))
-        )
+        (\output -> Value.geq output.value owed && (Tx.inlineDatum output == Just (Data.encode ref)))
         (Tx.outputsTo (PubKeyCredential order.maker) ctx)
 
 
-restReturned : Order -> Int -> ScriptContext -> Bool
-restReturned order left ctx =
+{-| Whether one output returns at least `rest` to the script under the same order.
+-}
+restReturned : Order -> Value -> ScriptContext -> Bool
+restReturned order rest ctx =
     case Tx.continuingOutputs ctx of
         [ output ] ->
-            (Value.quantityOf order.offerPolicy order.offerName output.value >= left)
-                && (Tx.inlineDatum output == Just (Data.encode order))
+            Value.geq output.value rest && (Tx.inlineDatum output == Just (Data.encode order))
 
         _ ->
             False

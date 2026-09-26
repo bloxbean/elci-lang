@@ -1262,11 +1262,12 @@ class StandardLibraryTest {
                 boundary = "julc-strict-v1"
                 spend = "Probe.spend"
                 mint = "Probe.mint"
+                withdraw = "Probe.withdraw"
                 """);
         Files.createDirectories(project.resolve("src"));
         Files.createDirectories(project.resolve("tests"));
         Files.writeString(project.resolve("src/Probe.elm"), """
-                module Probe exposing (Check(..), mint, spend)
+                module Probe exposing (Check(..), mint, spend, withdraw)
 
                 import Bytes
                 import Dict
@@ -1285,6 +1286,11 @@ class StandardLibraryTest {
                     | Balanced
                     | StartsAfter Int
                     | InlineDatumIs Int
+                    | HashedDatumIs Int
+                    | NoDatums
+                    | NoPolicyWhenSpending
+                    | PaidExactly PubKeyHash Int
+                    | Laws PubKeyHash PubKeyHash
 
 
                 spend : () -> Check -> ScriptContext -> Bool
@@ -1319,21 +1325,57 @@ class StandardLibraryTest {
                             List.any (\\output -> Tx.inlineDatum output == Just (Data.encode n) && Tx.datumOf output ctx == Just (Data.encode n))
                                 ctx.txInfo.outputs
 
+                        HashedDatumIs n ->
+                            List.any (\\output -> Tx.inlineDatum output == Nothing && Tx.datumOf output ctx == Just (Data.encode n))
+                                ctx.txInfo.outputs
+
+                        NoDatums ->
+                            List.all (\\output -> Tx.datumOf output ctx == Nothing) ctx.txInfo.outputs
+
+                        NoPolicyWhenSpending ->
+                            Tx.ownPolicy ctx == Nothing && Tx.ownRef ctx /= Nothing
+
+                        PaidExactly key amount ->
+                            Value.lovelaceOf (Tx.valuePaidTo (PubKeyCredential key) ctx) == amount
+
+                        Laws a b ->
+                            let
+                                paid key =
+                                    Tx.valuePaidTo (PubKeyCredential key) ctx
+                            in
+                            (paid a == Value.sum (List.map (\\output -> output.value) (Tx.outputsTo (PubKeyCredential a) ctx)))
+                                && (Tx.valueProduced ctx == Value.add (paid a) (paid b))
+
 
                 mint : () -> ScriptContext -> Bool
                 mint _ ctx =
                     case Tx.ownPolicy ctx of
                         Just policy ->
-                            Dict.get (TokenName (Bytes.fromString "T")) (Tx.mintedOf policy ctx) == Just 2
+                            let
+                                minted token =
+                                    Dict.get (TokenName (Bytes.fromString token)) (Tx.mintedOf policy ctx)
+                            in
+                            (Tx.ownRef ctx == Nothing)
+                                && (Maybe.map (\\input -> input.outRef) (Tx.ownInput ctx) == Nothing)
+                                && List.isEmpty (Tx.continuingOutputs ctx)
+                                && (minted "T" == Just 2)
+                                && (minted "B" == Nothing || minted "B" == Just -3)
 
                         Nothing ->
                             False
+
+
+                withdraw : () -> ScriptContext -> Bool
+                withdraw _ ctx =
+                    (Tx.ownRef ctx == Nothing) && (Tx.ownPolicy ctx == Nothing) && List.isEmpty (Tx.continuingOutputs ctx)
                 """);
         Files.writeString(project.resolve("tests/ProbeTest.elm"), """
-                module ProbeTest exposing (balanced, continues, datums, minted, paid, signed, spendsOwn, startsAfter, underpaid, unsigned, wrongMint)
+                module ProbeTest exposing (balanced, burned, burnSignKept, continues, datums, hashedDatums, laws, minted, noPolicyWhenSpending, paid, paidIgnoresStakingPart, signed, spendsOwn, startsAfter, underpaid, unsigned, unwitnessedDatums, withdrawn, wrongMint)
 
                 import Bytes
                 import Julc.Data as Data
+                import Julc.Ledger as Ledger exposing (Credential(..), OutputDatum(..), PubKeyHash, StakingCredential(..))
+                import Property exposing (Property)
                 import Probe exposing (Check(..))
                 import Scenario exposing (Policy(..), Scenario)
 
@@ -1414,10 +1456,85 @@ class StandardLibraryTest {
                         |> Scenario.redeemer Scenario.unit
                         |> Scenario.minting (Bytes.fromString "T") 1
                         |> Scenario.expectFailure
+
+
+                burned : Scenario
+                burned =
+                    minted |> Scenario.minting (Bytes.fromString "B") -3
+
+
+                burnSignKept : Scenario
+                burnSignKept =
+                    minted |> Scenario.minting (Bytes.fromString "B") 3 |> Scenario.expectFailure
+
+
+                withdrawn : Scenario
+                withdrawn =
+                    Scenario.withdraw "probe" |> Scenario.redeemer Scenario.unit
+
+
+                noPolicyWhenSpending : Scenario
+                noPolicyWhenSpending =
+                    check NoPolicyWhenSpending
+
+
+                hashedDatums : Scenario
+                hashedDatums =
+                    check (HashedDatumIs 42)
+                        |> Scenario.output (Scenario.toKey (Scenario.key "a") 1 |> Scenario.withDatumHash (Data.encode 42))
+
+
+                unwitnessedDatums : Scenario
+                unwitnessedDatums =
+                    let
+                        out =
+                            Scenario.toKey (Scenario.key "a") 1
+                    in
+                    check NoDatums
+                        |> Scenario.output { out | datum = OutputDatumHash (Ledger.DatumHash (Bytes.blake2b256 (Bytes.fromString "d"))) }
+
+
+                staked : PubKeyHash -> Ledger.Address
+                staked owner =
+                    Ledger.Address (PubKeyCredential owner) (Data.toOptional (Just (StakingHash (PubKeyCredential (Scenario.key "stake")))))
+
+
+                paidIgnoresStakingPart : Scenario
+                paidIgnoresStakingPart =
+                    check (PaidExactly (Scenario.key "a") 7)
+                        |> Scenario.output (Scenario.toAddress (staked (Scenario.key "a")) 3)
+                        |> Scenario.output (Scenario.toKey (Scenario.key "a") 4)
+                        |> Scenario.output (Scenario.toKey (Scenario.key "b") 9)
+
+
+                {-| valuePaidTo sums outputsTo, and every output paid to a or b makes up valueProduced.
+                -}
+                laws : Int -> Int -> Int -> Bool -> Property
+                laws x y z stake =
+                    let
+                        a =
+                            Scenario.key "a"
+
+                        b =
+                            Scenario.key "b"
+
+                        toA amount =
+                            if stake then
+                                Scenario.toAddress (staked a) amount
+
+                            else
+                                Scenario.toKey a amount
+                    in
+                    Property.scenario
+                        (check (Laws a b)
+                            |> Scenario.output (toA (modBy 1000 x + 1))
+                            |> Scenario.output (Scenario.toKey b (modBy 1000 y + 1))
+                            |> Scenario.output (Scenario.toKey a (modBy 1000 z + 1) |> Scenario.withToken (Policy (Bytes.fromString "p")) (Bytes.fromString "t") (modBy 5 z + 1))
+                        )
                 """);
         var result = NamedValidatorCliTest.run("test", project.toString());
         assertEquals(0, result.status(), result.out() + result.err());
-        assertTrue(result.out().contains("11 passed, 0 failed"), result.out());
+        assertTrue(result.out().contains("19 passed, 0 failed"), result.out());
     }
 
     @Test
@@ -1438,7 +1555,7 @@ class StandardLibraryTest {
         }
         var result = NamedValidatorCliTest.run("test", project.toString(), "--seed", "2026");
         assertEquals(0, result.status(), result.out() + result.err());
-        assertTrue(result.out().contains("50 passed, 0 failed (seed 2026)"), result.out());
+        assertTrue(result.out().contains("51 passed, 0 failed (seed 2026)"), result.out());
     }
 
     /** Budget snapshots: cost changes to the standard library must be deliberate. */

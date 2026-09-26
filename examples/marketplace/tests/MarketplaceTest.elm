@@ -1,11 +1,16 @@
 module MarketplaceTest exposing
     ( buyPaysSellerAndOperator
     , buyWithoutFeeRejected
+    , buyingPaysExactly
     , cancelByOtherRejected
     , cancelBySeller
+    , feeOutOfRangeRejected
     , feeRoundsDown
-    , feeSplitsThePrice
+    , onePaymentForTwoListingsRejected
+    , operatorSellingIsPaidInFull
+    , operatorSellingShortchangedRejected
     , sellerShortchangedRejected
+    , untaggedPaymentRejected
     )
 
 import Julc.Data as Data
@@ -53,6 +58,61 @@ sellerShortchangedRejected =
     buy 97499999 2500000 |> Scenario.expectFailure
 
 
+{-| Two listings by one seller, bought together with one pair of payments tagged for the
+first: the second is not paid for.
+-}
+onePaymentForTwoListingsRejected : Scenario
+onePaymentForTwoListingsRejected =
+    Scenario.spend "marketplace" (Scenario.outRef "listing" 1) (Data.encode listing)
+        |> Scenario.parameters [ Data.encode market ]
+        |> Scenario.redeemer (Data.encode Buy)
+        |> Scenario.input (Scenario.outRef "listing" 0) (Scenario.toScript 2000000 |> Scenario.withDatum (Data.encode listing))
+        |> Scenario.output (Scenario.toKey listing.seller 97500000 |> Scenario.withDatum tag)
+        |> Scenario.output (Scenario.toKey market.operator 2500000 |> Scenario.withDatum tag)
+        |> Scenario.expectFailure
+
+
+untaggedPaymentRejected : Scenario
+untaggedPaymentRejected =
+    Scenario.spend "marketplace" (Scenario.outRef "listing" 0) (Data.encode listing)
+        |> Scenario.parameters [ Data.encode market ]
+        |> Scenario.redeemer (Data.encode Buy)
+        |> Scenario.output (Scenario.toKey listing.seller 97500000)
+        |> Scenario.output (Scenario.toKey market.operator 2500000)
+        |> Scenario.expectFailure
+
+
+{-| The operator selling their own NFT, paid in one output.
+-}
+operatorSells : Int -> Scenario
+operatorSells amount =
+    Scenario.spend "marketplace" (Scenario.outRef "listing" 0) (Data.encode { listing | seller = market.operator })
+        |> Scenario.parameters [ Data.encode market ]
+        |> Scenario.redeemer (Data.encode Buy)
+        |> Scenario.output (Scenario.toKey market.operator amount |> Scenario.withDatum tag)
+
+
+operatorSellingIsPaidInFull : Scenario
+operatorSellingIsPaidInFull =
+    operatorSells 100000000
+
+
+operatorSellingShortchangedRejected : Scenario
+operatorSellingShortchangedRejected =
+    operatorSells 97500000 |> Scenario.expectFailure
+
+
+{-| A marketplace deployed with a fee over 100% rejects every purchase.
+-}
+feeOutOfRangeRejected : Scenario
+feeOutOfRangeRejected =
+    Scenario.spend "marketplace" (Scenario.outRef "listing" 0) (Data.encode listing)
+        |> Scenario.parameters [ Data.encode { market | feeBasisPoints = 10001 } ]
+        |> Scenario.redeemer (Data.encode Buy)
+        |> Scenario.output (Scenario.toKey market.operator 100010000 |> Scenario.withDatum tag)
+        |> Scenario.expectFailure
+
+
 cancel : String -> Scenario
 cancel signer =
     Scenario.spend "marketplace" (Scenario.outRef "listing" 0) (Data.encode listing)
@@ -76,18 +136,39 @@ feeRoundsDown =
     Marketplace.fee { operator = market.operator, feeBasisPoints = 250 } 399 == 9
 
 
-{-| The seller's share and the fee always add up to the price, and the fee never exceeds it.
+{-| At any price and fee below 100%, paying the seller exactly the price less the fee and
+the operator the fee buys the NFT; one lovelace less to the seller does not.
 -}
-feeSplitsThePrice : Int -> Int -> Property
-feeSplitsThePrice rawPrice rawBasisPoints =
+buyingPaysExactly : Int -> Int -> Bool -> Property
+buyingPaysExactly rawPrice rawBasisPoints short =
     let
-        price =
-            abs rawPrice
+        priced =
+            { listing | price = modBy 1000000000 (abs rawPrice) + 1 }
 
-        basisPoints =
-            modBy 10001 rawBasisPoints
+        charging =
+            { market | feeBasisPoints = modBy 10000 rawBasisPoints }
 
         cut =
-            Marketplace.fee { operator = market.operator, feeBasisPoints = basisPoints } price
+            Marketplace.fee charging priced.price
+
+        toSeller =
+            if short then
+                priced.price - cut - 1
+
+            else
+                priced.price - cut
+
+        scenario =
+            Scenario.spend "marketplace" (Scenario.outRef "listing" 0) (Data.encode priced)
+                |> Scenario.parameters [ Data.encode charging ]
+                |> Scenario.redeemer (Data.encode Buy)
+                |> Scenario.output (Scenario.toKey priced.seller toSeller |> Scenario.withDatum tag)
+                |> Scenario.output (Scenario.toKey charging.operator cut |> Scenario.withDatum tag)
     in
-    Property.holds (cut >= 0 && cut <= price && (price - cut) + cut == price)
+    Property.scenario
+        (if short then
+            Scenario.expectFailure scenario
+
+         else
+            scenario
+        )

@@ -5,7 +5,8 @@ the seller the price, less the marketplace's fee, and paying the operator the fe
 seller may cancel at any time.
 
 Each payment carries the listing's output reference as its inline datum, so one payment
-cannot settle two listings in the same transaction.
+cannot settle two listings in the same transaction. The buyer keeps the lovelace locked
+with the NFT, as the ledger requires some in every output.
 
 -}
 
@@ -15,7 +16,8 @@ import Tx
 import Value
 
 
-{-| The marketplace, fixed when the script is deployed.
+{-| The marketplace, fixed when the script is deployed. The fee is in basis points, from 0 to
+10000; a script deployed with any other fee rejects every purchase.
 -}
 type alias Market =
     { operator : PubKeyHash
@@ -45,8 +47,18 @@ spend market listing action ctx =
                     let
                         cut =
                             fee market listing.price
+
+                        -- An operator selling their own NFT is owed the whole price in one payment.
+                        owed =
+                            if listing.seller == market.operator then
+                                listing.price
+
+                            else
+                                listing.price - cut
                     in
-                    paid listing.seller (listing.price - cut) ref ctx
+                    (market.feeBasisPoints >= 0)
+                        && (market.feeBasisPoints <= 10000)
+                        && paid listing.seller owed ref ctx
                         && (cut == 0 || paid market.operator cut ref ctx)
 
                 Nothing ->

@@ -103,8 +103,10 @@ final class Scenarios {
         var inputType = Data.element(Data.field(specType, "inputs"));
         var outputType = Data.element(Data.field(specType, "outputs"));
         var tokenType = Data.element(Data.field(specType, "minted"));
+        // Datums held by hash, keyed by their hash, for the transaction's witnesses.
+        var witnesses = new java.util.LinkedHashMap<DatumHash, PlutusData>();
         var inputs = new ArrayList<TxInInfo>();
-        for (var input : Data.list(spec.get("inputs"))) inputs.add(input(input, inputType, ownAddress, policy));
+        for (var input : Data.list(spec.get("inputs"))) inputs.add(input(input, inputType, ownAddress, policy, witnesses));
         ScriptContextTestBuilder builder = switch (purpose.tag()) {
             case 0 -> {
                 var ref = TxOutRef.fromPlutusData(purpose.fields().get(0));
@@ -132,8 +134,9 @@ final class Scenarios {
         for (var signer : Data.list(spec.get("signers"))) builder.signer(PubKeyHash.fromPlutusData(signer));
         for (var input : inputs) builder.input(input);
         for (var reference : Data.list(spec.get("referenceInputs")))
-            builder.referenceInput(input(reference, inputType, ownAddress, policy));
-        for (var output : Data.list(spec.get("outputs"))) builder.output(output(output, outputType, ownAddress, policy));
+            builder.referenceInput(input(reference, inputType, ownAddress, policy, witnesses));
+        for (var output : Data.list(spec.get("outputs"))) builder.output(output(output, outputType, ownAddress, policy, witnesses));
+        witnesses.forEach(builder::datum);
         var minted = Value.zero();
         for (var token : Data.list(spec.get("minted"))) minted = minted.merge(token(token, tokenType, policy));
         if (!Data.list(spec.get("minted")).isEmpty()) builder.mint(canonical(minted));
@@ -148,20 +151,33 @@ final class Scenarios {
         return builder.buildPlutusData();
     }
 
-    private static TxInInfo input(PlutusData data, PirType type, Address own, PolicyId policy) {
+    private static TxInInfo input(PlutusData data, PirType type, Address own, PolicyId policy,
+                                  Map<DatumHash, PlutusData> witnesses) {
         var fields = Data.record(data, type);
         return new TxInInfo(TxOutRef.fromPlutusData(fields.get("ref")),
-                output(fields.get("output"), Data.field(type, "output"), own, policy));
+                output(fields.get("output"), Data.field(type, "output"), own, policy, witnesses));
     }
 
-    private static TxOut output(PlutusData data, PirType type, Address own, PolicyId policy) {
+    private static TxOut output(PlutusData data, PirType type, Address own, PolicyId policy,
+                                Map<DatumHash, PlutusData> witnesses) {
         var fields = Data.record(data, type);
         var destination = Data.constr(fields.get("destination"), -1);
         var address = destination.tag() == 0 ? own : Address.fromPlutusData(destination.fields().getFirst());
         var value = Value.lovelace(Data.integer(fields.get("lovelace")));
         var tokenType = Data.element(Data.field(type, "tokens"));
         for (var token : Data.list(fields.get("tokens"))) value = value.merge(token(token, tokenType, policy));
-        return new TxOut(address, canonical(value), OutputDatum.fromPlutusData(fields.get("datum")), Optional.empty());
+        var hashed = Data.maybe(fields.get("hashedDatum"));
+        if (hashed == null)
+            return new TxOut(address, canonical(value), OutputDatum.fromPlutusData(fields.get("datum")), Optional.empty());
+        var hash = datumHash(hashed);
+        witnesses.put(hash, hashed);
+        return new TxOut(address, canonical(value), new OutputDatum.OutputDatumHash(hash), Optional.empty());
+    }
+
+    /** The ledger's datum hash: BLAKE2b-256 of the datum's CBOR. */
+    static DatumHash datumHash(PlutusData datum) {
+        return new DatumHash(new org.julclang.testkit.JvmCryptoProvider()
+                .blake2b_256(org.julclang.core.cbor.PlutusDataCborEncoder.encode(datum)));
     }
 
     /**

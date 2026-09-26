@@ -36,9 +36,15 @@ Times are POSIX milliseconds.
 | `start range : Maybe Int`, `end range : Maybe Int` | the finite bounds, or `Nothing` when unbounded |
 | `after t`, `before t`, `between a b`, `everything` | ranges: from `t` on, up to `t`, both inclusive |
 
-The names follow Aiken's interval module, the closest precedent. An unbounded side never
-satisfies a check that needs it. The empty range satisfies both `isEntirelyAfter` and
-`isEntirelyBefore`, as in Aiken.
+The names follow Aiken's interval module, the closest precedent, and so do the checks. A
+check needs a finite bound on its side:
+
+- An unbounded side never satisfies it.
+- Neither does an infinite bound on the wrong side, which only an empty range has: a
+  `PosInf` start or a `NegInf` end.
+
+So a range that fails closed, such as one decoded from a datum, never passes a time check.
+The ledger's validity ranges never have these shapes.
 
 ### 2. `Tx`: questions about the transaction
 
@@ -63,8 +69,13 @@ A core module (`import Tx`). Each function takes the `ScriptContext` last, so ch
 
 - **Credentials, not addresses, identify owners.** A payment is usually required to reach a
   key or a script whatever the staking part. `outputsTo` and `valuePaidTo` therefore match
-  the payment credential only; code that cares about the staking part compares
-  `output.address` directly.
+  the payment credential only.
+  - The payer chooses the staking part, so a payee's staking rights are not protected.
+  - Code that cares about the staking part compares `output.address` directly, against an
+    address stored in the datum.
+- **`valuePaidTo` alone is open to double satisfaction.** When two inputs of a script can
+  each require a payment to the same party, one output can satisfy both. Contracts look
+  for a tagged output with `outputsTo`, and the doc comments say so.
 - **Datums stay `Data`.** Decoding needs the datum's type: `Tx.inlineDatum out |>
   Maybe.map Data.decode`, with an annotation. Decoding is strict, as everywhere, so a
   malformed datum fails the script rather than looking absent.
@@ -79,30 +90,52 @@ way to break it, and properties over the boundaries:
 
 - **Escrow.** A buyer locks payment for a seller. The seller claims it with the buyer's
   signature, or the buyer reclaims it after a deadline. It uses `Tx.signedBy`,
-  `Interval.isEntirelyAfter` and `Tx.valuePaidTo`.
+  `Interval.isEntirelyAfter`, `Tx.outputsTo` and `Tx.inlineDatum`.
 - **NFT marketplace.** A seller lists an NFT at a price. Anyone buys it by paying the seller
-  and the marketplace fee; the seller may cancel. It uses `Value`, `Tx.valuePaidTo` and
-  exact arithmetic on fees.
+  and the marketplace fee; the seller may cancel.
+  - It uses `Tx.outputsTo`, `Tx.inlineDatum` and exact arithmetic on fees.
+  - The fee must be between 0 and 10000 basis points.
+  - An operator selling their own NFT is owed the whole price.
 - **Order swap.** A maker locks tokens and asks for other tokens in return. A taker fills
-  it by paying the maker the asked amount; a partial fill returns the rest to the script
-  under the same order datum. It uses `Tx.ownInput`, `Tx.continuingOutputs`,
-  `Tx.inlineDatum` and `Value`. One script input per transaction keeps a returned output
-  from standing for two orders.
+  it by paying the maker the asked amount.
+  - A partial fill returns everything else the order holds, lovelace and other tokens
+    included, to the script under the same order datum.
+  - A full fill pays the maker the price and everything the order held besides the
+    offered tokens.
+  - It uses `Tx.ownInput`, `Tx.continuingOutputs`, `Tx.inlineDatum` and `Value.geq`.
+  - One input of the script per transaction keeps a returned output from standing for two
+    orders.
 
 All three tag their payments with the spent output's reference, against double
-satisfaction, and a test shows each attack failing.
+satisfaction. The scenarios show each attack failing:
+
+- two script inputs settled with one payment;
+- untagged and wrongly tagged payments;
+- a missing signature;
+- a changed continuing datum;
+- a partial or full fill that keeps part of the order's value.
 
 ### 4. Equality on `Data`
 
 Comparing an output's inline datum with an expected encoding,
 `Tx.inlineDatum out == Just (Data.encode ref)`, is the standard datum check. So `==` on
 `Data` is allowed, and it compares structure (`EqualsData`). Elci's encodings are
-deterministic per type, so this is exact for values Elci encodes.
+deterministic per type, so this is exact for values Elci encodes, with one exception. A
+`Map` keeps insertion order and has no `==` of its own, so two encodings of equal maps may
+differ.
 
 ### 5. Test library
 
-`Scenario.toKey key lovelace` pays a key's address with no staking part, as most
-payments do.
+- `Scenario.toKey key lovelace` pays a key's address with no staking part, as most
+  payments do.
+- `Scenario.withDatumHash datum output` holds a datum by hash. The runner puts the datum's
+  hash in the output and the datum among the transaction's witnesses, so `Tx.datumOf` can
+  be tested on both kinds of datum.
+
+### 6. Reserved names
+
+`Tx` and `Interval` join the core modules, so a project module can no longer have either
+name (ELCI2104), as with every core module (ADR-007).
 
 Each contract ships with a documentation page. The AI starter pack's examples come from the
 same sources, as for the existing examples.
@@ -112,10 +145,12 @@ same sources, as for the existing examples.
 - **Tests for every function**: the ledger shapes each handles, including unbounded
   ranges, mints without ADA, datum hashes and outputs to scripts.
 - **Law properties.**
-  - For `Interval`: `contains` and the `isEntirely` checks agree for every bound shape;
-    `after t` contains exactly the times `>= t`.
-  - For `Tx`: `valuePaidTo` sums what `outputsTo` returns, and `valueProduced` is the
-    sum over all credentials.
+  - For `Interval`:
+    - `contains` and the `isEntirely` checks agree for every finite bound shape;
+    - with infinite bounds, a check holds only on a finite bound on its side;
+    - `after t` contains exactly the times `>= t`.
+  - For `Tx`, generated as scenarios: `valuePaidTo` sums what `outputsTo` returns, and
+    `valueProduced` is the sum over the paid credentials.
 - **Scenario suites** for the reference contracts: every success path, every failure path
   and a property per boundary.
 - **Byte stability** of the existing examples, which are unchanged.

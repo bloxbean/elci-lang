@@ -1,4 +1,4 @@
-module IntervalLawsTest exposing (intervalBoundsAgree, intervalChecksAgreeWithContains)
+module IntervalLawsTest exposing (intervalBoundsAgree, intervalChecksAgreeWithContains, intervalChecksNeedFiniteBounds)
 
 import Interval
 import Julc.Ledger exposing (Interval(..), IntervalBound(..), IntervalBoundType(..))
@@ -64,4 +64,52 @@ intervalChecksAgreeWithContains rawLow rawHigh lowInclusive highInclusive rawTim
                 else
                     List.any (\x -> x >= time) inside || List.isEmpty inside
                )
+        )
+
+
+{-| With any mix of finite and infinite bounds, a check holds only on a finite bound on its
+side, and then no contained time breaks it; `start` and `end` see only finite bounds.
+-}
+intervalChecksNeedFiniteBounds : Int -> Int -> Int -> Int -> Bool -> Int -> Property
+intervalChecksNeedFiniteBounds lowShape highShape rawLow rawHigh inclusive rawTime =
+    let
+        low =
+            small rawLow
+
+        high =
+            low + small rawHigh
+
+        time =
+            small rawTime
+
+        bound shape at =
+            case modBy 3 shape of
+                0 ->
+                    IntervalBound (Finite at) inclusive
+
+                1 ->
+                    IntervalBound NegInf inclusive
+
+                _ ->
+                    IntervalBound PosInf inclusive
+
+        range =
+            Interval (bound lowShape low) (bound highShape high)
+
+        finite b =
+            case b.boundType of
+                Finite _ ->
+                    True
+
+                _ ->
+                    False
+
+        window =
+            List.range (time - 12) (time + 12)
+    in
+    Property.holds
+        ((not (Interval.isEntirelyAfter time range) || finite range.from && List.all (\x -> x > time || not (Interval.contains x range)) window)
+            && (not (Interval.isEntirelyBefore time range) || finite range.to && List.all (\x -> x < time || not (Interval.contains x range)) window)
+            && ((Interval.start range /= Nothing) == finite range.from)
+            && ((Interval.end range /= Nothing) == finite range.to)
         )

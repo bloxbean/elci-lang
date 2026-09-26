@@ -31,6 +31,7 @@ module Scenario exposing
     , validFrom
     , vote
     , withDatum
+    , withDatumHash
     , withToken
     , withdraw
     , withinBudget
@@ -83,11 +84,15 @@ type Destination
     | ToAddress Address
 
 
+{-| An output. `hashedDatum` holds a datum by hash: the runner puts the datum's hash in
+the output and the datum in the transaction's witnesses.
+-}
 type alias Output =
     { destination : Destination
     , lovelace : Int
     , tokens : List Token
     , datum : OutputDatum
+    , hashedDatum : Maybe Data
     }
 
 
@@ -301,12 +306,12 @@ withinBudget cpu memory =
 
 toScript : Int -> Output
 toScript lovelace =
-    { destination = ToScript, lovelace = lovelace, tokens = [], datum = NoOutputDatum }
+    { destination = ToScript, lovelace = lovelace, tokens = [], datum = NoOutputDatum, hashedDatum = Nothing }
 
 
 toAddress : Address -> Int -> Output
 toAddress address lovelace =
-    { destination = ToAddress address, lovelace = lovelace, tokens = [], datum = NoOutputDatum }
+    { destination = ToAddress address, lovelace = lovelace, tokens = [], datum = NoOutputDatum, hashedDatum = Nothing }
 
 
 {-| An output paid to a key's address, without a staking part.
@@ -318,7 +323,15 @@ toKey owner lovelace =
 
 withDatum : Data -> Output -> Output
 withDatum datum paid =
-    { paid | datum = OutputDatumInline datum }
+    { paid | datum = OutputDatumInline datum, hashedDatum = Nothing }
+
+
+{-| Hold a datum by hash, as older contracts do: the output carries the datum's hash, and the
+transaction carries the datum among its witnesses.
+-}
+withDatumHash : Data -> Output -> Output
+withDatumHash datum paid =
+    { paid | datum = NoOutputDatum, hashedDatum = Just datum }
 
 
 withToken : Policy -> Bytes -> Int -> Output -> Output

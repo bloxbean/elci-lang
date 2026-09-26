@@ -87,14 +87,22 @@ ownPolicy ctx =
             Nothing
 
 
-{-| The outputs paid to a payment credential, in order.
+{-| The outputs paid to a payment credential, in order. The payer chooses their staking
+part.
+
+When two inputs of a script can each require a payment to the same party, one output can
+satisfy both: double satisfaction. Tag each payment, for example with the spent output's
+reference as its inline datum, and look for the tagged output here.
+
 -}
 outputsTo : Credential -> ScriptContext -> List TxOut
 outputsTo credential ctx =
     List.filter (\output -> output.address.credential == credential) ctx.txInfo.outputs
 
 
-{-| The total value of the outputs paid to a payment credential.
+{-| The total value of the outputs paid to a payment credential. On its own this is open to
+double satisfaction when two inputs of a script can each require a payment to the same
+party; see `outputsTo`.
 -}
 valuePaidTo : Credential -> ScriptContext -> Value
 valuePaidTo credential ctx =

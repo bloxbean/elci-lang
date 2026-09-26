@@ -1,13 +1,21 @@
 module SwapTest exposing
     ( cancelByMaker
     , cancelByOtherRejected
+    , changedOrderRejected
     , fillCompletely
     , fillPartially
     , fillsAreChecked
+    , fullFillMustPayTheDeposit
+    , fullFillPaysTheDeposit
     , overfillRejected
+    , partialFillMustReturnEverything
     , partialFillMustReturnTheRest
+    , partialFillReturnsEverything
     , secondOrderInTheSameTransactionRejected
     , underpaidRejected
+    , untaggedPaymentRejected
+    , wrongTagRejected
+    , zeroTakeRejected
     )
 
 import Bytes
@@ -101,6 +109,118 @@ overfillRejected =
 secondOrderInTheSameTransactionRejected : Scenario
 secondOrderInTheSameTransactionRejected =
     take 4 12 |> rest 6 |> locked 1 |> Scenario.expectFailure
+
+
+{-| A richer order: 100 ADA, 10 GOLD and 5 BONUS. Only GOLD is for sale.
+-}
+rich : Scenario -> Scenario
+rich =
+    Scenario.input (Scenario.outRef "order" 0)
+        (Scenario.toScript 100000000
+            |> Scenario.withToken (Policy gold) (Bytes.fromString "GOLD") 10
+            |> Scenario.withToken (Policy gold) (Bytes.fromString "BONUS") 5
+            |> Scenario.withDatum (Data.encode order)
+        )
+
+
+takeRich : Int -> Scenario
+takeRich amount =
+    Scenario.spend "swap" (Scenario.outRef "order" 0) (Data.encode order)
+        |> rich
+        |> Scenario.redeemer (Data.encode (Take amount))
+
+
+{-| The maker's payment, tagged with the order: lovelace, SILVER and BONUS.
+-}
+paid : Int -> Int -> Int -> Scenario -> Scenario
+paid lovelace silverAmount bonus =
+    Scenario.output
+        (Scenario.toKey order.maker lovelace
+            |> Scenario.withToken (Policy silver) (Bytes.fromString "SILVER") silverAmount
+            |> Scenario.withToken (Policy gold) (Bytes.fromString "BONUS") bonus
+            |> Scenario.withDatum (Data.encode (Scenario.outRef "order" 0))
+        )
+
+
+{-| What a partial fill returns to the script: lovelace, GOLD and BONUS.
+-}
+returned : Int -> Int -> Int -> Scenario -> Scenario
+returned lovelace quantity bonus =
+    Scenario.output
+        (Scenario.toScript lovelace
+            |> Scenario.withToken (Policy gold) (Bytes.fromString "GOLD") quantity
+            |> Scenario.withToken (Policy gold) (Bytes.fromString "BONUS") bonus
+            |> Scenario.withDatum (Data.encode order)
+        )
+
+
+partialFillReturnsEverything : Scenario
+partialFillReturnsEverything =
+    takeRich 1 |> paid 1500000 3 0 |> returned 100000000 9 5
+
+
+{-| A taker who returns the GOLD but keeps the lovelace and the BONUS tokens is rejected.
+-}
+partialFillMustReturnEverything : Scenario
+partialFillMustReturnEverything =
+    takeRich 1 |> paid 1500000 3 0 |> returned 1500000 9 0 |> Scenario.expectFailure
+
+
+fullFillPaysTheDeposit : Scenario
+fullFillPaysTheDeposit =
+    takeRich 10 |> paid 100000000 30 5
+
+
+{-| A taker who pays the price but keeps the order's lovelace is rejected.
+-}
+fullFillMustPayTheDeposit : Scenario
+fullFillMustPayTheDeposit =
+    takeRich 10 |> paid 1500000 30 5 |> Scenario.expectFailure
+
+
+{-| The returned order must be the same order: a taker cannot name themselves the maker.
+-}
+changedOrderRejected : Scenario
+changedOrderRejected =
+    take 1 3
+        |> Scenario.output
+            (Scenario.toScript 2000000
+                |> Scenario.withToken (Policy gold) (Bytes.fromString "GOLD") 9
+                |> Scenario.withDatum (Data.encode { order | maker = Scenario.key "taker" })
+            )
+        |> Scenario.expectFailure
+
+
+untaggedPaymentRejected : Scenario
+untaggedPaymentRejected =
+    Scenario.spend "swap" (Scenario.outRef "order" 0) (Data.encode order)
+        |> locked 0
+        |> Scenario.redeemer (Data.encode (Take 10))
+        |> Scenario.output
+            (Scenario.toKey order.maker 2000000
+                |> Scenario.withToken (Policy silver) (Bytes.fromString "SILVER") 30
+            )
+        |> Scenario.expectFailure
+
+
+{-| A payment tagged for another order does not fill this one.
+-}
+wrongTagRejected : Scenario
+wrongTagRejected =
+    Scenario.spend "swap" (Scenario.outRef "order" 0) (Data.encode order)
+        |> locked 0
+        |> Scenario.redeemer (Data.encode (Take 10))
+        |> Scenario.output
+            (Scenario.toKey order.maker 2000000
+                |> Scenario.withToken (Policy silver) (Bytes.fromString "SILVER") 30
+                |> Scenario.withDatum (Data.encode (Scenario.outRef "order" 1))
+            )
+        |> Scenario.expectFailure
+
+
+zeroTakeRejected : Scenario
+zeroTakeRejected =
+    take 0 0 |> rest 10 |> Scenario.expectFailure
 
 
 cancel : String -> Scenario
