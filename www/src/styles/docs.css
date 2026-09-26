@@ -1,38 +1,39 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-/* Dark theme: warm plum greys with a rose → violet accent (matches the landing page). */
+/* Dark theme: espresso greys with a clay accent (matches the landing page). */
 :root {
   --sl-font: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --sl-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --sl-content-width: 50rem;
-  --sl-color-accent-low: #3a1830;
-  --sl-color-accent: #ff6fa3;
-  --sl-color-accent-high: #ffd0e2;
-  --sl-color-white: #faf5f8;
-  --sl-color-gray-1: #eadfe7;
-  --sl-color-gray-2: #c9bac5;
-  --sl-color-gray-3: #9d8b99;
-  --sl-color-gray-4: #66566a;
-  --sl-color-gray-5: #3b2f40;
-  --sl-color-gray-6: #231b28;
-  --sl-color-black: #16111a;
-  --elci-gradient: linear-gradient(120deg, #ff7a3d 0%, #f0417e 50%, #7a5cff 100%);
+  --sl-color-accent-low: #3d2118;
+  --sl-color-accent: #f0a58a;
+  --sl-color-accent-high: #fbd9cb;
+  --sl-color-white: #f8f1ec;
+  --sl-color-gray-1: #e8dcd4;
+  --sl-color-gray-2: #c9b9ae;
+  --sl-color-gray-3: #9c8a7f;
+  --sl-color-gray-4: #6a5a50;
+  --sl-color-gray-5: #3d2f28;
+  --sl-color-gray-6: #271d18;
+  --sl-color-black: #1e1612;
+  --elci-gradient: linear-gradient(120deg, #f4b39a 0%, #e07a5f 50%, #e0607e 100%);
 }
 
-/* Light theme: ivory paper and plum ink. */
+/* Light theme: neutral paper and near-black ink for reading; rust for text-sized accents. */
 :root[data-theme='light'] {
-  --sl-color-accent-low: #fde4ee;
-  --sl-color-accent: #c4225f;
-  --sl-color-accent-high: #7a1340;
-  --sl-color-white: #221a2e;
-  --sl-color-gray-1: #33283d;
-  --sl-color-gray-2: #4d4257;
-  --sl-color-gray-3: #6c6376;
-  --sl-color-gray-4: #a39aa8;
-  --sl-color-gray-5: #e6dde3;
-  --sl-color-gray-6: #f6efee;
-  --sl-color-gray-7: #fbf6f3;
-  --sl-color-black: #fffaf5;
+  --sl-color-accent-low: #fbe7dc;
+  --sl-color-accent: #b3400f;
+  --sl-color-accent-high: #7a2a08;
+  --sl-color-white: #1a1411;
+  --sl-color-gray-1: #292524;
+  --sl-color-gray-2: #44403c;
+  --sl-color-gray-3: #57534e;
+  --sl-color-gray-4: #a8a29e;
+  --sl-color-gray-5: #e7e5e4;
+  --sl-color-gray-6: #f5f5f4;
+  --sl-color-gray-7: #fafaf9;
+  --sl-color-black: #fafaf9;
+  --elci-gradient: linear-gradient(120deg, #e07a5f 0%, #c2410c 50%, #9f1239 100%);
 }
 
 h1,
@@ -78,7 +79,7 @@ header.header {
 }
 
 :root:not([data-theme='light']) header.header {
-  background-color: rgb(22 17 26 / 0.84);
+  background-color: rgb(30 22 18 / 0.84);
 }
 
 .site-title img {

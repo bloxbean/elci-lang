@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Elci">
   <defs>
     <linearGradient id="elci-tile" x1="6" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ff7a3d"/>
-      <stop offset="0.5" stop-color="#f0417e"/>
-      <stop offset="1" stop-color="#7a5cff"/>
+      <stop offset="0" stop-color="#e07a5f"/>
+      <stop offset="0.5" stop-color="#c2410c"/>
+      <stop offset="1" stop-color="#9f1239"/>
     </linearGradient>
   </defs>
   <rect x="3" y="3" width="58" height="58" rx="17" fill="url(#elci-tile)"/>

@@ -151,7 +151,7 @@ Avoid making results depend on map order.
 about 2.76 billion CPU units. See [costs and performance](/advanced/costs/).
 
 A generic value such as `Map.empty` needs a concrete type where it is used. `Map.size Map.empty` on its
-own fails with `ELCI3001: Cannot specialize Map.size at an unconstrained type (Map t t) -> Int; add a type
+own fails with `ELCI3001: Cannot specialize Map.size at an unconstrained type Map t t -> Int; add a type
 annotation so the type is known here`.
 
 ## `Array`

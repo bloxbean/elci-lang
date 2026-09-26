@@ -1,18 +1,19 @@
 :root {
-  /* A warm, light palette: ivory paper, plum ink, and a tangerine → rose → violet accent. */
-  --ink: #fffaf5;
-  --surface: rgb(255 255 255 / 0.72);
+  /* Terracotta on neutral paper: near-white paper and near-black ink for reading, with a
+     clay → rust → mulberry accent. The gradient is reserved for the headline, the primary
+     buttons and the logo; everything else uses rust. */
+  --ink: #fafaf9;
+  --surface: rgb(255 255 255 / 0.86);
   --surface-strong: #ffffff;
-  --border: rgb(76 44 72 / 0.1);
-  --border-strong: rgb(76 44 72 / 0.18);
-  --text: #221a2e;
-  --muted: #6c6376;
-  --faint: #a39aa8;
-  --tangerine: #ff7a3d;
-  --rose: #f0417e;
-  --violet: #7a5cff;
-  --gold: #f5a524;
-  --gradient: linear-gradient(120deg, var(--tangerine) 0%, var(--rose) 50%, var(--violet) 100%);
+  --border: rgb(28 25 23 / 0.09);
+  --border-strong: rgb(28 25 23 / 0.16);
+  --text: #1a1411;
+  --muted: #57534e;
+  --faint: #a8a29e;
+  --clay: #e07a5f;
+  --rust: #c2410c;
+  --mulberry: #9f1239;
+  --gradient: linear-gradient(120deg, var(--clay) 0%, var(--rust) 50%, var(--mulberry) 100%);
   --radius: 18px;
   --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   color-scheme: light;
@@ -70,7 +71,7 @@ code {
 }
 
 :focus-visible {
-  outline: 2px solid var(--violet);
+  outline: 2px solid var(--mulberry);
   outline-offset: 3px;
   border-radius: 6px;
 }
@@ -78,11 +79,16 @@ code {
 /* ---------------------------------------------------------------- backdrop */
 
 .backdrop {
-  position: fixed;
-  inset: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1150px;
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
+  mask-image: linear-gradient(#000 55%, transparent);
+  -webkit-mask-image: linear-gradient(#000 55%, transparent);
 }
 
 .aurora {
@@ -90,21 +96,21 @@ code {
   width: 60vmax;
   height: 60vmax;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.55;
+  filter: blur(100px);
+  opacity: 0.3;
   animation: drift 26s ease-in-out infinite alternate;
 }
 
 .aurora-a {
   top: -28vmax;
   left: -16vmax;
-  background: radial-gradient(circle, #ffc9a8 0%, transparent 62%);
+  background: radial-gradient(circle, #f5d9c9 0%, transparent 62%);
 }
 
 .aurora-b {
   top: -20vmax;
   right: -22vmax;
-  background: radial-gradient(circle, #ffb8d6 0%, transparent 62%);
+  background: radial-gradient(circle, #f2d6c6 0%, transparent 62%);
   animation-duration: 32s;
   animation-delay: -8s;
 }
@@ -112,8 +118,8 @@ code {
 .aurora-c {
   bottom: -38vmax;
   left: 20vmax;
-  background: radial-gradient(circle, #d4c8ff 0%, transparent 60%);
-  opacity: 0.6;
+  background: radial-gradient(circle, #efd8de 0%, transparent 60%);
+  opacity: 0.28;
   animation-duration: 38s;
   animation-delay: -15s;
 }
@@ -134,8 +140,8 @@ code {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgb(76 44 72 / 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(76 44 72 / 0.05) 1px, transparent 1px);
+    linear-gradient(rgb(28 25 23 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(28 25 23 / 0.05) 1px, transparent 1px);
   background-size: 56px 56px;
   mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
 }
@@ -146,7 +152,7 @@ code {
   left: var(--x);
   font-family: var(--mono);
   font-size: 1.05rem;
-  color: rgb(122 92 255 / 0.22);
+  color: rgb(159 18 57 / 0.22);
   animation: rise var(--s) linear infinite;
   animation-delay: var(--d);
 }
@@ -181,7 +187,7 @@ code {
 }
 
 .nav.scrolled {
-  background: rgb(255 250 245 / 0.78);
+  background: rgb(250 250 249 / 0.86);
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   border-bottom-color: var(--border);
@@ -266,12 +272,12 @@ code {
   background: var(--gradient);
   background-size: 160% 160%;
   color: #ffffff;
-  box-shadow: 0 12px 30px -12px rgb(240 65 126 / 0.6);
+  box-shadow: 0 12px 30px -12px rgb(194 65 12 / 0.6);
   animation: sheen 7s ease-in-out infinite;
 }
 
 .btn-primary:hover {
-  box-shadow: 0 16px 40px -12px rgb(240 65 126 / 0.75);
+  box-shadow: 0 16px 40px -12px rgb(194 65 12 / 0.75);
 }
 
 @keyframes sheen {
@@ -291,8 +297,8 @@ code {
 }
 
 .btn-ghost:hover {
-  border-color: rgb(122 92 255 / 0.45);
-  background: rgb(122 92 255 / 0.06);
+  border-color: rgb(159 18 57 / 0.45);
+  background: rgb(159 18 57 / 0.06);
 }
 
 .btn-small {
@@ -335,18 +341,18 @@ main {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--rose);
-  box-shadow: 0 0 0 0 rgb(240 65 126 / 0.6);
+  background: var(--rust);
+  box-shadow: 0 0 0 0 rgb(194 65 12 / 0.6);
   animation: pulse 2.4s ease-out infinite;
 }
 
 @keyframes pulse {
   0% {
-    box-shadow: 0 0 0 0 rgb(240 65 126 / 0.5);
+    box-shadow: 0 0 0 0 rgb(194 65 12 / 0.5);
   }
   80%,
   100% {
-    box-shadow: 0 0 0 10px rgb(240 65 126 / 0);
+    box-shadow: 0 0 0 10px rgb(194 65 12 / 0);
   }
 }
 
@@ -376,7 +382,7 @@ main {
 
 .lede a {
   color: var(--text);
-  text-decoration-color: rgb(240 65 126 / 0.55);
+  text-decoration-color: rgb(194 65 12 / 0.55);
   text-underline-offset: 3px;
 }
 
@@ -403,11 +409,11 @@ main {
 }
 
 .command:hover {
-  border-color: rgb(240 65 126 / 0.55);
+  border-color: rgb(194 65 12 / 0.55);
 }
 
 .prompt {
-  color: var(--rose);
+  color: var(--rust);
   user-select: none;
 }
 
@@ -419,7 +425,7 @@ main {
   color: var(--muted);
   padding: 0.18rem 0.5rem;
   border-radius: 6px;
-  background: rgb(76 44 72 / 0.07);
+  background: rgb(28 25 23 / 0.07);
 }
 
 .copy-button {
@@ -444,9 +450,9 @@ main {
   position: relative;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.96), rgb(255 251 248 / 0.94));
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.96), rgb(255 255 255 / 0.96));
   box-shadow:
-    0 30px 70px -32px rgb(122 60 110 / 0.35),
+    0 30px 70px -32px rgb(28 25 23 / 0.35),
     0 0 0 1px rgb(255 255 255 / 0.6) inset;
   overflow: hidden;
 }
@@ -457,7 +463,7 @@ main {
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: var(--gradient);
+  background: linear-gradient(120deg, var(--clay), var(--rust));
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
     linear-gradient(#000 0 0);
@@ -473,7 +479,7 @@ main {
   gap: 0.8rem;
   padding: 0.7rem 1rem;
   border-bottom: 1px solid var(--border);
-  background: rgb(76 44 72 / 0.025);
+  background: rgb(28 25 23 / 0.025);
 }
 
 .lights {
@@ -485,19 +491,19 @@ main {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: #e3d9e4;
+  background: #e7e5e4;
 }
 
 .lights i:nth-child(1) {
-  background: #ff6b6b;
+  background: #e07a5f;
 }
 
 .lights i:nth-child(2) {
-  background: #ffc145;
+  background: #e9b36a;
 }
 
 .lights i:nth-child(3) {
-  background: #c3a6ff;
+  background: #cdbcae;
 }
 
 .window-title {
@@ -513,7 +519,7 @@ main {
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
   color: #ffffff;
-  background: var(--gradient);
+  background: var(--rust);
 }
 
 .window pre.astro-code {
@@ -552,7 +558,7 @@ main {
   height: 1.1em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: var(--rose);
+  background: var(--rust);
   animation: blink 1s steps(1) infinite;
 }
 
@@ -600,11 +606,11 @@ main {
 }
 
 .term-pass {
-  color: #1f8a5b;
+  color: #3f7d4e;
 }
 
 .term-ok {
-  color: var(--violet);
+  color: var(--mulberry);
 }
 
 .term-out {
@@ -621,20 +627,20 @@ main {
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--text);
-  box-shadow: 0 12px 30px -14px rgb(122 60 110 / 0.45);
+  box-shadow: 0 12px 30px -14px rgb(28 25 23 / 0.45);
   animation: bob 6s ease-in-out infinite;
 }
 
 .chip-a {
   top: 44%;
   right: -1.4rem;
-  color: var(--rose);
+  color: var(--rust);
 }
 
 .chip-b {
   bottom: -1.1rem;
   left: 1.6rem;
-  color: var(--violet);
+  color: var(--mulberry);
   animation-delay: -3s;
 }
 
@@ -666,10 +672,7 @@ main {
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  background: var(--gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--rust);
 }
 
 .section h2,
@@ -719,7 +722,7 @@ main {
   inset: 0;
   background: radial-gradient(
     380px circle at var(--mx, 50%) var(--my, -20%),
-    rgb(240 65 126 / 0.1),
+    rgb(194 65 12 / 0.1),
     transparent 45%
   );
   opacity: 0;
@@ -729,9 +732,9 @@ main {
 
 .feature:hover,
 .path-card:hover {
-  border-color: rgb(240 65 126 / 0.35);
+  border-color: rgb(194 65 12 / 0.35);
   transform: translateY(-3px);
-  box-shadow: 0 22px 44px -30px rgb(122 60 110 / 0.45);
+  box-shadow: 0 22px 44px -30px rgb(28 25 23 / 0.45);
 }
 
 .feature:hover::before,
@@ -745,8 +748,8 @@ main {
   display: grid;
   place-items: center;
   border-radius: 13px;
-  background: rgb(240 65 126 / 0.08);
-  border: 1px solid rgb(240 65 126 / 0.22);
+  background: rgb(194 65 12 / 0.08);
+  border: 1px solid rgb(194 65 12 / 0.22);
   margin-bottom: 1.2rem;
 }
 
@@ -754,7 +757,7 @@ main {
   width: 24px;
   height: 24px;
   fill: none;
-  stroke: var(--rose);
+  stroke: var(--rust);
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -762,24 +765,24 @@ main {
 
 .icon-leaf,
 .icon-beaker {
-  background: rgb(255 122 61 / 0.1);
-  border-color: rgb(255 122 61 / 0.28);
+  background: rgb(224 122 95 / 0.1);
+  border-color: rgb(224 122 95 / 0.28);
 }
 
 .icon-leaf svg,
 .icon-beaker svg {
-  stroke: var(--tangerine);
+  stroke: var(--clay);
 }
 
 .icon-layers,
 .icon-bolt {
-  background: rgb(122 92 255 / 0.08);
-  border-color: rgb(122 92 255 / 0.25);
+  background: rgb(159 18 57 / 0.08);
+  border-color: rgb(159 18 57 / 0.25);
 }
 
 .icon-layers svg,
 .icon-bolt svg {
-  stroke: var(--violet);
+  stroke: var(--mulberry);
 }
 
 .feature h3,
@@ -836,7 +839,7 @@ main {
 
 .tab[aria-selected='true'] {
   color: #ffffff;
-  background: var(--gradient);
+  background: var(--rust);
 }
 
 .tab-panel {
@@ -886,7 +889,7 @@ main {
   left: 6%;
   right: 6%;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgb(240 65 126 / 0.55), transparent);
+  background: linear-gradient(90deg, transparent, rgb(194 65 12 / 0.55), transparent);
   background-size: 40% 100%;
   background-repeat: no-repeat;
   animation: flow 3.6s linear infinite;
@@ -924,8 +927,8 @@ main {
     box-shadow: none;
   }
   8% {
-    border-color: rgb(240 65 126 / 0.55);
-    box-shadow: 0 0 30px -10px rgb(240 65 126 / 0.55);
+    border-color: rgb(194 65 12 / 0.55);
+    box-shadow: 0 0 30px -10px rgb(194 65 12 / 0.55);
   }
 }
 
@@ -938,7 +941,7 @@ main {
   border-radius: 50%;
   font: 600 0.75rem var(--mono);
   color: #ffffff;
-  background: var(--gradient);
+  background: var(--rust);
 }
 
 .pipeline strong {
@@ -988,7 +991,7 @@ main {
   display: inline-block;
   margin-bottom: 0.9rem;
   font: 600 0.8rem var(--mono);
-  color: var(--rose);
+  color: var(--rust);
 }
 
 .path-arrow {
@@ -1002,8 +1005,37 @@ main {
 }
 
 .path-card:hover .path-arrow {
-  color: var(--rose);
+  color: var(--rust);
   transform: translateX(4px);
+}
+
+/* Build with AI */
+
+.ai {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 3rem;
+  align-items: center;
+}
+
+.ai-copy p:not(.eyebrow) {
+  color: var(--muted);
+  margin: 1rem 0 1.8rem;
+}
+
+.ai-copy p code {
+  color: var(--text);
+}
+
+.prompt-body {
+  margin: 0;
+  padding: 1.1rem 1.25rem 1.3rem;
+  font-family: var(--mono);
+  font-size: 0.84rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
 }
 
 /* Quickstart */
@@ -1033,9 +1065,9 @@ main {
   border: 1px solid var(--border-strong);
   border-radius: 28px;
   background:
-    radial-gradient(ellipse at 20% 0%, rgb(255 122 61 / 0.16), transparent 55%),
-    radial-gradient(ellipse at 80% 10%, rgb(240 65 126 / 0.14), transparent 55%),
-    radial-gradient(ellipse at 50% 120%, rgb(122 92 255 / 0.16), transparent 60%),
+    radial-gradient(ellipse at 20% 0%, rgb(224 122 95 / 0.16), transparent 55%),
+    radial-gradient(ellipse at 80% 10%, rgb(194 65 12 / 0.14), transparent 55%),
+    radial-gradient(ellipse at 50% 120%, rgb(159 18 57 / 0.16), transparent 60%),
     var(--surface-strong);
 }
 
@@ -1138,7 +1170,8 @@ main {
     display: none;
   }
 
-  .quickstart {
+  .quickstart,
+  .ai {
     grid-template-columns: 1fr;
   }
 }

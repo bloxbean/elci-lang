@@ -1,5 +1,6 @@
 // Checks the built site: every local link and asset resolves, every #anchor exists, and no page
 // refers to internal design records.
+import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,8 +48,26 @@ for (const [file, text] of html) {
   }
 }
 
+// The AI artifacts: every page has a Markdown export listed in llms.txt, and every checksum matches.
+try {
+  const manifest = JSON.parse(await readFile(resolve(dist, 'ai/manifest.json'), 'utf8'));
+  const llms = await readFile(resolve(dist, 'llms.txt'), 'utf8');
+  const local = (url) => resolve(dist, '.' + new URL(url, 'https://site.invalid').pathname);
+  for (const item of [...manifest.pages.map((p) => ({ url: p.markdown, sha256: p.sha256 })), ...manifest.artifacts]) {
+    const bytes = await readFile(local(item.url));
+    if (createHash('sha256').update(bytes).digest('hex') !== item.sha256) failures.push(`Checksum mismatch: ${item.url}`);
+  }
+  for (const page of manifest.pages)
+    if (!llms.includes(page.markdown)) failures.push(`llms.txt does not list ${page.markdown}`);
+  const htmlPages = [...html.keys()].filter((f) => !/\/(404|index)\.html$/.test(f.replace(dist, '')) || /\/[^/]+\/index\.html$/.test(f.replace(dist, '')));
+  if (manifest.pages.length < htmlPages.length - 1)
+    failures.push(`Only ${manifest.pages.length} Markdown exports for ${htmlPages.length} HTML pages`);
+} catch (error) {
+  failures.push(`AI artifacts: ${error.message}`);
+}
+
 if (failures.length) {
   console.error([...new Set(failures)].join('\n'));
   process.exit(1);
 }
-console.log(`Checked ${html.size} pages: local links, assets and anchors resolve.`);
+console.log(`Checked ${html.size} pages: local links, assets and anchors resolve; AI artifacts are complete.`);

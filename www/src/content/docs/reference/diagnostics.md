@@ -452,11 +452,17 @@ import Julc.Ledger exposing (Hash)
 src/Main.elm:3:1: ELCI2101: Unknown ledger record type Hash
 ```
 
-The test library (`Expect`, `Scenario`, `Property`) is only for test modules. `elci test` reports a source
-module that imports it (`elci check` and `elci build` report the module as missing):
+The test library (`Expect`, `Scenario`, `Property`) is only for test modules. A source module that imports
+it is rejected. `elci test` reports:
 
 ```text
 src/Main.elm:3:1: ELCI2101: Only test modules can import Expect; it is part of the test library, not available to elci build
+```
+
+`elci check` and `elci build` report it when a validator reaches that module:
+
+```text
+src/Main.elm:3:1: ELCI2101: Expect is part of the test library; only test modules can import it
 ```
 
 Imports of existing modules fail with `ELCI2104` when the name is not exposed:

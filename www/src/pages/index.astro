@@ -206,6 +206,12 @@ const path = [
   { step: '06', title: 'Go further', text: 'Tutorials, Java libraries, costs and how Elci compiles.', href: '/tutorials/vesting/' },
 ];
 
+// The docs origin for copyable agent prompts: the configured site, or a visible placeholder.
+const docsOrigin = (Astro.site?.href ?? 'https://<your-elci-docs-host>/').replace(/\/$/, '');
+const agentPrompt = `You are writing Cardano smart contracts in Elci, an Elm-syntax language that compiles to Plutus V3.
+Before writing any code, read ${docsOrigin}/ai/starter-pack.md and follow it strictly.
+After every change, run \`elci check .\` and \`elci test .\` and fix every ELCI error before continuing.`;
+
 const quickstart = `elci init my-contract
 elci test my-contract
 elci build my-contract`;
@@ -220,7 +226,7 @@ elci build my-contract`;
       name="description"
       content="Elci is an Elm-syntax functional language for Cardano smart contracts. Typed, testable validators compiled to Plutus V3 through Julc."
     />
-    <meta name="theme-color" content="#fffaf5" />
+    <meta name="theme-color" content="#fafaf9" />
     <link rel="icon" href={link('/favicon.svg')} type="image/svg+xml" />
     <meta property="og:title" content="Elci — Cardano smart contracts, written like Elm" />
     <meta
@@ -268,6 +274,7 @@ elci build my-contract`;
           <a href={link('/contracts/validators/')}>Contracts</a>
           <a href={link('/testing/unit-tests/')}>Testing</a>
           <a href={link('/reference/cli/')}>Reference</a>
+          <a href={link('/ai/')}>AI</a>
         </nav>
         <div class="nav-actions">
           <a class="icon-link" href="https://github.com/bloxbean/elci-lang" aria-label="Elci on GitHub">
@@ -502,6 +509,30 @@ elci build my-contract`;
         </div>
       </section>
 
+      <section class="section ai reveal" id="ai">
+        <div class="ai-copy">
+          <p class="eyebrow">Build with AI</p>
+          <h2>Point your agent at Elci.</h2>
+          <p>
+            AI models have seen little Elci. A starter pack written for agents gives them the language, the APIs and
+            the error fixes in one read, and <code>elci check</code> and <code>elci test</code> let them verify their
+            own code. It works with Claude Code, Codex, Cursor, Copilot and any agent that can run a shell command.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href={link('/ai/')}>Set up your agent</a>
+            <a class="btn btn-ghost" href={link('/llms.txt')}>llms.txt</a>
+          </div>
+        </div>
+        <div class="window prompt-window">
+          <div class="window-bar">
+            <span class="lights"><i></i><i></i><i></i></span>
+            <span class="window-title">prompt for your agent</span>
+            <button class="copy-button" type="button" data-copy={agentPrompt}><span data-copy-label>Copy</span></button>
+          </div>
+          <pre class="prompt-body">{agentPrompt}</pre>
+        </div>
+      </section>
+
       <section class="section quickstart reveal" id="quickstart">
         <div class="quickstart-copy">
           <p class="eyebrow">Quickstart</p>
@@ -567,6 +598,7 @@ elci build my-contract`;
           <div>
             <h4>More</h4>
             <a href={link('/reference/cli/')}>Reference</a>
+            <a href={link('/ai/')}>Build with AI</a>
             <a href="https://github.com/bloxbean/elci-lang">GitHub</a>
             <a href="https://julc.dev">Julc</a>
           </div>
