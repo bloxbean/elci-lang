@@ -1615,10 +1615,13 @@ public final class Lowering {
         return body;
     }
 
-    /** The failure when a decoded Dict's keys are out of order, with a trace saying so. */
+    /**
+     * The failure when a decoded Dict's keys are out of order, with a trace saying so. A trace's
+     * body is evaluated before the trace is emitted, so the trace guards a condition instead.
+     */
     private static PirTerm unsortedDict(PirType type) {
-        return new PirTerm.Trace(new PirTerm.Const(Constant.string("Dict keys are not strictly ascending")),
-                new PirTerm.Error(type));
+        return new PirTerm.IfThenElse(new PirTerm.Trace(new PirTerm.Const(Constant.string("Dict keys are not strictly ascending")),
+                bool(true)), new PirTerm.Error(type), new PirTerm.Error(type));
     }
 
     /** Component {@code index} of a tuple value (a tag-zero constructor with positional fields). */
