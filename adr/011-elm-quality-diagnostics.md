@@ -101,14 +101,16 @@ qualified (`Main.Value`, `Julc.Ledger.Value`).
 A non-exhaustive `case` lists up to three patterns it does not cover, written as source:
 `Nothing`, `Just (Err _)`, `( True, False )`, `[]`, `[ _ ]`, `_ :: _ :: _`. A literal
 pattern's type is open, so what it leaves out is `_`. It adds `and N more` when there are
-more, or `and more` beyond fifty. Constructors are written by their own names, as a
-module that exposes them writes them; library constructors too (`ScriptCredential _`).
+more, or `and more` beyond fifty. A constructor is written with the qualifier the case's
+own patterns use for its module (`Kinds.B _` after `Kinds.A ->`), or by its own name
+(`ScriptCredential _`).
 
 The list is complete: adding a branch for each pattern makes the case exhaustive. One
 usefulness algorithm decides exhaustiveness and produces the list. It is Maranget's, as in
 Elm, extended to find every missing vector:
 
-- A row of wildcards covers everything.
+- A row of wildcards covers everything, and so do default rows that cover the remaining
+  columns. That second check stops at the first gap and is remembered within a case.
 - Otherwise what the column's default rows leave uncovered is missing for every constructor
   the column never names, or for "any other value" when the type has no fixed constructors.
   The literals a column names are covered by that "any other value".
@@ -117,7 +119,7 @@ Elm, extended to find every missing vector:
 
 The search is depth first and stops at fifty, so it stays quick even for a case whose
 missing patterns are exponentially many, such as pairs of `Bool` columns that each exclude
-the equal values.
+the equal values; and exhaustive cases whose wildcard rows cover the rest stay quick too.
 
 The message is `This case does not cover every possibility; it is missing …`, with the hint
 `add a branch for each missing pattern`.

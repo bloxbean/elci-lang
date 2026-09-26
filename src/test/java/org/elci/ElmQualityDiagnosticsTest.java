@@ -306,7 +306,12 @@ class ElmQualityDiagnosticsTest {
     void secondReviewFindings() {
         // Library constructors are written as source, and literal columns list only `_`.
         assertTrue(report("check : Julc.Ledger.Credential -> Int\ncheck c =\n    case c of\n        Julc.Ledger.PubKeyCredential _ ->\n"
-                + "            1\n\n\nmain : Int\nmain =\n    1\n").contains("it is missing `ScriptCredential _`\n"));
+                + "            1\n\n\nmain : Int\nmain =\n    1\n").contains("it is missing `Julc.Ledger.ScriptCredential _`\n"));
+        // An unqualified case lists unqualified constructors, and a nested list is parenthesized when it must be.
+        assertTrue(report("check : Julc.Ledger.Credential -> Int\ncheck c =\n    case c of\n        Julc.Ledger.PubKeyCredential _ ->\n"
+                + "            1\n\n\nmain : Int\nmain =\n    1\n").contains("`Julc.Ledger.ScriptCredential _`"));
+        assertTrue(main("Int", "case [ [ [ 1 ] ] ] of\n        [] ->\n            0\n\n        [] :: _ ->\n            1\n\n"
+                + "        ((_ :: _) :: _) :: _ ->\n            2").contains("it is missing `([] :: _) :: _`"));
         assertTrue(main("Int", "case ( 1, True ) of\n        ( 1, True ) ->\n            0").contains("it is missing `( _, _ )`\n"));
         // A qualified constructor pattern is named whole.
         assertTrue(main("Int", "case Just 1 of\n        Maybe.Just ->\n            0\n\n        _ ->\n            1")
@@ -326,6 +331,22 @@ class ElmQualityDiagnosticsTest {
         // A number has one spelling in patterns: 01 repeats 1.
         assertEquals("15:9: ELCI2006: Unreachable pattern",
                 main("Int", "case 1 of\n        1 ->\n            1\n\n        01 ->\n            2\n\n        _ ->\n            0"));
+    }
+
+    @Test
+    void thirdReviewFindings() {
+        // Missing constructors keep the qualifier the case writes for their module.
+        var d = assertThrows(Diagnostic.class, () -> new ElciCompiler().compileProject(Map.of(
+                "Kinds", "module Kinds exposing (Kind(..))\n\n\ntype Kind\n    = A\n    | B Int\n    | C\n",
+                "Main", "module Main exposing (main)\n\nimport Kinds\n\n\nf : Kinds.Kind -> Int\nf k =\n    case k of\n"
+                        + "        Kinds.A ->\n            1\n\n\nmain : Int\nmain =\n    f Kinds.A\n"),
+                "Main", "main", FrontendProgram.Purpose.FUNCTION, Map.of(), new CompilerOptions()));
+        assertEquals("This case does not cover every possibility; it is missing `Kinds.B _` and `Kinds.C`", d.getMessage());
+        // -0 is 0.
+        assertEquals("15:9: ELCI2006: Unreachable pattern",
+                main("Int", "case 1 of\n        0 ->\n            1\n\n        -0 ->\n            2\n\n        _ ->\n            0"));
+        // Under a module, a short name one edit off is still suggested.
+        assertTrue(main("List Int", "List.mp identity [ 1 ]").endsWith("\nHint: did you mean `List.map`?"));
     }
 
     @Test

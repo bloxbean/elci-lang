@@ -21,7 +21,8 @@ public final class Suggestions {
         // Under one module, only the last part can be misspelt: String.toInt is not String.join.
         int dot = name.lastIndexOf('.');
         String module = dot < 0 ? null : name.substring(0, dot + 1), last = name.substring(dot + 1);
-        int limit = limit(module == null ? name : last);
+        // Under a module the candidates are few, so even a short name may be one edit off: List.mp.
+        int limit = module == null ? limit(name) : Math.max(1, limit(last));
         record Scored(String candidate, int distance) {}
         var scored = new ArrayList<Scored>();
         for (String candidate : new TreeSet<>(candidates)) {

@@ -588,7 +588,7 @@ public final class Parser {
         if (t.text().equals("-") && peek().kind() == Token.Kind.INT) {
             Token value = next();
             // One spelling per number, so 01 and 1 are the same pattern.
-            return new Pattern("-" + new BigInteger(value.text()), List.of(), t);
+            return new Pattern(new BigInteger(value.text()).negate().toString(), List.of(), t);
         }
         if (t.kind() == Token.Kind.NAME
                 || t.kind() == Token.Kind.INT
@@ -597,7 +597,7 @@ public final class Parser {
             if (t.kind() == Token.Kind.NAME && Character.isUpperCase(name.charAt(0)))
                 while (take(".")) name += "." + upper().text();
             // The token spells the whole qualified name, as written, for diagnostics.
-            return new Pattern(name, List.of(), name.equals(t.text()) ? t
+            return new Pattern(name, List.of(), name.equals(t.text()) || t.kind() != Token.Kind.NAME ? t
                     : new Token(name, t.kind(), t.offset(), t.line(), t.column(), t.source()));
         }
         throw new Diagnostic("ELCI1002", t, "Unsupported pattern");
