@@ -18,7 +18,7 @@ separate milestones.
 | Core library | Elm's `Basics` prelude and `List`, `Maybe`, `Result`, `Tuple`, `String` modules, written in Elci ([ADR-008](../adr/008-native-standard-library-foundation.md)) |
 | Lists | Homogeneous Data-backed lists, list patterns, generic core functions |
 | Tuples | Pairs/triples, nested patterns and parameter destructuring; tag-zero encoding |
-| Records | Closed structural records, generic aliases and constructors, destructuring, field access and updates |
+| Records | Closed structural records, generic aliases and constructors, destructuring, field access, Elm accessor functions (`.field`) and updates |
 | Custom types | Generic and regular recursive unions; declaration-order tags |
 | Patterns | Nested constructors/lists/tuples/records, aliases, unit and Bool/Int/String literals |
 | Pattern coverage | Nested exhaustiveness and usefulness analysis; duplicate/unreachable branches rejected |
@@ -175,7 +175,11 @@ still evaluate in source order. Updates evaluate the base once, then replacement
 in source order.
 
 A record field access needs enough context to determine a closed record type.
-Unconstrained row-polymorphic accessors are not inferred. Generic fields containing
+As in Elm, `.amount` is the accessor function `\r -> r.amount`, as in
+`List.map .amount payouts`; like a field access, it needs a closed record type,
+because row-polymorphic accessors are not inferred. A field of a qualified value
+reads as in Elm: `Config.settings.amount`. A qualified name is written without
+spaces and ends at its first lowercase segment. Generic fields containing
 functions or unit are not yet supported in serialized containers.
 
 Pairs and triples use `( first, second )` and `( first, second, third )`. Tuple and

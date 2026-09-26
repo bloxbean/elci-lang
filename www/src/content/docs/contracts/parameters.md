@@ -51,10 +51,14 @@ mint admin limits quantity ctx =
 The rules:
 
 - **Order matters.** Parameters are applied in the listed order, and every handler of the validator receives all of them, in that order.
-- **Types must agree.** Each parameter must have the same type in every handler. If `Treasury.spend` takes `admin : PubKeyHash` but `Treasury.withdraw` declares it as an `Int`, the check fails:
+- **Types must agree.** Each parameter must have the same type in every handler. If `Treasury.spend` takes `admin : PubKeyHash` but `Treasury.withdraw` declares and uses it as an `Int`, the check fails:
 
   ```text
-  .../treasury/src/Treasury.elm:28:1: ELCI2014: Handler Treasury.withdraw does not have the withdraw signature admin -> redeemer -> ScriptContext -> Bool that [validators.treasury] needs (1 parameter); its type is Int -> () -> ScriptContext -> Bool (Type mismatch: expected Int, found PubKeyHash)
+  elci: .../treasury/elci.toml:7: [validators.treasury]
+  .../treasury/src/Treasury.elm:28:1: ELCI2014: Handler Treasury.withdraw does not have the withdraw signature admin -> redeemer -> ScriptContext -> Bool that [validators.treasury] needs (1 parameter); its type is Int -> () -> ScriptContext -> Bool; it has `Int` where the configuration needs `PubKeyHash`
+
+  28| withdraw : Int -> () -> ScriptContext -> Bool
+      ^^^^^^^^
   ```
 
 - **Boundary types only.** Parameters follow the same rules as datums and redeemers: records, custom types, lists, dictionaries, maps and ledger types such as `PubKeyHash` or `TxOutRef` are fine; functions, arrays and `Value` are not. To parameterize a script by an amount of tokens, take a `List ( PolicyId, TokenName, Int )` and build the value with `Value.fromList`. See [Datums and redeemers](/contracts/datums-and-redeemers/).
@@ -131,7 +135,7 @@ The test runner applies the parameters to the compiled script before it builds t
 
 ```text
 FAIL DropTest.adminMintsWithinLimits
-    cannot prepare validator 'drop': it takes 2 parameter(s) [admin, limits], but the scenario gives 1; set them with Scenario.parameters
+    cannot prepare validator 'drop': it takes 2 parameters [admin, limits], but the scenario gives 1; set them with Scenario.parameters
 0 passed, 1 failed
 ```
 
@@ -212,7 +216,7 @@ elci apply . --validator drop \
 ```
 
 ```text
-validator drop: applied 2 parameter(s); hash 4ba1e0d80a5891c79032b5eccdf0514392f90e90278ce6567a7d3d76; wrote .../token-drop/build/validators/drop/applied.plutus.json
+validator drop: applied 2 parameters; hash 4ba1e0d80a5891c79032b5eccdf0514392f90e90278ce6567a7d3d76; wrote .../token-drop/build/validators/drop/applied.plutus.json
 ```
 
 The applied artifact has the same format as `validator.plutus.json`, now with a hash and no remaining parameters:
@@ -314,7 +318,7 @@ elci apply token-drop --validator drop \
 ```
 
 ```text
-validator drop: applied 2 parameter(s); hash 4ba1e0d80a5891c79032b5eccdf0514392f90e90278ce6567a7d3d76; wrote .../drop-preprod.plutus.json
+validator drop: applied 2 parameters; hash 4ba1e0d80a5891c79032b5eccdf0514392f90e90278ce6567a7d3d76; wrote .../drop-preprod.plutus.json
 ```
 
 If the validator sets `expected-abi` and the current ABI differs, `apply` refuses to apply parameters. See [Build and deploy](/contracts/build-and-deploy/).

@@ -176,6 +176,9 @@ main =
 
 ```text
 .../src/Main.elm:6:7: ELCI2001: Float division is unsupported; use // for integer quotient
+
+6|     7 / 2
+         ^
 ```
 
 To work with fractions, scale your integers. For example, store a percentage in basis points (1% is 100).
@@ -222,6 +225,9 @@ main =
 
 ```text
 .../src/Main.elm:6:11: ELCI1002: Comparison operators cannot be chained; use && or explicit parentheses
+
+6|     1 < 2 < 3
+             ^
 ```
 
 ## Functions and signatures
@@ -240,10 +246,13 @@ double x =
 
 ```text
 .../src/Main.elm:4:1: ELCI2004: Top-level declarations require a type signature
+
+4| double x =
+   ^^^^^^
 ```
 
 Inside a function, types are inferred, so local values need no annotations (you may still add them). When
-types don't fit together, the compiler tells you where:
+types don't fit together, the compiler shows you where and suggests a fix:
 
 ```elm
 main : Int
@@ -253,7 +262,14 @@ main =
 
 ```text
 .../src/Main.elm:6:7: ELCI2002: The operator + works on Int values, not String; use ++ to append
+
+6|     1 + "one"
+         ^
 ```
+
+The first line gives the file, line and column, and a code you can look up in the
+[diagnostics](/reference/diagnostics/) reference. Below it are the line itself, with a caret under the
+problem, and sometimes a `Hint:` line with the likely fix.
 
 ## Lambdas, currying and partial application
 
@@ -336,7 +352,11 @@ identity x =
 ```
 
 ```text
-.../src/Main.elm:4:1: ELCI2002: Type mismatch: expected Int, found a
+.../src/Main.elm:4:1: ELCI2002: The annotation of `identity` says `a` can be any type, but its definition needs `Int`
+
+4| identity : a -> a
+   ^^^^^^^^
+Hint: write `Int` in the annotation, or make the definition work for any type
 ```
 
 To compare values of a type variable with `<`, or to join them with `++`, name the variable

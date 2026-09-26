@@ -66,8 +66,16 @@ apply action balance =
 ```
 
 ```text
-.../src/Main.elm:12:5: ELCI2007: Non-exhaustive case; add the missing constructor or a wildcard branch
+.../src/Main.elm:12:5: ELCI2007: This case does not cover every possibility; it is missing `Close`
+
+12|     case action of
+        ^^^^
+Hint: add a branch for each missing pattern
 ```
+
+The message lists the patterns the `case` misses: up to three, then how many more there are. Nested
+patterns are listed too: a `case` on a `Maybe (Result String Int)` with only a `Just (Ok n)` branch is
+missing `Nothing` and `Just (Err _)`.
 
 A branch that can never match is also an error. `Just 0` below is unreachable, because `Just _` already
 matches every `Just`:
@@ -88,6 +96,9 @@ isZero value =
 
 ```text
 .../src/Main.elm:10:9: ELCI2006: Unreachable pattern
+
+10|         Just 0 ->
+            ^^^^
 ```
 
 :::tip

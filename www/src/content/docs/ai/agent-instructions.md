@@ -36,9 +36,9 @@ Evaluation is strict.
    `isEmpty`, `append`, `concat`, `join`. `List` has all of Elm's except `map4`/`map5`, and `Dict` all of
    Elm's. Replacements: `Set` → `Dict k Bool`; `Debug.log` → `Debug.trace`; `String.length s` →
    `Bytes.length (Bytes.fromString s)`.
-4. No `Float`, `/`, `%`, `number`, char literals, extensible records or `.field` accessor functions. Use
-   `Int`, `//`, `modBy`, `remainderBy` and lambdas. Operators work as functions: `(+)`, `(::)`. Tuples
-   have 2 or 3 elements.
+4. No `Float`, `/`, `%`, `number`, char literals or extensible records. Use `Int`, `//`, `modBy` and
+   `remainderBy`. Operators work as functions: `(+)`, `(::)`. Accessor functions work as in Elm:
+   `List.map .amount payouts`. Write qualified names without spaces. Tuples have 2 or 3 elements.
 5. `<`, `>`, `<=`, `>=`, `compare`, `max` and `List.sort` work on comparable types: `Int`, `String`,
    `Bytes`, ledger hashes such as `PubKeyHash`, and lists and tuples of these. Sort records with
    `List.sortBy`. A signature variable used with `<` must be named `comparable`, with `++` `appendable`.
@@ -129,12 +129,32 @@ Use `elci eval` only in a function project (`[entrypoint]`) to evaluate helper l
 parameters with `elci apply --validator <name> --param name='{"bytes": "..."}'`, which validates them
 off-chain. Every command exits with status 0 on success and 1 on any error or failing test.
 
-Diagnostics read `path:line:col: ELCIxxxx: message`. Look the code up in the starter pack's error
-table: `ELCI2002` type mismatch, `ELCI2003` equality, ordering or append on a type without it,
-`ELCI2004` missing signature, `ELCI2005` unknown name, `ELCI2007` non-exhaustive case, `ELCI2013` type
-cannot cross the data boundary, `ELCI2014` handler signature does not match `elci.toml`, `ELCI2102`
-ambiguous name, `ELCI2101`/`ELCI2104` import problems or a function Elci lacks, `ELCI2105` a Java export
-Elci can't use, such as one that returns a `Value`.
+## Reading diagnostics
+
+A diagnostic's first line is `path:line:col: ELCIxxxx: message`, and its form never changes. Below it come
+the source line with a caret under the reported token, and zero or more `Hint:` lines:
+
+```text
+src/Main.elm:8:5: ELCI2005: Unknown name 'double'
+
+8|     double 4
+       ^^^^^^
+Hint: write `Helper.double`, or expose `double` in its import
+```
+
+- Fix the part the message names: the argument, branch, list element, operator side, annotation or field
+  whose type differs, or each pattern a `case` is missing.
+- Apply the hint when it fits: a close name (`did you mean`), a conversion such as `String.fromInt`,
+  `Bytes.fromString`, `.hash` or `Maybe.withDefault`, or an import to add.
+- The compiler stops at the first error. Rerun `elci check` after each fix.
+- To parse errors, add `--report=json` to `check`, `build`, `eval` or `test`. An error is then one JSON
+  object on stderr with `code`, `path`, `line`, `column`, `message`, `hints`, `excerpt` and `context`.
+
+Look the code up in the starter pack's error table: `ELCI2002` type mismatch, `ELCI2003` equality,
+ordering or append on a type without it, `ELCI2004` missing signature, `ELCI2005` unknown name, `ELCI2007`
+non-exhaustive case, `ELCI2013` type cannot cross the data boundary, `ELCI2014` handler signature does not
+match `elci.toml`, `ELCI2102` ambiguous name, `ELCI2101`/`ELCI2104` import problems or a function Elci
+lacks, `ELCI2105` a Java export Elci can't use, such as one that returns a `Value`.
 
 ## Done means
 

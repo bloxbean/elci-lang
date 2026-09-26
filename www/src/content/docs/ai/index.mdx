@@ -34,7 +34,7 @@ Only use functions and modules that the starter pack or https://__ELCI_DOCS__/ai
 | [llms-full.txt](/llms-full.txt) | All documentation in one Markdown file | Attach it for long sessions |
 | `/ai/pages/…` | Each page as plain Markdown, such as [transaction scenarios](/ai/pages/testing/scenarios.md) | To read one topic |
 | [catalog.json](/ai/catalog.json) | Signatures of the bundled modules, compiler-provided modules and Java libraries | To check that a function exists |
-| [diagnostics.json](/ai/diagnostics.json) | Every ELCI error code and its meaning | To explain a compiler error |
+| [diagnostics.json](/ai/diagnostics.json) | Every ELCI error code and its meaning, the error format and the `--report=json` fields | To explain a compiler error |
 | [examples.json](/ai/examples.json) | The example projects, with every source file | To copy a working pattern |
 | [manifest.json](/ai/manifest.json) | The Elci and Julc versions the docs describe, and checksums of all of the above | To match your installed version |
 
@@ -101,7 +101,9 @@ A chat can't run the compiler, so paste `elci check` and `elci test` output back
 ## Let the agent check its own work
 
 The CLI is the agent's feedback loop. Every command is non-interactive and exits with status 1 on failure.
-Errors are printed as `path:line:column: ELCIxxxx: message`, located in the source.
+Errors are printed as `path:line:column: ELCIxxxx: message`, followed by the source line and any hints
+with the likely fix. With `--report=json`, `check`, `build`, `eval` and `test` print an error as one JSON
+object instead.
 
 | Command | What the agent uses it for |
 | --- | --- |

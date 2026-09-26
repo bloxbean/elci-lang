@@ -485,7 +485,7 @@ FAIL MarketTest.sellerCannotDelist (cpu 15573596, mem 65977)
 FAIL MarketTest.typo
     cannot prepare validator 'markt': no [validators.markt] in elci.toml
 FAIL MarketTest.unparameterized
-    cannot prepare validator 'market': it takes 1 parameter(s) [operator], but the scenario gives 0; set them with Scenario.parameters
+    cannot prepare validator 'market': it takes 1 parameter [operator], but the scenario gives 0; set them with Scenario.parameters
 ```
 
 The last two fail before the validator runs, so they fail even with `Scenario.expectFailure`: a scenario cannot pass just because it was set up wrongly.

@@ -465,7 +465,7 @@ elci apply . --validator nft \
 ```
 
 ```text
-validator nft: applied 2 parameter(s); hash 4481b6b376b6479a565cde7c29f6ab8e12019a6091d2140afc94d5b5; wrote .../one-shot/build/validators/nft/applied.plutus.json
+validator nft: applied 2 parameters; hash 4481b6b376b6479a565cde7c29f6ab8e12019a6091d2140afc94d5b5; wrote .../one-shot/build/validators/nft/applied.plutus.json
 ```
 
 The hash is the policy id of your NFT. The minting transaction must spend exactly the output you applied (`a8a61c...#1` here), mint one `TICKET` under this policy id with the `Mint` redeemer, and attach `applied.plutus.json`'s script. Once that output is spent, the policy can never mint again.

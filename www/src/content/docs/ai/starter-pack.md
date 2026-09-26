@@ -139,6 +139,8 @@ purpose = "function"
   or 3, closed records, custom types (generic, recursive).
 - `type alias R = { x : Int }` (also a constructor `R 1`); `type T a = A a | B`.
 - Records: `{ x = 1 }`, `r.x`, `{ r | x = 2 }`, destructuring `{ x, y }` in parameters and `let`.
+  Accessor functions as in Elm: `.x` is `\r -> r.x`, so `List.map .amount payouts` works. A field of a
+  qualified value: `Config.settings.fee`. Write qualified names without spaces.
 - `case` with nested patterns: constructors, `[]`, `[ a, b ]`, `a :: rest`, tuples, record fields, `as`,
   `_`, `()`, `True`/`False`, Int and String literals. Exhaustive and no unreachable branches.
 - `if c then a else b` (else required), `let ... in`, `++` on `String` and `List`, `::`.
@@ -158,7 +160,6 @@ purpose = "function"
 | Refutable patterns in function or lambda arguments (`f (x :: _) = ...`) | `ELCI1002`; use `case` |
 | Chained comparisons `a < b < c` | `ELCI1002`; use `a < b && b < c` |
 | Tuples of 4 or more | `ELCI1002` |
-| Record accessors `.field` | use lambdas `\r -> r.field` |
 | `(/)` | `ELCI2001`; use `(//)` |
 | Char literals `'a'`, `%`, hex `0xFF`, `1_000` | `ELCI1001` |
 | `port module`, `import Html` | `ELCI1002` / `ELCI2101` |
@@ -186,7 +187,6 @@ purpose = "function"
 | `Char`, `'a'` | none |
 | `List.map4`, `Maybe.map4`, `Result.map5`, … | nest `map3`, or `case` |
 | `Debug.log`, `Debug.toString`, `Debug.todo` | `Debug.trace : String -> a -> a`; `String.fromInt` for numbers |
-| `.price` | `\r -> r.price` |
 | `Bytes.lessThan` (removed) | `a < b` |
 
 Everything else in Elm's `Basics`, `List`, `Maybe`, `Result`, `Tuple` exists with Elm's signature
@@ -395,9 +395,10 @@ For datums, use `Tx.inlineDatum out` or `Tx.datumOf out ctx` (section 8) rather 
 Rules:
 
 - `PubKeyHash`, `ScriptHash`, `PolicyId`, `TokenName`, `TxId`, `DatumHash` are **distinct from `Bytes`**;
-  compare like with like, or use `.hash`. `Bytes` vs `PubKeyHash` is
-  `ELCI2002: Type mismatch: expected Bytes, found PubKeyHash`. `token.name` is
-  `ELCI2010: Unknown field 'name' of org.julclang.ledger.TokenName`; write `token.hash`.
+  compare like with like, or use `.hash`. `key == Bytes.fromString "k"` with `key : PubKeyHash` is
+  `` ELCI2002: The two sides of == have different types: the left is `PubKeyHash`, but the right is `Bytes` ``,
+  with a hint to wrap the bytes with the constructor. `token.name` is
+  `ELCI2010: Unknown field 'name' of TokenName`; write `token.hash`.
 - Signature check: `Tx.signedBy key ctx`.
 - Ledger hashes order like bytes: `List.sort` sorts a `List PubKeyHash`. `TxOutRef` and other ledger
   records are not comparable.
@@ -845,8 +846,24 @@ Run from the project directory (or pass it as the first argument). Exit status i
    `{"map": [{"k": ..., "v": ...}]}`, `{"constructor": 0, "fields": [...]}`; `@file` reads a file. A `Dict`
    parameter must list its keys strictly ascending (integers numerically, bytes lexicographically).
 
-Error format: `path:line:col: ELCIxxxx: message`; for a validator the first line is
-`elci: .../elci.toml:<line>: [validators.<name>]`. Configuration errors start with `elci:`.
+Error format: the first line is `path:line:col: ELCIxxxx: message`. Then come a blank line, the source line
+as `N| code`, a caret line under the reported token, and zero or more `Hint: ...` lines. For a validator, a
+blank line and `In .../elci.toml:<line>: [validators.<name>]` follow:
+
+```text
+src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
+
+6|     lenght [ 1, 2 ]
+       ^^^^^^
+Hint: did you mean `List.length`?
+```
+
+Parse the first line, whose form never changes, and apply the hints: they name a close name, a conversion
+(`String.fromInt`, `Bytes.fromString`, `.hash`, `Maybe.withDefault`, `Value.lovelaceOf`) or an import to
+add. The compiler stops at the first error, so rerun it after each fix. Configuration errors start with
+`elci:`. For tools, `--report=json` on `check`, `build`, `eval` and `test` prints the error on stderr as one
+JSON object with `code`, `path`, `line`, `column`, `message`, `hints` (an array), `excerpt` and `context`
+(the validator's `elci.toml` line, or null); prefer it to parsing text. Results and test output stay text.
 
 ## 11. Error codes: cause and fix
 
@@ -854,39 +871,39 @@ Error format: `path:line:col: ELCIxxxx: message`; for a validator the first line
 | --- | --- | --- |
 | `ELCI1001` | `Float is unsupported; ...`, `Unsupported character '%'` | scaled `Int`; `modBy` |
 | `ELCI1002` | `Function parameters require irrefutable patterns; use case ...`, `Comparison operators cannot be chained`, `Mixing (<\|) and (\|>) needs parentheses ...` | `case`; `&&`; parentheses |
-| `ELCI2001` | `Float division is unsupported; use // for integer quotient` | `//` |
-| `ELCI2002` | `Type mismatch: expected Int, found a`, `The operator + works on Int values, not String; use ++ to append` | fix the types or signature |
+| `ELCI2001` | `Float division is unsupported; use // for integer quotient`, `The constructor Just takes 1 argument, but this pattern gives it 2`, `Unknown constructor Jsut in this pattern` | `//`; fix the pattern |
+| `ELCI2002` | `` The 1st argument to `String.fromInt` is `String`, but `String.fromInt` needs `Int` ``, `` The annotation of `identity` says `a` can be any type, but its definition needs `Int` ``, `` The 2nd branch of this case is `String`, but the first branch is `Int` ``, `The operator + works on Int values, not String; use ++ to append` | fix the part the message names; apply the hint |
 | `ELCI2003` | `The operator == cannot compare Map Int Int values: it has no equality`, `The operator < needs comparable values, but Bool, in ( Int, Bool ), is not comparable. ...`, `` The operator > compares values of type `a`, but the annotation of `larger` says `a` can be any type. Rename it `comparable` ... ``, `The operator ++ appends String or List values, not Int` | compare lookups or keys; `List.sortBy`; rename to `comparable`/`appendable` |
 | `ELCI2004` | `Top-level declarations require a type signature` | add the signature |
-| `ELCI2005` | `Unknown name 'lenght'`, `Unknown name 'Math.maximum'; check that the imported module exports it` | spelling; section 3.3 |
+| `ELCI2005` | `Unknown name 'lenght'` with ``Hint: did you mean `List.length`?``, `Unknown name 'double'` with ``Hint: write `Helper.double`, or expose `double` in its import``, `Unknown name 'Math.maximum'; check that the imported module exports it` | spelling; the import; section 3.3 |
 | `ELCI2006` | `Unreachable pattern`, `Duplicate pattern variable x` | remove the branch; rename |
-| `ELCI2007` | `Non-exhaustive case; add the missing constructor or a wildcard branch` | add branches |
+| `ELCI2007` | `` This case does not cover every possibility; it is missing `Nothing` and `Just (Err _)` `` | add a branch for each listed pattern |
 | `ELCI2008` | `Cyclic eager values are unsupported; recursion requires functions` | break the cycle |
 | `ELCI2009` | `Entrypoints require concrete types`, `Handler Main.mint requires a concrete type` | no type variables in handlers |
 | `ELCI2010` | `Missing field 'price'; available fields: [amount]` | correct field; annotate the record type |
 | `ELCI2011` | `Duplicate constructor Buy`, `Nothing is a constructor of the built-in Maybe type; choose another name`, `Bytes is a built-in type; choose another name` | rename |
-| `ELCI2012` | `Type List expects 1 arguments, got 2`, `Type is not declared or imported in this module: Amount`, `Write tuple types as ( a, b ) or ( a, b, c )` | declare/import the type |
+| `ELCI2012` | `The type List takes 1 argument, but it is given 2`, `Type is not declared or imported in this module: Amount`, `Write tuple types as ( a, b ) or ( a, b, c )` | declare/import the type |
 | `ELCI2013` | `Functions cannot be serialized as datum or redeemer`, `Arrays have no Data encoding ...`, `org.julclang.ledger.Value has no approved strict Data boundary (BOUNDARY); ...` | Data-encodable boundary types; `List` in data; `List ( PolicyId, TokenName, Int )` for a value |
 | `ELCI2014` | `Handler Main.spend does not have the spend signature datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (0 parameters); its type is ...` | section 6 |
 | `ELCI2101` | `Missing source module: X; add X.elm under a source directory, or map a Java library to it under [java-modules]`, `Expect is part of the test library; only test modules can import it` | add module / mapping; move to `tests/` |
 | `ELCI2102` | `max is ambiguous: it could be Basics.max or Utils.max. Write the one you mean, like Basics.max, or stop exposing the other` | qualify, or expose the name explicitly |
 | `ELCI2103` | `Handler Main.mint must be exposed by its module` | expose it |
-| `ELCI2104` | ``Bytes.fromString needs the Bytes module; add `import Bytes` ``, `Elci's List module has no find. It has all, any, ...`, `Elci has no Debug.log; use Debug.trace message value, which returns value`, `Map is imported as M; write M.get`, `The module name Tx is taken by Elci's core library; rename this module`, `Import cycle: Main -> Pricing -> Main`, `Java modules cannot be imported with exposing (..); ...` | add the import; section 3.3; rename; break cycles |
+| `ELCI2104` | ``Bytes.fromString needs the Bytes module; add `import Bytes` ``, `Module Helper does not expose 'doubel'`, ``Module Helper is not imported; add `import Helper` ``, `No module Lsit is imported, and none has that name`, `Elci's List module has no find. It has all, any, ...`, `Elci has no Debug.log; use Debug.trace message value, which returns value`, `Map is imported as M; write M.get`, `The module name Tx is taken by Elci's core library; rename this module`, `Import cycle: Main -> Pricing -> Main`, `Java modules cannot be imported with exposing (..); ...` | add the import; section 3.3; rename; break cycles |
 | `ELCI2105` | `...MathLib.divMod: Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>`, `...ValuesLib.add: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module` | use another export; the core `Value` module |
 | `ELCI3001` | `Cannot determine the type converted by Julc.Data.decode; add a type annotation` | annotate (`let xs : List Int`) |
 | `ELCI3002` | specialization limit (256) | remove polymorphic recursion |
 | `ELCI3003` | `Type argument T = Unit of firstOr must have a Plutus Data encoding`, `No strict decoder for org.julclang.ledger.TxOut ...`, `No encoder for List [org.julclang.ledger.Value] ...`, `Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; ...`, `Type argument a = Value of filter contains a Value, which a Java library does not keep in the ledger's canonical order; ...` | Data-encodable type; convert values with `Value.toList`; no `Dict` or `Value` through Java generics |
-| `ELCI4001` | `unknown validator 'x'`, `eval runs an [entrypoint] function; test validators with elci test`, `ABI drift from ...`, `parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats` | fix config or command; sort `Dict` keys |
+| `ELCI4001` | `unknown validator 'x'`, `src/Main.elm is not valid UTF-8 text; save it as UTF-8`, `eval runs an [entrypoint] function; test validators with elci test`, `ABI drift from ...`, `parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats` | fix config or command; sort `Dict` keys |
 | `ELCI4002`, `ELCI4003` | backend rejected or lacks a capability | compiler issue; report it |
 | (none) | `Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"`, `Unknown configuration key: [project] name` | fix `elci.toml` |
 
-A failing scenario that was never run prints `cannot prepare validator 'badge': it takes 1 parameter(s)
+A failing scenario that was never run prints `cannot prepare validator 'badge': it takes 1 parameter
 [admin], but the scenario gives 0; set them with Scenario.parameters`.
 
 ## 12. Anti-patterns agents get wrong
 
 1. **Using Elm APIs Elci lacks** (`Set`, `Debug.log`, `String.length`, `String.toInt`,
-   `List.map4`, `.field`). Use section 3.3. The core functions in section 8 do exist; use them rather than
+   `List.map4`). Use section 3.3. The core functions in section 8 do exist; use them rather than
    writing your own or mapping `Julc.Math`.
 2. **Forgetting imports.** `Dict`, `Map`, `Array`, `Value`, `Interval`, `Tx`, `Bytes`, `Julc.Data` must be imported; `Basics`, `List`,
    `Maybe`, `Result`, `String`, `Tuple` and `Debug` are implicit. `Julc.*` Java modules also need a
@@ -1278,7 +1295,7 @@ PASS BadgeTest.otherTokensAreRejected (cpu 17971962, mem 62350)
 PASS BadgeTest.onlyTheDeclaredQuantity (100 runs, max cpu 16338349, mem 56630)
 6 passed, 0 failed (seed 42)
 $ elci apply --validator badge --param 'admin={"bytes": "a2c20c77887ace1cd986193e4e75babd8993cfd56995cd5cfce609c2"}'
-validator badge: applied 1 parameter(s); hash 8769d0504d637d83ffdc196eb33ab8146710d182338b0608f970c3cb; wrote .../badge/build/validators/badge/applied.plutus.json
+validator badge: applied 1 parameter; hash 8769d0504d637d83ffdc196eb33ab8146710d182338b0608f970c3cb; wrote .../badge/build/validators/badge/applied.plutus.json
 ```
 
 ### 14.3 Function project for `elci eval`

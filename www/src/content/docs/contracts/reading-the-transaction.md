@@ -88,15 +88,20 @@ signedByBytes key ctx =
 ```
 
 ```text
-elci: .../my-project/elci.toml:9: [validators.main]
-.../my-project/src/Main.elm:8:51: ELCI2002: Type mismatch: expected Bytes, found PubKeyHash
+.../my-project/src/Main.elm:8:51: ELCI2002: The field `signatories` is `List PubKeyHash`, but it is used here as `List Bytes`
+
+8|     List.any (\signer -> signer == key) ctx.txInfo.signatories
+                                                     ^
+Hint: the `.hash` field is the Bytes inside a PubKeyHash
+
+In .../my-project/elci.toml:9: [validators.main]
 ```
 
 Take a `PubKeyHash` instead, or use the `.hash` field to get the bytes when you really need them: `policy.hash` for a `PolicyId`, and `token.hash` for a `TokenName`, which has no other field.
 
 What you can do with a ledger type is decided per type:
 
-- **Fields**: read record fields with `.field`, including nested ones such as `output.address.credential`.
+- **Fields**: read record fields with `.field`, including nested ones such as `output.address.credential`. Accessor functions work too: `List.map .resolved ctx.txInfo.inputs` is the list of spent outputs.
 - **Patterns and constructors**: match on custom types in `case`, and build values such as `Ledger.TxOutRef txId 0`.
 - **Equality**: `==` and `/=` work on hashes, `TxOutRef`, `Credential`, `Address`, `Interval`, `OutputDatum`, `ScriptInfo`, `Value`, `Data` and the other plain ledger types. A `JulcOptional` has no equality: convert it with `Data.fromOptional` and compare the `Maybe`.
 - **Records that contain a `Value`** (`TxOut`, `TxInInfo`, `TxInfo`) have no equality: compare their fields. Neither they nor a `Value` can be a datum, redeemer or parameter.

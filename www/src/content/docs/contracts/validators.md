@@ -251,15 +251,23 @@ mint owner _ _ ctx =
 ```
 
 ```text
-elci: .../vault/elci.toml:7: [validators.vault]
-.../vault/src/Vault.elm:15:1: ELCI2014: Handler Vault.mint does not have the mint signature owner -> redeemer -> ScriptContext -> Bool that [validators.vault] needs (1 parameter); its type is PubKeyHash -> () -> () -> ScriptContext -> Bool (Type mismatch: expected (), found ScriptContext)
+.../vault/src/Vault.elm:15:1: ELCI2014: Handler Vault.mint does not have the mint signature owner -> redeemer -> ScriptContext -> Bool that [validators.vault] needs (1 parameter); its type is PubKeyHash -> () -> () -> ScriptContext -> Bool; it has `()` where the configuration needs `ScriptContext`
+
+15| mint : PubKeyHash -> () -> () -> ScriptContext -> Bool
+    ^^^^
+
+In .../vault/elci.toml:7: [validators.vault]
 ```
 
 The message gives the signature the table needs, with its parameter count, and the handler's actual type. A mint handler takes the parameters, a redeemer and the context, so the extra `()` puts a `()` where the `ScriptContext` should be. A handler that its module doesn't expose is `ELCI2103`:
 
 ```text
-elci: .../vault/elci.toml:7: [validators.vault]
 .../vault/src/Vault.elm:15:1: ELCI2103: Handler Vault.mint must be exposed by its module
+
+15| mint : PubKeyHash -> () -> ScriptContext -> Bool
+    ^^^^
+
+In .../vault/elci.toml:7: [validators.vault]
 ```
 
 And a handler key that names a missing function:

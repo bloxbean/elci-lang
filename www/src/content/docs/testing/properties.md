@@ -317,6 +317,9 @@ A property's parameters must be concrete, Data-encodable types. `elci test` reje
 
 ```text
 tests/Lim.elm:6:1: ELCI2009: Property applies needs Data-encodable parameters to generate; functions, arrays and ScriptContext cannot be generated (take a List and use Array.fromList)
+
+6| applies : (Int -> Int) -> Property
+   ^^^^^^^
 ```
 
 - **Functions** cannot be generated.

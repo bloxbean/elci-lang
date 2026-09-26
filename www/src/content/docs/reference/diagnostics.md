@@ -1,36 +1,97 @@
 ---
 title: Diagnostics
-description: Every ELCI error code with its meaning, plus real messages and fixes for the errors you will meet most often.
+description: How to read an Elci error, the JSON report for tools, and every ELCI error code with real messages and fixes for the errors you will meet most often.
 sidebar:
   order: 6
 ---
 
-Elci reports errors with a stable code and a source location. This page lists every code, then shows
-the most common errors with a small program that triggers each one, the exact message and the fix.
+Elci reports each error with a stable code and a source location, shows the source line it is about and
+suggests a fix. This page explains how to read a diagnostic and how tools can read one. It then lists
+every code, and shows the most common errors with a small program that triggers each one, the exact
+output and the fix.
 
 ## Reading a diagnostic
 
-A compile error has the form `path:line:column: code: message`:
+A compile error starts with one line, `path:line:column: code: message`. A blank line follows, then the
+source line with a caret under the reported token, then any hints:
 
 ```text
 src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
+
+6|     lenght [ 1, 2 ]
+       ^^^^^^
+Hint: did you mean `List.length`?
 ```
 
-- The **path** is the file of the module where the problem is, which may be a module imported by the
-  one you compiled. A problem inside a bundled module such as `List` is reported where your code uses it,
-  or otherwise as `<bundled>/List.elm`.
-- The **code** names the class of error and never changes between releases. The **message** names the
-  construct and types involved.
-- For a validator, the `elci.toml` table is printed first, on its own line:
+- The **first line** has the same form for every error, so editors and scripts can parse it. The
+  **path** is the file of the module where the problem is, which may be a module imported by the one you
+  compiled. A problem inside a bundled module such as `List` is reported where your code uses it, or
+  otherwise as `<bundled>/List.elm`.
+- The **code** names the class of error and never changes between releases. The **message** says what is
+  wrong in terms of your code: which argument, branch, list element, operator side, annotation or field
+  has the wrong type, or which patterns a `case` doesn't cover.
+- The **excerpt** shows the line with its number. The caret underlines the reported token, such as a
+  qualified name or a string literal with its quotes. For an error at the end of the file, it points just
+  past the last code. An error in a bundled module has no excerpt.
+- Each **hint** suggests a likely fix: a close name, a conversion such as `String.fromInt`, or an import
+  to add. An error has zero or more hints.
+
+Types in messages are written as in source, in backticks: `Result a Int`, `Order`. When two types of one
+name meet in a message, both are qualified, as in `Main.Value` and `Julc.Ledger.Value`.
+
+For a validator, the `elci.toml` table follows the diagnostic, on its own line:
 
 ```text
-elci: my-project/elci.toml:6: [validators.main]
 my-project/src/Main.elm:6:1: ELCI2013: Functions cannot be serialized as datum or redeemer
+
+6| mint : (Int -> Int) -> ScriptContext -> Bool
+   ^^^^
+
+In my-project/elci.toml:6: [validators.main]
 ```
 
-Every error makes the command exit with status 1. Codes starting with `ELCI1` come from the lexer and
-parser, `ELCI20` from type checking, `ELCI21` from modules and imports, `ELCI3` from code generation and
-`ELCI4` from configuration and the backend.
+The compiler stops at the first error: fix it and run the command again. Every error makes the command
+exit with status 1. Codes starting with `ELCI1` come from the lexer and parser, `ELCI20` from type
+checking, `ELCI21` from modules and imports, `ELCI3` from code generation and `ELCI4` from configuration
+and the backend.
+
+Some examples below show only the first line of a diagnostic, without its excerpt and hints.
+
+## JSON reports for tools
+
+`elci check`, `elci build`, `elci eval` and `elci test` take `--report=json`. An error is then printed on
+standard error as one JSON object, on one line, as Elm's `--report=json` does:
+
+```text
+$ elci check --report=json
+{"code":"ELCI2005","path":"src/Main.elm","line":6,"column":5,"message":"Unknown name 'lenght'","hints":["did you mean `List.length`?"],"excerpt":"6|     lenght [ 1, 2 ]\n       ^^^^^^","context":null}
+```
+
+| Field | Type | Contents |
+| --- | --- | --- |
+| `code` | string or null | The `ELCI` code; null for a failure that has no code |
+| `path` | string or null | The file, as on the first line of the text report |
+| `line`, `column` | number or null | The position, counting from 1 |
+| `message` | string | The message, without the path and code |
+| `hints` | array of strings | The hints, without `Hint:`; empty when there are none |
+| `excerpt` | string or null | The source line and the caret line, separated by `\n`; null when there is no source to show |
+| `context` | string or null | For a failure in a named validator, its `elci.toml` line and table; otherwise null |
+
+A failure in a validator names its table in `context`:
+
+```text
+{"code":"ELCI2013","path":"my-project/src/Main.elm","line":6,"column":1,"message":"Functions cannot be serialized as datum or redeemer","hints":[],"excerpt":"6| mint : (Int -> Int) -> ScriptContext -> Bool\n   ^^^^","context":"my-project/elci.toml:6: [validators.main]"}
+```
+
+A failure without a source location keeps the same fields, with null location fields:
+
+```text
+{"code":"ELCI4001","path":null,"line":null,"column":null,"message":"unknown validator 'treasury'; configured: main","hints":[],"excerpt":null,"context":null}
+```
+
+The exit status is the same with or without the option. Results stay text on standard output: the lines of
+`elci check` and `elci build`, the value and budget of `elci eval` or its `evaluation failed:` line, and
+test results, including failing tests. The other commands reject the option with `ELCI4001`.
 
 ## All codes
 
@@ -39,7 +100,7 @@ parser, `ELCI20` from type checking, `ELCI21` from modules and imports, `ELCI3` 
 | `ELCI1001` | Invalid source character or literal |
 | `ELCI1002` | Malformed or unsupported syntax |
 | `ELCI2001` | Invalid pattern or expression form |
-| `ELCI2002` | Type mismatch or infinite type |
+| `ELCI2002` | Type mismatch, or a type that would have to contain itself |
 | `ELCI2003` | Unsupported equality, ordering or append type; a constrained type variable that is missing or misnamed; a `Dict` decoded from Data whose keys aren't comparable |
 | `ELCI2004` | Missing required top-level signature |
 | `ELCI2005` | Unknown value name |
@@ -76,6 +137,9 @@ main =
 
 ```text
 src/Main.elm:6:6: ELCI1001: Float is unsupported; represent fractional amounts using an explicit integer scale
+
+6|     1.5
+        ^
 ```
 
 **Fix:** use integers with an explicit scale, such as lovelace instead of ada or basis points instead of
@@ -94,6 +158,9 @@ first (x :: _) =
 
 ```text
 src/Main.elm:5:8: ELCI1002: Function parameters require irrefutable patterns; use case for refutable matching
+
+5| first (x :: _) =
+          ^
 ```
 
 **Fix:** match with `case`, and handle every shape:
@@ -114,7 +181,7 @@ parentheses` (for `1 < 2 < 3`), `Mixing (<|) and (|>) needs parentheses: they as
 directions, as in Elm` (for `f <| x |> g`), `Extensible records are unsupported; use a closed record` and
 `Tuples have two or three elements`.
 
-### `ELCI2001`: invalid expression form
+### `ELCI2001`: invalid expression or pattern
 
 ```elm
 main : Int
@@ -124,24 +191,88 @@ main =
 
 ```text
 src/Main.elm:6:7: ELCI2001: Float division is unsupported; use // for integer quotient
+
+6|     7 / 2
+         ^
 ```
 
 **Fix:** `7 // 2`, together with `modBy` or `remainderBy` when you need the rest. The function `(/)` is
 rejected the same way, with a suggestion to use `(//)`.
+
+`ELCI2001` also covers patterns that can't match their value's shape. A constructor pattern must give the
+constructor all of its arguments:
+
+```elm
+main : Int
+main =
+    case Just 1 of
+        Just x y ->
+            x
+
+        Nothing ->
+            0
+```
+
+```text
+src/Main.elm:7:9: ELCI2001: The constructor Just takes 1 argument, but this pattern gives it 2
+
+7|         Just x y ->
+           ^^^^
+```
+
+A misspelt constructor in a pattern gets a suggestion:
+
+```text
+src/Main.elm:7:9: ELCI2001: Unknown constructor Jsut in this pattern
+
+7|         Jsut n ->
+           ^^^^
+Hint: did you mean `Just`?
+```
+
+A record pattern such as `{ index }` can't take apart a ledger record. Read its fields instead:
+
+```text
+src/Main.elm:10:9: ELCI2001: TxOutRef is a library record, which a pattern cannot take apart; read its fields with `.index` instead
+```
 
 ## Type errors
 
 ### `ELCI2002`: type mismatch
 
 ```elm
-main : Int
+main : String
 main =
-    1 + True
+    String.fromInt "42"
 ```
 
 ```text
-src/Main.elm:6:7: ELCI2002: The operator + works on Int values, not Bool
+src/Main.elm:6:20: ELCI2002: The 1st argument to `String.fromInt` is `String`, but `String.fromInt` needs `Int`
+
+6|     String.fromInt "42"
+                      ^^^^
 ```
+
+The message names the part of the code whose type differs, and the type it needs:
+
+| Where | Example message |
+| --- | --- |
+| An argument | `` The 1st argument to `String.fromInt` is `String`, but `String.fromInt` needs `Int` `` |
+| A value piped in with `\|>` | `` The 1st argument to `double`, the value piped in, is `String`, but `double` needs `Int` `` |
+| Too many arguments | `` `max` takes 2 arguments, but it is given 3 `` |
+| A value applied like a function | `` `fee` is `Int`, not a function, so it cannot take an argument `` |
+| The condition of an `if` | `` The condition of this if is `Int`, but it must be `Bool` `` |
+| The branches of an `if` | `` The branches of this if have different types: the then branch is `Int`, but the else branch is `String` `` |
+| A branch of a `case` | `` The 2nd branch of this case is `String`, but the first branch is `Int` `` |
+| A pattern | `` This pattern matches `Maybe a`, but the value it is matched against is `Int` `` |
+| A list element | `` The 3rd element of this list is `String`, but the elements before it are `Int` `` |
+| An operator | `` The left side of :: is `String`, but the list on the right holds `Int` ``, `` The two sides of ++ have different types: the left is `String`, but the right is `Int` `` |
+| A composition | `` The left side of >> returns `String`, but the right side takes `Int` `` |
+| An annotation | `` The annotation of `add` says it returns `Int`, but its body is `String` ``, `` The annotation of `add` gives it 1 argument, but its definition has 2 parameters `` |
+| A record field | `` The field `owner` is `String`, but it is used here as `Int` `` |
+
+A too-many-arguments error also hints that a missing comma or parentheses can make values look like extra
+arguments.
 
 A signature that claims more than the body delivers is also a mismatch:
 
@@ -152,10 +283,18 @@ identity value =
 ```
 
 ```text
-src/Main.elm:4:1: ELCI2002: Type mismatch: expected Int, found a
+src/Main.elm:4:1: ELCI2002: The annotation of `identity` says `a` can be any type, but its definition needs `Int`
+
+4| identity : a -> a
+   ^^^^^^^^
+Hint: write `Int` in the annotation, or make the definition work for any type
 ```
 
-**Fix:** make the signature match the body (`increment : Int -> Int`), or the body match the signature.
+**Fix:** make the signature match the body (`increment : Int -> Int`), or the body match the signature. An
+annotation with two type variables that the definition needs to be the same says
+`` The annotation of `pick` says `a` and `b` can be different types, but its definition needs them to be the same ``.
+The annotations of mutually recursive functions are all read before any body is checked, so a mistake is
+reported in the body that makes it.
 
 Arithmetic operators name the types they accept, and suggest the right operator where there is one:
 
@@ -165,8 +304,32 @@ src/Main.elm:6:7: ELCI2002: The operator + works on Int values, not String; use 
 
 Comparisons on a type that has no order are `ELCI2003`, below.
 
-Recursion that would need an infinitely growing type, such as a generic function that calls itself with
-a tuple of its argument, is reported as `ELCI2002: Infinite type`.
+**Hints.** A mismatch between types that are often confused carries a hint with the conversion:
+
+```elm
+main : Int
+main =
+    List.head [ 1, 2 ] + 1
+```
+
+```text
+src/Main.elm:6:24: ELCI2002: The operator + works on Int values, not Maybe Int
+
+6|     List.head [ 1, 2 ] + 1
+                          ^
+Hint: this is a Maybe: handle `Nothing` with a case, or use `Maybe.withDefault`
+```
+
+The hints cover `Int` and `String` (`String.fromInt`), `String` and `Bytes` (`Bytes.fromString`,
+`Bytes.toString`), `Bytes` and a ledger hash such as `PubKeyHash` (the constructor, or the `.hash` field),
+a `Maybe` or `Result` and a plain value (a `case`, `Maybe.withDefault`, `Result.withDefault` or `Just`),
+`Value` and `Int` (`Value.lovelaceOf`, `Value.lovelace`), `Data` and a typed value (`Data.decode`,
+`Data.encode`), and a function where a value is needed (a missing argument). An error shows at most two
+hints, and only those that fit the types. A pattern of the wrong type gets no hint.
+
+A type that would have to contain itself, as when a generic function calls itself with a tuple of its
+argument, is reported as
+`` ELCI2002: This needs a type that contains itself: `a` would have to be `( a, a )` ``.
 
 ### `ELCI2003`: unsupported equality, ordering or append
 
@@ -183,6 +346,9 @@ main =
 
 ```text
 src/Main.elm:11:12: ELCI2003: The operator == cannot compare Int -> Int values: functions have no equality
+
+11|     double == double
+               ^^
 ```
 
 Equality is rejected for functions, `Map`, `Array` and imported types without approved equality, such as
@@ -207,6 +373,9 @@ main =
 
 ```text
 src/Main.elm:6:17: ELCI2003: The operator < needs comparable values, but Bool, in ( Int, Bool ), is not comparable. Comparable types are Int, String, Bytes, byte-string ledger types such as PubKeyHash, and lists and tuples of comparable types
+
+6|     ( 1, True ) < ( 2, False )
+                   ^
 ```
 
 For records and custom types, the message goes on to suggest a key:
@@ -233,6 +402,9 @@ larger x y =
 
 ```text
 src/Main.elm:6:10: ELCI2003: The operator > compares values of type `a`, but the annotation of `larger` says `a` can be any type. Rename it `comparable` (as in Elm) to require comparable values
+
+6|     if x > y then
+            ^
 ```
 
 **Fix:** write `larger : comparable -> comparable -> comparable`. For `++`, the message suggests
@@ -261,6 +433,9 @@ double x =
 
 ```text
 src/Main.elm:4:1: ELCI2004: Top-level declarations require a type signature
+
+4| double x =
+   ^^^^^^
 ```
 
 **Fix:** add `double : Int -> Int` directly above the definition. Local definitions do not need one.
@@ -275,16 +450,46 @@ main =
 
 ```text
 src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
+
+6|     lenght [ 1, 2 ]
+       ^^^^^^
+Hint: did you mean `List.length`?
 ```
 
-**Fix:** correct the spelling, or import the module that defines the name. A misspelled name from a Java
-library module gets a hint:
+**Fix:** correct the spelling, or import the module that defines the name. The hint lists up to three
+close names. It looks first at the names the module can write unqualified, local ones included, and then
+at qualified names. A name is close when it differs only in case, by one edit for a name of three to five
+characters, or by two edits for a longer name. Swapping two neighbouring letters counts as one edit.
+
+A name that an imported module exposes, but that its import doesn't list, gets a hint that says how to
+reach it. Here the module `Helper` exposes `double`:
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+import Helper
+
+
+main : Int
+main =
+    double 4
+```
+
+```text
+src/Main.elm:8:5: ELCI2005: Unknown name 'double'
+
+8|     double 4
+       ^^^^^^
+Hint: write `Helper.double`, or expose `double` in its import
+```
+
+A name that a Java library module doesn't export is reported with a reminder to check its exports:
 
 ```text
 src/Main.elm:8:5: ELCI2005: Unknown name 'Math.maximum'; check that the imported module exports it
 ```
 
-A qualified name from a core module that doesn't exist is `ELCI2104`, and lists what the module has; see
+A qualified name whose module is missing, not imported or lacks the name is `ELCI2104`; see
 [module and import errors](#elci2101-elci2102-and-elci2104).
 
 ### `ELCI2006`: duplicate binder or unreachable pattern
@@ -305,6 +510,9 @@ describe value =
 
 ```text
 src/Main.elm:13:9: ELCI2006: Unreachable pattern
+
+13|         Just _ ->
+            ^^^^
 ```
 
 **Fix:** remove the branch that can never match. A pattern that binds the same name twice, such as
@@ -330,11 +538,39 @@ amount action =
 ```
 
 ```text
-src/Main.elm:12:5: ELCI2007: Non-exhaustive case; add the missing constructor or a wildcard branch
+src/Main.elm:12:5: ELCI2007: This case does not cover every possibility; it is missing `Cancel`
+
+12|     case action of
+        ^^^^
+Hint: add a branch for each missing pattern
 ```
 
 **Fix:** add a `Cancel ->` branch. Prefer naming every constructor over `_ ->`, so that adding a
 constructor later points you to every `case` to update.
+
+The message lists the missing patterns as you would write them, including nested ones:
+
+```elm
+describe : Maybe (Result String Int) -> String
+describe value =
+    case value of
+        Just (Ok n) ->
+            String.fromInt n
+```
+
+```text
+src/Main.elm:6:5: ELCI2007: This case does not cover every possibility; it is missing `Nothing` and `Just (Err _)`
+
+6|     case value of
+       ^^^^
+Hint: add a branch for each missing pattern
+```
+
+The list is complete: a branch for each pattern in it makes the `case` exhaustive. It shows up to three
+patterns, then how many more there are, as in
+`` it is missing `Square _`, `Triangle _ _ _`, `Line` and 1 more ``. Lists and literals are covered too:
+a `case` on a list with branches for `[]` and `[ _ ]` is missing `_ :: _ :: _`, and one on an `Int` or a
+`String` without a `_` branch is missing `_`.
 
 ### `ELCI2008`: eager value cycle
 
@@ -353,6 +589,9 @@ main =
 
 ```text
 src/Main.elm:7:9: ELCI2008: Cyclic eager values are unsupported; recursion requires functions
+
+7|         a =
+           ^
 ```
 
 **Fix:** values are computed eagerly, so they cannot depend on each other in a loop. Break the cycle, or
@@ -368,6 +607,9 @@ main =
 
 ```text
 src/Main.elm:4:1: ELCI2009: Entrypoints require concrete types
+
+4| main : List a
+   ^^^^
 ```
 
 A validator handler gets `Handler Main.mint requires a concrete type`, and a property test with generic
@@ -387,11 +629,15 @@ main =
 ```
 
 ```text
-src/Main.elm:14:10: ELCI2010: Missing field 'price'; available fields: [amount]
+src/Main.elm:10:10: ELCI2010: Missing field 'price'; available fields: [amount]
+
+10|     order.price
+             ^
 ```
 
-**Fix:** use one of the listed fields. When Elci cannot tell which record a field access belongs to, add
-a signature with the record type.
+**Fix:** use one of the listed fields. A field name close to one of them, such as `order.amont`, also
+gets the hint ``did you mean `amount`?``. When Elci cannot tell which record a field access belongs to,
+add a signature with the record type.
 
 ### `ELCI2011` and `ELCI2012`: invalid type declarations
 
@@ -409,7 +655,7 @@ A type applied to the wrong number of arguments, and type aliases that refer to 
 are `ELCI2012`:
 
 ```text
-src/Main.elm:4:1: ELCI2012: Type List expects 1 arguments, got 2
+src/Main.elm:4:1: ELCI2012: The type List takes 1 argument, but it is given 2
 src/Main.elm:4:12: ELCI2012: Cyclic type alias: A -> B -> A
 ```
 
@@ -420,10 +666,21 @@ src/Main.elm:4:8: ELCI2012: Write tuple types as ( a, b ) or ( a, b, c )
 src/Main.elm:4:10: ELCI2012: Write the unit type as ()
 ```
 
-An unknown type name in a signature is also `ELCI2012`, reported at the declaration:
+An unknown type name in a signature is also `ELCI2012`, reported at the declaration. A close type name is
+suggested:
+
+```elm
+main : Strin
+main =
+    "x"
+```
 
 ```text
-src/Main.elm:4:1: ELCI2012: Type is not declared or imported in this module: Amount
+src/Main.elm:4:1: ELCI2012: Type is not declared or imported in this module: Strin
+
+4| main : Strin
+   ^^^^
+Hint: did you mean `String`?
 ```
 
 **Fix:** declare or import the type, or correct its spelling.
@@ -441,15 +698,20 @@ mint _ _ =
 ```
 
 ```text
-elci: my-project/elci.toml:6: [validators.main]
 my-project/src/Main.elm:6:1: ELCI2013: Functions cannot be serialized as datum or redeemer
+
+6| mint : (Int -> Int) -> ScriptContext -> Bool
+   ^^^^
+
+In my-project/elci.toml:6: [validators.main]
 ```
 
 A `Value`, and ledger types that contain one such as `TxOut`, are rejected the same way:
 
 ```text
-elci: my-project/elci.toml:6: [validators.main]
 my-project/src/Main.elm:7:1: ELCI2013: org.julclang.ledger.Value has no approved strict Data boundary (BOUNDARY); for example records containing the map-encoded Value cannot be checked
+
+In my-project/elci.toml:6: [validators.main]
 ```
 
 **Fix:** use your own record or custom type, or a ledger type with an approved boundary such as `TxOutRef`
@@ -480,6 +742,9 @@ main =
 
 ```text
 src/Main.elm:10:1: ELCI2013: Arrays have no Data encoding and cannot be stored in data; keep a List and convert it with Array.fromList
+
+10| main : Int
+    ^^^^
 ```
 
 ### `ELCI2014`: handler signature does not match
@@ -493,12 +758,16 @@ spend _ _ =
 ```
 
 ```text
-elci: my-project/elci.toml:6: [validators.main]
-my-project/src/Main.elm:6:1: ELCI2014: Handler Main.spend does not have the spend signature datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (0 parameters); its type is () -> ScriptContext -> Bool (Type mismatch: expected Bool, found ScriptContext -> Bool)
+my-project/src/Main.elm:6:1: ELCI2014: Handler Main.spend does not have the spend signature datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (0 parameters); its type is () -> ScriptContext -> Bool; it has `Bool` where the configuration needs `ScriptContext -> Bool`
+
+6| spend : () -> ScriptContext -> Bool
+   ^^^^^
+
+In my-project/elci.toml:6: [validators.main]
 ```
 
 The message gives the signature the table needs, how many parameters it declares and the handler's
-actual type. The same code reports a missing parameter argument (`does not have the mint signature
+actual type. The part in parentheses names the first pair of types that differ. The same code reports a missing parameter argument (`does not have the mint signature
 owner -> redeemer -> ScriptContext -> Bool that [validators.main] needs (1 parameter)`) and a datum that
 should be a `Maybe` (`uses spend-datum = "optional", so its datum must have type Maybe d, not Int`). **Fix:** make the signature match the table in
 [`elci.toml`](/reference/configuration/): parameters first, then the datum (for `spend`), the redeemer
@@ -507,8 +776,9 @@ and the `ScriptContext`.
 ### `ELCI2103`: not exposed
 
 ```text
-elci: my-project/elci.toml:6: [validators.main]
 my-project/src/Main.elm:11:1: ELCI2103: Handler Main.mint must be exposed by its module
+
+In my-project/elci.toml:6: [validators.main]
 ```
 
 **Fix:** add the handler, or the `[entrypoint]` function, to the module's `exposing` list.
@@ -526,6 +796,9 @@ import Julc.Nope as Nope
 
 ```text
 src/Main.elm:3:1: ELCI2101: Missing source module: Julc.Nope; add Julc/Nope.elm under a source directory, or map a Java library to it under [java-modules]
+
+3| import Julc.Nope as Nope
+   ^^^^^^
 ```
 
 ```elm
@@ -534,6 +807,19 @@ import Julc.Ledger exposing (Hash)
 
 ```text
 src/Main.elm:3:1: ELCI2101: Unknown ledger record type Hash
+
+3| import Julc.Ledger exposing (Hash)
+   ^^^^^^
+```
+
+A misspelt module, ledger type or exposed name in an import gets a suggestion:
+
+```text
+src/Main.elm:3:1: ELCI2101: Unknown ledger type Credentail
+
+3| import Julc.Ledger exposing (Credentail(..))
+   ^^^^^^
+Hint: did you mean `Credential`?
 ```
 
 The test library (`Expect`, `Scenario`, `Property`) is only for test modules. A source module that imports
@@ -556,8 +842,36 @@ import Map exposing (lookup)
 ```
 
 ```text
-src/Main.elm:3:1: ELCI2104: Module does not expose 'lookup': Map
+src/Main.elm:3:1: ELCI2104: Map does not expose 'lookup'
+
+3| import Map exposing (lookup)
+   ^^^^^^
 ```
+
+A qualified name gives one of three messages, depending on the module. The hint suggests close names:
+
+| Situation | Message |
+| --- | --- |
+| The module is imported, but doesn't expose the name | `Module Helper does not expose 'doubel'` |
+| A project or Java module exists, but this module doesn't import it | ``Module Helper is not imported; add `import Helper` `` |
+| No imported module has that name | `No module Lsit is imported, and none has that name` |
+
+```elm
+main : Int
+main =
+    Lsit.length [ 1, 2 ]
+```
+
+```text
+src/Main.elm:6:5: ELCI2104: No module Lsit is imported, and none has that name
+
+6|     Lsit.length [ 1, 2 ]
+       ^^^^^^^^^^^
+Hint: did you mean `List.length`?
+```
+
+A qualified name must use the name the module is imported under. After `import Shop.Pricing` without
+`as Pricing`, `Pricing.priceOf` gets the third message; write `Shop.Pricing.priceOf`.
 
 A qualified name that a core module lacks lists what the module has. For Elm functions that Elci doesn't
 provide, the message says what to use instead:
@@ -569,8 +883,8 @@ src/Main.elm:6:5: ELCI2104: Elci has no String.length; a String is UTF-8 text; B
 src/Main.elm:6:5: ELCI2104: Elci has no Bytes.lessThan; bytes are comparable: write a < b
 ```
 
-Using a module that isn't imported by default, such as `Bytes`, `Dict`, `Map`, `Array` or `Julc.Data`,
-without its import names the import to add:
+Using a core module that isn't imported by default, such as `Bytes`, `Dict`, `Map`, `Array` or
+`Julc.Data`, without its import names the import to add:
 
 ```text
 src/Main.elm:6:5: ELCI2104: Bytes.fromString needs the Bytes module; add `import Bytes`
@@ -580,13 +894,13 @@ A module imported with an alias is used through the alias:
 
 ```text
 src/Main.elm:8:5: ELCI2104: Map is imported as M; write M.get
+src/Main.elm:8:5: ELCI2104: Shop.Pricing is imported as P; write P.priceOf
 ```
 
-`ELCI2104` also covers a source module you use without importing it, `exposing (..)` on a Java module, a
-file whose `module` line does not match its path, and import cycles:
+`ELCI2104` also covers `exposing (..)` on a Java module, a file whose `module` line does not match its
+path, and import cycles:
 
 ```text
-src/Main.elm:6:5: ELCI2104: Module Pricing is not imported or does not expose 'fee'
 src/Main.elm:3:1: ELCI2104: Java modules cannot be imported with exposing (..); list the exported names you use
 src/Pricing.elm:1:1: ELCI2104: Module header Finance.Pricing does not match its source path, which names module Pricing
 src/Pricing.elm:3:1: ELCI2104: Import cycle: Main -> Pricing -> Main
@@ -636,6 +950,9 @@ main =
 
 ```text
 src/Main.elm:8:10: ELCI2105: org.julclang.stdlib.lib.MathLib.divMod: Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>
+
+8|     case Math.divMod 7 2 of
+            ^^^^^^^^^^^
 ```
 
 **Fix:** use another export, such as `Math.floorDiv` and `Math.floorMod`, or Elci operators.
@@ -671,6 +988,9 @@ main =
 
 ```text
 src/Main.elm:8:18: ELCI3001: Cannot determine the type converted by Julc.Data.decode; add a type annotation
+
+8|     List.length (Data.decode (Data.encode [ 1, 2 ]))
+                    ^^^^^^^^^^^
 ```
 
 `List.length` works on any list, so nothing tells Elci what the decoded list contains, and it cannot pick
@@ -740,9 +1060,10 @@ elci: ELCI4001: unknown validator 'treasury'; configured: main
 elci: ELCI4001: eval runs an [entrypoint] function; test validators with elci test
 elci: ELCI4001: parameter owner is not a well-formed org.julclang.ledger.PubKeyHash value
 elci: ELCI4001: parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats
+elci: ELCI4001: src/Main.elm is not valid UTF-8 text; save it as UTF-8
 ```
 
-The message says what to change. A `Dict` parameter must list its keys in ascending order, each once; see
+The message says what to change. A source file must be UTF-8 text. A `Dict` parameter must list its keys in ascending order, each once; see
 [parameterized validators](/contracts/parameters/#what-apply-checks). The [CLI](/reference/cli/) and
 [`elci.toml`](/reference/configuration/) references list the others. Some configuration errors have no code yet; they are listed below.
 

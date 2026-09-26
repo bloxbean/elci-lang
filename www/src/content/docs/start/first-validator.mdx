@@ -268,7 +268,10 @@ Now change the validator so that spending needs two signatures: the owner's and 
 
    ```text
    elci: .../my-contract/elci.toml:9: [validators.main]
-   .../my-contract/src/Main.elm:8:1: ELCI2014: Handler Main.spend does not have the spend signature owner -> datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (1 parameter); its type is PubKeyHash -> PubKeyHash -> () -> () -> ScriptContext -> Bool (Type mismatch: expected (), found ScriptContext)
+   .../my-contract/src/Main.elm:8:1: ELCI2014: Handler Main.spend does not have the spend signature owner -> datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (1 parameter); its type is PubKeyHash -> PubKeyHash -> () -> () -> ScriptContext -> Bool; it has `()` where the configuration needs `ScriptContext`
+
+   8| spend : PubKeyHash -> PubKeyHash -> () -> () -> ScriptContext -> Bool
+      ^^^^^
    ```
 
    The table still declares one parameter, so the handler must take one parameter, then the datum, the
@@ -300,9 +303,9 @@ Now change the validator so that spending needs two signatures: the owner's and 
 
    ```text
    FAIL MainTest.ownerSigns
-       cannot prepare validator 'main': it takes 2 parameter(s) [owner, guardian], but the scenario gives 1; set them with Scenario.parameters
+       cannot prepare validator 'main': it takes 2 parameters [owner, guardian], but the scenario gives 1; set them with Scenario.parameters
    FAIL MainTest.othersAreRejected
-       cannot prepare validator 'main': it takes 2 parameter(s) [owner, guardian], but the scenario gives 1; set them with Scenario.parameters
+       cannot prepare validator 'main': it takes 2 parameters [owner, guardian], but the scenario gives 1; set them with Scenario.parameters
    0 passed, 2 failed
    ```
 
@@ -418,7 +421,7 @@ elci apply . --validator main \
 ```
 
 ```text
-validator main: applied 2 parameter(s); hash 7cf11fa222b171e7a3102db8f51aac3f4815ee8256ed47bde39cc6a6; wrote .../my-contract/build/validators/main/applied.plutus.json
+validator main: applied 2 parameters; hash 7cf11fa222b171e7a3102db8f51aac3f4815ee8256ed47bde39cc6a6; wrote .../my-contract/build/validators/main/applied.plutus.json
 ```
 
 `apply` first checks each value against the parameter's type. The applied script has its own hash, which

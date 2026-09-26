@@ -61,7 +61,7 @@ These are the messages you meet most often in a failing scenario, and what they 
 | `rejected the transaction: UnBData: not BytesData` | a value that should be bytes is something else, such as `Data.encode 5` given as a `PubKeyHash` parameter |
 | `accepted a transaction expected to fail` | a check is missing or too loose |
 | `cannot prepare validator 'markt': no [validators.markt] in elci.toml` | a misspelled validator name |
-| `cannot prepare validator 'market': it takes 1 parameter(s) [operator], but the scenario gives 0; set them with Scenario.parameters` | `Scenario.parameters` is missing or incomplete |
+| `cannot prepare validator 'market': it takes 1 parameter [operator], but the scenario gives 0; set them with Scenario.parameters` | `Scenario.parameters` is missing or incomplete |
 
 The first message is the common one, and the least helpful: a validator that returns `False` fails with an error, whichever check was false. Traces tell you which one.
 

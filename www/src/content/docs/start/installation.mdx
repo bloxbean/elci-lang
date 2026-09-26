@@ -169,7 +169,8 @@ the generated scripts and their hashes.
 
 - **Diagnostics:** the Elm language server doesn't know Elci's modules (`Julc.Ledger`, `Map`, `Array`,
   `Bytes`, your Java library imports), so its errors aren't reliable for Elci code. Use `elci check`, which
-  reports errors as `file:line:column: ELCIxxxx: message`.
+  reports errors as `file:line:column: ELCIxxxx: message`, followed by the source line and any hints.
+  With `--report=json` it prints the error as one JSON object instead, for editor integrations.
 
 :::caution
 elm-format silently changes integer literals larger than about 9.2 × 10¹⁸, because it stores them as 64-bit

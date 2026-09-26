@@ -27,7 +27,7 @@ preview: the profile below is implemented and tested, and everything outside it 
 | Core library | The `Basics` prelude and the `List`, `Maybe`, `Result`, `Tuple` and `String` modules, imported by default. See [core modules](/reference/core-modules/). |
 | Lists | `List a`, literals, `::`, `++` and list patterns. |
 | Tuples | Pairs and triples, with patterns and destructuring. |
-| Records | Closed records, generic aliases with constructors, field access, update, destructuring. |
+| Records | Closed records, generic aliases with constructors, field access, accessor functions such as `.name`, update, destructuring. |
 | Custom types | Generic and recursive unions; `Maybe` is built in, and `Result` and `Order` come from the core library. |
 | Patterns | Nested constructors, lists, cons, tuples, record fields, `as`, `_`, unit, and `Bool`, `Int` and `String` literals. Exhaustiveness and reachability are checked. |
 | Equality and order | Structural `==` and `/=` for equality-capable types, and `<`, `compare` and sorting for comparable types (below). |
@@ -42,8 +42,8 @@ preview: the profile below is implemented and tested, and everything outside it 
 
 **Not supported:** `Float`, `/` and `number`, typeclasses and user-defined constraints, extensible
 records and row polymorphism, higher-rank types, polymorphic recursion, ports and effects, Elm's `Set` and
-`Char` modules and most of `String`, record accessor functions such as `.name`, character
-literals, hexadecimal literals, `%`, tuples of four or more, and Elm packages.
+`Char` modules and most of `String`, character literals, hexadecimal literals, `%`, tuples of four or
+more, and Elm packages.
 
 ## Syntax summary
 
@@ -146,6 +146,8 @@ main =
 | Custom type | `type T a = A a \| B` |
 | Type alias | `type alias R = { x : Int }`; a record alias is also a constructor `R 1` |
 | Record | `{ x = 1, y = 2 }`, `r.x`, `{ r \| x = 3 }` |
+| Accessor function | `.x`, which is `\r -> r.x`: `List.map .x points` |
+| Field of a qualified value | `Config.settings.x` |
 | Tuple | `( 1, True )`, `( 1, 2, 3 )` |
 | List | `[ 1, 2 ]`, `1 :: rest`, `xs ++ ys` |
 | Operator as a function | `(+)`, `(::)`, `(<)`: `List.foldl (+) 0 xs` |
@@ -197,7 +199,12 @@ Names resolve as in Elm, with one addition:
   (`ELCI2102`). The message lists the qualified alternatives.
 - *Addition:* a name listed explicitly, as in `import Utils exposing (clamp)`, takes precedence over a
   default import.
-- Qualified names such as `Basics.max` and `Result.Ok` always work.
+- Qualified names such as `Basics.max` and `Result.Ok` always work. A qualified name is written without
+  spaces and ends at its first lowercase part, so `Config.settings.fee` is the field `fee` of the value
+  `Config.settings`.
+- A qualified name that doesn't resolve is `ELCI2104`, with one of three messages: the module doesn't
+  expose the name, the module isn't imported (with the import to add), or no imported module has that
+  name. See [diagnostics](/reference/diagnostics/#elci2101-elci2102-and-elci2104).
 - An import can't be aliased to the name of another module, core or in the project:
   `import Utils as String` and `import Julc.Interval as Interval` are `ELCI2104`.
 

@@ -192,6 +192,15 @@ async function diagnostics(link) {
   const text = await readFile(resolve(repo, 'docs/DIAGNOSTICS.md'), 'utf8');
   return {
     format: 'path:line:column: CODE: message',
+    details:
+      'The first line is followed by a blank line, the source line as "N| code", a caret line under the ' +
+      'reported token, and zero or more "Hint: ..." lines. The compiler stops at the first error.',
+    report: {
+      option: '--report=json',
+      commands: ['check', 'build', 'eval', 'test'],
+      output: 'one JSON object on standard error',
+      fields: ['code', 'path', 'line', 'column', 'message', 'hints', 'excerpt', 'context'],
+    },
     reference: link('/reference/diagnostics/'),
     codes: [...text.matchAll(/^\|\s*`(ELCI\d{4})`\s*\|\s*(.+?)\s*\|$/gm)].map((m) => ({ code: m[1], meaning: m[2] })),
   };

@@ -69,6 +69,9 @@ If the header and the path disagree, the compiler says so:
 
 ```text
 .../src/Shop/Pricing.elm:1:1: ELCI2104: Module header Pricing does not match its source path, which names module Shop.Pricing
+
+1| module Pricing exposing (Item, Tier(..), priceOf)
+          ^^^^^^^
 ```
 
 ## What a module exposes
@@ -85,7 +88,10 @@ The `exposing` list in the header is the module's public interface:
 Everything else is private. `memberDiscount` above isn't exposed, so `Main` can't call it:
 
 ```text
-.../src/Main.elm:9:11: ELCI2104: Module Pricing is not imported or does not expose 'memberDiscount'
+.../src/Main.elm:9:11: ELCI2104: Module Pricing does not expose 'memberDiscount'
+
+9|         - Pricing.memberDiscount 500
+             ^^^^^^^^^^^^^^^^^^^^^^^
 ```
 
 Keeping helpers private lets you change them without breaking other modules. In a validator module, expose
@@ -104,8 +110,15 @@ A qualified name only works through an import in the current module. After
 `import Shop.Pricing exposing (Tier(..))` without `as Pricing`, the name `Pricing.priceOf` means nothing:
 
 ```text
-.../src/Main.elm:8:5: ELCI2104: Module Pricing is not imported or does not expose 'priceOf'
+.../src/Main.elm:8:5: ELCI2104: No module Pricing is imported, and none has that name
+
+8|     Pricing.priceOf Member { name = "hat", price = 500 }
+       ^^^^^^^^^^^^^^^
 ```
+
+Write `Shop.Pricing.priceOf`, or import the module `as Pricing`. Without any import of the module,
+`Shop.Pricing.priceOf` gives ``Module Shop.Pricing is not imported; add `import Shop.Pricing` ``. A
+misspelt qualified name gets a suggestion, such as ``did you mean `List.length`?`` for `Lsit.length`.
 
 Your own declarations take precedence over imported names. If two imports expose different things under
 one name, using that name is an error that lists the qualified alternatives; write the one you mean, such
@@ -116,6 +129,9 @@ stops with:
 
 ```text
 .../src/Shop/Pricing.elm:3:1: ELCI2104: Import cycle: Main -> Shop.Pricing -> Main
+
+3| import Main
+   ^^^^^^
 ```
 
 Move the shared code into a third module that both import.
@@ -197,6 +213,9 @@ rules differ from Elci modules:
 
   ```text
   .../src/Main.elm:3:1: ELCI2104: Java modules cannot be imported with exposing (..); list the exported names you use
+
+  3| import Julc.Math exposing (..)
+     ^^^^^^
   ```
 
 [Standard library](/advanced/standard-library/) lists what each library provides, and

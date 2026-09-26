@@ -1,14 +1,26 @@
 # Elci diagnostic catalogue
 
 Elci diagnostics have stable category codes and a source token location. The CLI
-renders them as `path:line:column: code: message`.
+renders the first line as `path:line:column: code: message`. A blank line follows,
+then the source line with a caret under the reported token, then zero or more
+`Hint:` lines with the likely fix ([ADR-011](../adr/011-elm-quality-diagnostics.md)):
+
+```text
+src/Main.elm:6:20: ELCI2002: The 1st argument to `String.fromInt` is `String`, but `String.fromInt` needs `Int`
+
+6|     String.fromInt "42"
+                      ^^^^
+```
+
+The first line's format is stable; tools parse it. The compiler stops at the first
+error.
 
 | Code | Meaning |
 | --- | --- |
 | `ELCI1001` | Invalid source character or literal |
 | `ELCI1002` | Malformed or unsupported syntax |
-| `ELCI2001` | Invalid pattern or expression form |
-| `ELCI2002` | Type mismatch or infinite type |
+| `ELCI2001` | Invalid pattern or expression form, including a constructor pattern with the wrong number of arguments and a record pattern on a library record |
+| `ELCI2002` | Type mismatch, or a type that would have to contain itself |
 | `ELCI2003` | Unsupported equality, ordering or append type; a constrained type variable (`comparable`, `appendable`) missing or misnamed, or `number`; a `Dict` decoded from Data whose keys are not comparable |
 | `ELCI2004` | Missing required top-level signature |
 | `ELCI2005` | Unknown value name |
@@ -29,7 +41,7 @@ renders them as `path:line:column: code: message`.
 | `ELCI3001` | PIR lowering cannot represent the inferred program, such as `Julc.Data.decode` or a generic Java export at a type nothing determines |
 | `ELCI3002` | Specialization or polymorphic-recursion limit |
 | `ELCI3003` | Generic library type argument violates the export's constraint (for example `DATA_ENCODABLE`), or contains a `Dict` or a `Value`, which a Java library could build without the key-order or canonical-form check |
-| `ELCI4001` | Invalid project configuration or CLI request, including a `[java-modules]` key that names a core module and an `elci apply` parameter that doesn't fit its type (such as a `Dict` whose keys are not strictly ascending) |
+| `ELCI4001` | Invalid project configuration or CLI request, including a `[java-modules]` key that names a core module, an `elci apply` parameter that doesn't fit its type (such as a `Dict` whose keys are not strictly ascending) and a source file that is not UTF-8 |
 | `ELCI4002` | Julc backend rejected generated PIR; reported at the Elci declaration it names, with the `JULC00xx` code |
 | `ELCI4003` | The Julc backend lacks a contract revision or capability the program needs |
 
@@ -50,6 +62,32 @@ Julc's catalogued `JULC00xx` backend codes are kept in the message.
   names an Elci definition (`$elci$<declaration>$<n>`) or a handler symbol. Elci
   maps it back to that declaration as `ELCI4002`.
 
-The code identifies the failure class; the message supplies the construct and
-type involved. Parser rejections share `ELCI1002` while their messages distinguish
-deferred features such as extensible records from malformed input.
+The code identifies the failure class; the message names the construct and types
+involved in the reader's terms. A type mismatch says which argument, `if` or `case`
+branch, list element, operator side, annotation or field differs, with types written
+as in source. A non-exhaustive `case` lists the patterns it misses, up to three and
+then how many more. Unknown names, types, constructors, fields, qualified names and
+imports get "did you mean" hints. Parser rejections share `ELCI1002` while their
+messages distinguish deferred features such as extensible records from malformed
+input.
+
+## JSON report
+
+`--report=json` on `check`, `build`, `eval` and `test` prints a failure on standard
+error as one JSON object on one line, with these fields:
+
+| Field | Contents |
+| --- | --- |
+| `code` | The `ELCI` code, or null |
+| `path`, `line`, `column` | The location, or null for a failure without one |
+| `message` | The message, without the path and code |
+| `hints` | An array of hint strings, possibly empty |
+| `excerpt` | The source and caret lines, or null |
+| `context` | The `elci.toml` line and `[validators.<name>]` table of a named validator, or null |
+
+```text
+{"code":"ELCI2005","path":"src/Main.elm","line":6,"column":5,"message":"Unknown name 'lenght'","hints":["did you mean `List.length`?"],"excerpt":"6|     lenght [ 1, 2 ]\n       ^^^^^^","context":null}
+```
+
+Results, test output and a failed `eval` run stay text on standard output. Other
+commands reject the option with `ELCI4001`.

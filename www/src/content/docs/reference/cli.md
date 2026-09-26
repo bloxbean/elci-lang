@@ -20,6 +20,7 @@ Usage: elci <check|build> [project-directory] [--validator <name>]...
        elci apply [project-directory] --validator <name> --param <name>=<plutus-data-json|@file> [--output <file>]
        elci init <project-directory> [--validator <name>] [--purpose spend|mint|withdraw|certify|vote|propose|function]
        elci --version
+check, build, eval and test take --report=json to print a compile failure as one JSON object
 A build writes build/validators/<name>/validator.flat, validator.plutus, validator.plutus.json (Julc format) and abi.json (Elci schema)
 for each [validators.<name>] group; an [entrypoint] function project writes build/validator.flat, validator.plutus and abi.json.
 ```
@@ -54,18 +55,28 @@ Compile, configuration and command-line errors go to standard error.
 | `0` | The command succeeded. |
 | `1` | Any error: invalid arguments or configuration, a compile error, an `eval` that failed at run time, a failing test, or no tests found. |
 
-**Error format.** A compile error names the source location:
+**Error format.** A compile error starts with a line that names the source location and the code. The
+source line follows, with a caret under the reported token, and then any hints:
 
 ```text
 my-project/src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
+
+6|     lenght [ 1, 2 ]
+       ^^^^^^
+Hint: did you mean `List.length`?
 ```
 
-A problem inside a bundled module such as `List` is reported where your code uses it, or otherwise as
-`<bundled>/List.elm`. For a validator, the `elci.toml` table comes first, on its own line:
+The first line always has the form `path:line:column: code: message`. A problem inside a bundled module
+such as `List` is reported where your code uses it, or otherwise as `<bundled>/List.elm`, without an
+excerpt. For a validator, the `elci.toml` table comes first, on its own line:
 
 ```text
-elci: my-project/elci.toml:6: [validators.main]
-my-project/src/Main.elm:6:1: ELCI2014: Handler Main.spend does not have the spend signature datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (0 parameters); its type is () -> ScriptContext -> Bool (Type mismatch: expected Bool, found ScriptContext -> Bool)
+my-project/src/Main.elm:6:1: ELCI2014: Handler Main.spend does not have the spend signature datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (0 parameters); its type is () -> ScriptContext -> Bool; it has `Bool` where the configuration needs `ScriptContext -> Bool`
+
+6| spend : () -> ScriptContext -> Bool
+   ^^^^^
+
+In my-project/elci.toml:6: [validators.main]
 ```
 
 Configuration and command-line errors start with `elci:`. Many carry the code `ELCI4001`:
@@ -74,7 +85,51 @@ Configuration and command-line errors start with `elci:`. Many carry the code `E
 elci: ELCI4001: unknown validator 'treasury'; configured: main
 ```
 
-The [diagnostics](/reference/diagnostics/) page lists every code.
+A command stops at the first error. The [diagnostics](/reference/diagnostics/) page explains how to read
+one and lists every code.
+
+**JSON reports.** `check`, `build`, `eval` and `test` take `--report=json`. With it, an error is printed on
+standard error as one JSON object on one line, instead of the text above. Here it is formatted with `jq`:
+
+```text
+$ elci check my-project --report=json 2>&1 | jq
+{
+  "code": "ELCI2005",
+  "path": "my-project/src/Main.elm",
+  "line": 6,
+  "column": 5,
+  "message": "Unknown name 'lenght'",
+  "hints": [
+    "did you mean `List.length`?"
+  ],
+  "excerpt": "6|     lenght [ 1, 2 ]\n       ^^^^^^",
+  "context": null
+}
+```
+
+| Field | Contents |
+| --- | --- |
+| `code` | The `ELCI` code, or null for an error without one |
+| `path`, `line`, `column` | The location, or null for an error without one |
+| `message` | The message, without the path and code |
+| `hints` | The hints, as an array of strings; empty when there are none |
+| `excerpt` | The source line and caret line, separated by a newline, or null |
+| `context` | The `elci.toml` line and table of a failing validator, such as `my-project/elci.toml:6: [validators.main]`, or null |
+
+A configuration or command-line error keeps the same fields, with null location fields:
+
+```text
+{"code":"ELCI4001","path":null,"line":null,"column":null,"message":"unknown validator 'treasury'; configured: main","hints":[],"excerpt":null,"context":null}
+```
+
+The exit status doesn't change. Results stay text on standard output: the `check` and `build` lines, the
+value, budget or `evaluation failed:` line of `eval`, and test results, including failing tests. `init` and
+`apply` reject the option:
+
+```text
+$ elci apply --report=json
+{"code":"ELCI4001","path":null,"line":null,"column":null,"message":"--report=json applies to check, build, eval and test","hints":[],"excerpt":null,"context":null}
+```
 
 ## `elci init`
 
@@ -108,12 +163,13 @@ Errors: `Project directory is not empty: ...`, `Unsupported purpose: ...` and `I
 Compiles the project and reports each result without writing files.
 
 ```text
-elci check [project-directory] [--validator <name>]...
+elci check [project-directory] [--validator <name>]... [--report=json]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--validator <name>` | Check only this validator. Repeat it to select several. Validator projects only. |
+| `--report=json` | Print an error as one JSON object on standard error (see [JSON reports](#common-behavior)). |
 
 For a validator project, it prints one line per validator, sorted by name, with the purposes it
 handles and its size in FLAT bytes:
@@ -139,8 +195,10 @@ Main.main: checked; 6 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 Compiles the project and writes its artifacts under `build/`. It prints the same lines as `check`.
 
 ```text
-elci build [project-directory] [--validator <name>]...
+elci build [project-directory] [--validator <name>]... [--report=json]
 ```
+
+It takes the same options as `check`.
 
 For each validator it writes `build/validators/<name>/`:
 
@@ -170,12 +228,13 @@ See [build and deploy](/contracts/build-and-deploy/) for using these files.
 Runs an `[entrypoint]` project's function on Julc's evaluator and prints the result.
 
 ```text
-elci eval [project-directory] [--builtins]
+elci eval [project-directory] [--builtins] [--report=json]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--builtins` | Also print the builtin calls of the run, one per line, with arguments and result. The log keeps the last 20 calls. |
+| `--report=json` | Print a compile or configuration error as one JSON object. A failed evaluation still prints `evaluation failed:` as text. |
 
 The first line is the value, written in Elci syntax. The second is the CPU and memory consumed. Each
 `Debug.trace` message follows on its own line:
@@ -229,7 +288,7 @@ cpu 276441, mem 1001
 Runs the tests in the project's test directories (`tests/` by default) and reports each with its budget.
 
 ```text
-elci test [project-directory] [--match <substring>] [--seed <n>] [--fuzz <runs>]
+elci test [project-directory] [--match <substring>] [--seed <n>] [--fuzz <runs>] [--report=json]
 ```
 
 | Option | Default | Meaning |
@@ -237,6 +296,7 @@ elci test [project-directory] [--match <substring>] [--seed <n>] [--fuzz <runs>]
 | `--match <substring>` | all tests | Run tests whose full name (`Module.test`) contains the substring, ignoring case. |
 | `--seed <n>` | random | Seed for property tests. The seed used is printed, so any run can be repeated. |
 | `--fuzz <runs>` | `100` | Number of runs for each property test. Must be positive. |
+| `--report=json` | text | Print a compile or configuration error, such as one in a test module, as one JSON object. Test results stay text. |
 
 ```text
 $ elci test --match deadline --seed 42
@@ -294,7 +354,7 @@ directory, while `--output` is relative to the current directory. JSON strings m
 
 ```text
 $ elci apply --validator main --param 'owner={"bytes": "a2c20c77887ace1cd986193e4e75babd8993cfd56995cd5cfce609c2"}'
-validator main: applied 1 parameter(s); hash f050dee3352fb4863e471b360e9d9a1121d81e6705580d1cbc3b831f; wrote /path/to/my-project/build/validators/main/applied.plutus.json
+validator main: applied 1 parameter; hash f050dee3352fb4863e471b360e9d9a1121d81e6705580d1cbc3b831f; wrote /path/to/my-project/build/validators/main/applied.plutus.json
 ```
 
 `apply` compiles the validator, checks its ABI when `expected-abi` is set, and checks every value

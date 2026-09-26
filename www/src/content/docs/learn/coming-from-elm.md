@@ -17,6 +17,8 @@ difference that matters, so you can skip the parts of the Learn section you don'
 - Hindley–Milner type inference, generic functions (`a -> a`), and generic type aliases and custom types.
 - Exhaustive `case` checking. Redundant patterns are errors.
 - Local type annotations in `let`.
+- Records: field access, updates, destructuring and accessor functions such as `.price`, as in
+  `List.map .price items`. A field of a value from another module reads as in Elm: `Config.settings.fee`.
 - The core library's default imports: `Basics` with `exposing (..)`, `List`, `Maybe` with `Maybe(..)`,
   `Result` with `Result(..)`, `String`, `Tuple` and `Debug`. Their functions have Elm's names, argument
   orders and edge cases: `max`, `compare`, `identity`, `Maybe.withDefault`, `List.head`, `List.range`,
@@ -65,7 +67,6 @@ Elm, `n // 0` evaluates to `0`. In Elci, it fails the script, as do `modBy 0` an
 | `2 ^ -1` | `0.5` | Fails the script |
 | `==` on functions | Runtime crash | Compile error, as for `Map`. `==` on `Data` compares structure |
 | Extensible records `{ r \| x : Int }` | Available | Not available. Records are closed |
-| Accessor functions (`.price`) | Available | Not available. Use `\item -> item.price` |
 | Let-polymorphism | Values and functions | Only for non-expansive bindings (functions, lambdas, plain values) |
 | Undetermined type variables | Allowed | Allowed, except where a value of the type is created: `Julc.Data.decode` and generic Java library functions need an annotation |
 
@@ -81,6 +82,9 @@ joinTwo left right =
 
 ```text
 .../src/Main.elm:6:10: ELCI2003: The operator ++ appends values of type `a`, but the annotation of `joinTwo` says `a` can be any type. Rename it `appendable` (as in Elm) to require String or List values
+
+6|     left ++ right
+            ^^
 ```
 
 With `joinTwo : appendable -> appendable -> appendable`, both `joinTwo "a" "b"` and `joinTwo [ 1 ] [ 2 ]`
@@ -229,6 +233,50 @@ Unlike `Json.Decode.decodeValue`, `Data.decode` doesn't return a `Result`. Malfo
 which rejects the transaction. Annotate the target type (`decoded : Payout`) when inference can't tell what to
 decode. [Datums and redeemers](/contracts/datums-and-redeemers/) covers the rules.
 
+## Error messages
+
+Elci's error messages follow Elm's: they quote the line of source, say what is wrong in terms of your
+program and suggest a fix.
+
+```elm
+label : Int -> String
+label count =
+    case count of
+        0 ->
+            "none"
+
+        1 ->
+            "one"
+
+        _ ->
+            count
+```
+
+```text
+.../src/Main.elm:14:13: ELCI2002: The 3rd branch of this case is `Int`, but the branches before it are `String`
+
+14|             count
+                ^^^^^
+Hint: `String.fromInt` turns an Int into a String
+```
+
+As in Elm:
+
+- A type mismatch names the argument, branch, list element, operator side, annotation or field whose
+  type differs, and writes types as in source.
+- A `case` that doesn't cover every value lists the missing patterns, such as `Nothing` and
+  `Just (Err _)`.
+- A misspelt name gets a suggestion, such as ``did you mean `List.length`?``.
+
+What differs:
+
+- The first line is `path:line:column: ELCIxxxx: message`, not a `-- TYPE MISMATCH --` banner. Editors and
+  scripts parse this line, and each code keeps its meaning between releases.
+- Elci reports one error per run. Fix it and run `elci check` again.
+- `--report=json` prints the error as one JSON object, but its fields are Elci's own: `code`, `path`,
+  `line`, `column`, `message`, `hints`, `excerpt` and `context`. See
+  [diagnostics](/reference/diagnostics/#json-reports-for-tools).
+
 ## An elm-format pitfall
 
 elm-format 0.8.8 is Elci's formatter, but it stores integer literals as 64-bit numbers. It silently changes
@@ -238,7 +286,8 @@ values instead, for example `1000000000 * 1000000000 * 1000000000`.
 ## Tooling
 
 - There is no Elci language server. The Elm language server doesn't know Elci's modules, so trust
-  `elci check` over its diagnostics.
+  `elci check` over its diagnostics. An editor integration can run `elci check --report=json` and read
+  the error's location, message and hints.
 - `elci eval` runs a function project and shows the result and its cost, which is the closest thing to
   `elm repl`. [Values, functions and types](/learn/basics/) shows how to set one up.
 - `elci test` replaces elm-test, and adds transaction scenarios and property tests. See

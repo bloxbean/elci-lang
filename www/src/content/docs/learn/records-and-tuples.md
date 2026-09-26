@@ -85,6 +85,77 @@ cpu 886960, mem 4025
 `Listing 2000 True` is the record `{ price = 2000, active = True }`. `elci eval` prints record fields in
 alphabetical order, which is a hint about how Elci stores them.
 
+## Accessor functions
+
+As in Elm, `.amount` is a function that reads the field `amount` of a record. It is short for
+`\payout -> payout.amount`, and it is handy with list functions:
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+
+type alias Payout =
+    { beneficiary : String
+    , amount : Int
+    }
+
+
+main : ( Int, List String )
+main =
+    let
+        payouts =
+            [ Payout "carol" 300, Payout "alice" 150, Payout "bob" 250 ]
+    in
+    ( List.sum (List.map .amount payouts)
+    , payouts
+        |> List.sortBy .amount
+        |> List.map .beneficiary
+    )
+```
+
+```text
+( 700, ["alice", "bob", "carol"] )
+cpu 31097157, mem 139215
+```
+
+A record that another module exposes is read the same way. `Config.settings.fee` reads the field `fee`
+of the value `settings` in module `Config`:
+
+```elm title="src/Config.elm"
+module Config exposing (Settings, settings)
+
+
+type alias Settings =
+    { fee : Int
+    , owner : String
+    }
+
+
+settings : Settings
+settings =
+    { fee = 200, owner = "alice" }
+```
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+import Config
+
+
+main : Int
+main =
+    Config.settings.fee * 2
+```
+
+```text
+400
+cpu 1310048, mem 4828
+```
+
+A qualified name is written without spaces and ends at its first lowercase part: `Config.settings` is the
+value, and `.fee` reads its field. In `List.map .amount payouts`, the space before `.amount` makes it an
+accessor passed to `List.map`.
+
 ## How records are stored on-chain
 
 Cardano stores datums and redeemers as **Plutus Data**: integers, byte strings, lists, maps and constructors
@@ -325,6 +396,9 @@ rejected:
 
 ```text
 .../src/Main.elm:7:24: ELCI1002: Tuple patterns have two or three elements
+
+7|         ( a, b, c, d ) =
+                          ^
 ```
 
 ## Equality
@@ -356,17 +430,21 @@ Records in Elci are **closed**: a record type lists all of its fields.
 
   ```text
   .../src/Main.elm:4:13: ELCI1002: Extensible records are unsupported; use a closed record
+
+  4| total : { r | price : Int } -> Int
+                 ^
   ```
 
-- A field access needs to know which record type it is reading. Use a named alias or a signature when
-  inference can't tell. Reading a field that doesn't exist is an error:
+- A field access, or an accessor function such as `.price`, needs to know which record type it is
+  reading. Use a named alias or a signature when inference can't tell. Reading a field that doesn't exist
+  is an error:
 
   ```text
   .../src/Main.elm:14:12: ELCI2010: Missing field 'cost'; available fields: [price]
-  ```
 
-- Field accessor functions such as `.price` are not supported. Write a lambda instead:
-  `List.map (\listing -> listing.price) listings`.
+  14|     listing.cost
+                 ^
+  ```
 
 ## Next
 

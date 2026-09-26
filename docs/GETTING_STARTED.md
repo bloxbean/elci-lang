@@ -331,10 +331,12 @@ npm exec --yes --package elm-format@0.8.8 -- \
 The [diagnostic catalogue](DIAGNOSTICS.md) lists the stable error categories. The
 stock Elm language server does not know Elci's Java exports or ledger profile;
 its type diagnostics are not authoritative for Elci. Elci errors include `ELCI`
-codes and the file and token location of the module they occur in. Named-validator
-errors also name the `elci.toml` table. Backend rejections are located at the
-generated declaration, which is precise to the declaration rather than the
-expression.
+codes and the file and token location of the module they occur in, followed by the
+source line with a caret and any `Hint:` lines. Named-validator errors also name
+the `elci.toml` table. Backend rejections are located at the generated declaration,
+which is precise to the declaration rather than the expression. For editors and
+agents, `--report=json` on `check`, `build`, `eval` and `test` prints the error as
+one JSON object.
 
 ## 6. Troubleshooting
 
