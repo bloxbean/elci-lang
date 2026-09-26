@@ -464,7 +464,7 @@ class StandardLibraryTest {
 
                         """, "List Int", "List.map classify [ \"_\", \"$record\", \"True\", \"Nothing\", \"[]\", \"::\", \"abc\" ]"));
         assertTrue(diagnostic("main : Int\nmain =\n    case \"x\" of\n        \"_\" ->\n            1\n")
-                .contains("ELCI2007: Non-exhaustive case"));
+                .contains("ELCI2007: This case does not cover every possibility; it is missing `_`"));
     }
 
     @Test

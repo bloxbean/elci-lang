@@ -82,7 +82,8 @@ public final class ElciCompiler {
         javaModules=org.elci.modules.Modules.withCoreLibraries(javaModules);
         var modules=new org.elci.modules.Modules(sources,javaModules);
         var java=javaProvider(modules,List.of(module),options,librarySources);
-        return compileModule(modules.resolve(module),function,purpose,javaModules,options,java);
+        try {return compileModule(modules.resolve(module),function,purpose,javaModules,options,java);}
+        catch(Diagnostic d){throw modules.withSuggestions(d);}
     }
     /**
      * The Java-source provider for the libraries reachable from {@code roots}. It is built before
@@ -152,7 +153,9 @@ public final class ElciCompiler {
         var java=javaProvider(modules,List.of(module),options,librarySources);
         var resolved=modules.resolve(module);
         var frontend=frontend(resolved,javaModules,options,java);
-        var inference=frontend.inference();inference.check(resolved.declarations(),frontend.importedTypes());
+        var inference=frontend.inference();
+        try {inference.check(resolved.declarations(),frontend.importedTypes());}
+        catch(Diagnostic d){throw modules.withSuggestions(d);}
         var results=new LinkedHashMap<Value,Result>();
         for(var declaration:resolved.declarations()) {
             // Only the root module's own declarations; imported ones are module-qualified.
@@ -221,7 +224,9 @@ public final class ElciCompiler {
         var java=javaProvider(modules,roots,options,librarySources);
         var module=modules.resolveAll(roots);
         var frontend=frontend(module,javaModules,options,java);
-        var inference=frontend.inference();inference.check(module.declarations(),frontend.importedTypes());
+        var inference=frontend.inference();
+        try {inference.check(module.declarations(),frontend.importedTypes());}
+        catch(Diagnostic d){throw modules.withSuggestions(d);}
         var declarations=new HashMap<String,Ast.Decl>();module.declarations().forEach(d->declarations.put(d.name(),d));
 
         var ordered=spec.handlers().stream().sorted(Comparator.comparingInt(h->BackendContract.ledgerTag(h.purpose()))).toList();

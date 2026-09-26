@@ -385,6 +385,34 @@ public final class Modules {
         return resolve(List.copyOf(new TreeSet<>(roots)), null);
     }
 
+    /** "Did you mean" hints for names left unresolved here, used if inference rejects them (ADR-011). */
+    private final Map<Token, java.util.function.Supplier<List<String>>> nameHints = new HashMap<>();
+
+    /** {@code d}, with a "did you mean" hint when it rejects a name this resolution left unresolved. */
+    public Diagnostic withSuggestions(Diagnostic d) {
+        var hint = Set.of("ELCI2005", "ELCI2001").contains(d.code()) ? nameHints.get(d.token()) : null;
+        return hint == null ? d : d.withHints(hint.get());
+    }
+
+    /**
+     * Names close to {@code name}: first those in scope as written (locals, and exposed or own
+     * names), then qualified ones.
+     */
+    private static List<String> suggest(String name, Map<String, String> names, Set<String> bound) {
+        var plain = new TreeSet<>(bound);
+        plain.addAll(List.of("True", "False", "Just", "Nothing"));
+        var qualified = new TreeSet<String>();
+        for (String key : names.keySet())
+            if (key.startsWith("$") || key.endsWith(".")) continue;
+            else if (key.contains(".")) qualified.add(key);
+            else plain.add(key);
+        if (!name.contains(".")) {
+            var hint = Suggestions.hint(name, plain);
+            if (!hint.isEmpty()) return hint;
+        }
+        return Suggestions.hint(name, qualified);
+    }
+
     /** Whether {@code module} exposes the top-level declaration {@code name}. */
     public boolean exposes(String module, String name) {
         var m = available.get(module);
@@ -457,7 +485,7 @@ public final class Modules {
                             scope.name(exposed, intrinsicPrefix + exposed, named, imp.alias() + "." + exposed);
                         else
                             throw new Diagnostic("ELCI2104", imp.token(), imp.module() + " does not expose '" + exposed
-                                    + "'; it provides " + String.join(", ", functions));
+                                    + "'; it provides " + String.join(", ", functions), Suggestions.hint(exposed, functions));
                     }
                     continue;
                 }
@@ -554,7 +582,9 @@ public final class Modules {
                                                         new Diagnostic(
                                                                 "ELCI2104",
                                                                 imp.token(),
-                                                                "Unknown exposed type " + n));
+                                                                "Unknown exposed type " + n,
+                                                                Suggestions.hint(typeName, dependency.unions().stream()
+                                                                        .map(u -> u.name()).toList())));
                         if (!dependency.exposing().contains(n)
                                 && !dependency.exposing().contains(".."))
                             throw new Diagnostic(
@@ -570,7 +600,8 @@ public final class Modules {
                         throw new Diagnostic(
                                 "ELCI2104",
                                 imp.token(),
-                                "Module does not expose '" + n + "': " + dependency.name());
+                                "Module does not expose '" + n + "': " + dependency.name(),
+                                Suggestions.hint(n, exposedNames(dependency)));
                 }
                 if (BUILTIN_TYPES.containsKey(dependency.name()))
                     scope.type(imp.alias() + "." + BUILTIN_TYPES.get(dependency.name()),
@@ -635,6 +666,15 @@ public final class Modules {
         return new Ast.Module(root, original.exposing(), imports, definitions, aliases, unions);
     }
 
+    /** The names a module exposes: values, type aliases and custom types. */
+    private static List<String> exposedNames(Ast.Module m) {
+        var result = new ArrayList<String>();
+        m.declarations().forEach(d -> { if (exposes(m, d.name())) result.add(d.name()); });
+        m.aliases().keySet().forEach(a -> { if (exposes(m, a)) result.add(a); });
+        m.unions().forEach(u -> { if (exposes(m, u.name()) || m.exposing().contains(u.name() + "(..)")) result.add(u.name()); });
+        return result;
+    }
+
     private static boolean exposes(Ast.Module m, String n) {
         return m.exposing().contains(n) || m.exposing().contains("..");
     }
@@ -675,9 +715,32 @@ public final class Modules {
         } catch (IllegalArgumentException e) {
             String message = e.getMessage();
             if (message != null && message.matches("ELCI\\d{4}: .*"))
-                throw new Diagnostic(message.substring(0, 8), at, message.substring(10));
+                throw new Diagnostic(message.substring(0, 8), at, message.substring(10),
+                        e instanceof UnknownType unknown ? unknown.hints : List.of());
             throw e;
         }
+    }
+
+    /** A type name no scope declares, with "did you mean" hints. */
+    private static final class UnknownType extends IllegalArgumentException {
+        final List<String> hints;
+
+        UnknownType(String message, List<String> hints) {
+            super(message);
+            this.hints = hints;
+        }
+    }
+
+    /** The type names a module can write: its scope's and the built-in ones. */
+    private static List<String> typeHint(String name, Map<String, String> names) {
+        var plain = new TreeSet<>(List.of("Int", "Bool", "String", "Bytes", "Data", "List", "Maybe", "Map", "Dict", "Array"));
+        var qualified = new TreeSet<String>();
+        for (String key : names.keySet())
+            if (key.startsWith("$") || key.endsWith(".")) continue;
+            else if (key.contains(".")) qualified.add(key);
+            else plain.add(key);
+        var hint = name.contains(".") ? List.<String>of() : Suggestions.hint(name, plain);
+        return hint.isEmpty() ? Suggestions.hint(name, qualified) : hint;
     }
 
     private static Type type(Type t, Map<String, String> names) {
@@ -700,8 +763,9 @@ public final class Modules {
                 // A core module's type: say which import brings it in.
                 String module = BUILTIN_TYPES.entrySet().stream().filter(e -> e.getValue().equals(t.name())
                         && !builtinTarget(t.name()).equals(t.name())).map(Map.Entry::getKey).findFirst().orElse(null);
-                throw new IllegalArgumentException("ELCI2012: Type is not declared or imported in this module: " + t.name()
-                        + (module == null ? "" : "; add `import " + module + " exposing (" + t.name() + ")`"));
+                throw new UnknownType("ELCI2012: Type is not declared or imported in this module: " + t.name()
+                        + (module == null ? "" : "; add `import " + module + " exposing (" + t.name() + ")`"),
+                        module != null ? List.of() : typeHint(t.name(), names));
             }
         }
         if (name.equals("org.julclang.ledger.ScriptContext")) name = "ScriptContext";
@@ -759,15 +823,13 @@ public final class Modules {
         }
         if (!exports.isEmpty())
             throw new Diagnostic("ELCI2104", token, "Elci's " + module + " module has no " + name + ". It has "
-                    + String.join(", ", exports));
+                    + String.join(", ", exports), Suggestions.hint(n, exports.stream().map(e -> module + "." + e).toList()));
         throw new Diagnostic(
                 "ELCI2104",
                 token,
-                "Module "
-                        + module
-                        + " is not imported or does not expose '"
-                        + name
-                        + "'");
+                imported ? "Module " + module + " does not expose '" + name + "'"
+                        : "Module " + module + " is not imported; add `import " + module + "`",
+                suggest(n, names, Set.of()));
     }
 
     /** @param hidden the root module's names, invisible to the other modules */
@@ -780,7 +842,9 @@ public final class Modules {
                 if (!bound.contains(n.name()) && !resolves(n.name(), names)) {
                     qualified(n.name(), names, n.token());
                     if (hidden.contains(n.name()))
-                        throw new Diagnostic("ELCI2005", n.token(), "Unknown name '" + n.name() + "'");
+                        throw new Diagnostic("ELCI2005", n.token(), "Unknown name '" + n.name() + "'", suggest(n.name(), names, bound));
+                    var visible = Set.copyOf(bound);
+                    nameHints.put(n.token(), () -> suggest(n.name(), names, visible));
                 }
                 yield new Name(unambiguous(resolve(n.name(), names, bound), n.token()), n.token());
             }
@@ -862,7 +926,9 @@ public final class Modules {
         if (!variable && p.token().kind() == Token.Kind.NAME && !names.containsKey(p.name())) {
             qualified(p.name(), names, p.token());
             if (hidden.contains(p.name()))
-                throw new Diagnostic("ELCI2001", p.token(), "Unsupported constructor pattern " + p.name());
+                throw new Diagnostic("ELCI2001", p.token(), "Unknown constructor " + p.name() + " in this pattern",
+                        suggest(p.name(), names, Set.of()));
+            nameHints.put(p.token(), () -> suggest(p.name(), names, Set.of()));
         }
         name = unambiguous(name, p.token());
         return new Pattern(

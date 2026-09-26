@@ -14,6 +14,9 @@ public final class Main {
     public static void main(String[] args) { System.exit(run(args)); }
     public static int run(String...args) {
         String source="<project>";java.util.function.Function<String,String> files=module->null;
+        // `--report=json` prints a failure as one JSON object on stderr, for editors and agents (ADR-011).
+        boolean json=Arrays.asList(args).contains("--report=json");
+        if(json)args=Arrays.stream(args).filter(a->!a.equals("--report=json")).toArray(String[]::new);
         try {
             // `elci --help`, `elci help` and `elci <command> --help` all print the usage.
             if(args.length==0||args[0].equals("help")||Arrays.asList(args).contains("--help")) {
@@ -24,12 +27,14 @@ public final class Main {
                         +"       elci apply [project-directory] --validator <name> --param <name>=<plutus-data-json|@file> [--output <file>]\n"
                         +"       elci init <project-directory> [--validator <name>] [--purpose spend|mint|withdraw|certify|vote|propose|function]\n"
                         +"       elci --version\n"
+                        +"check, build, eval and test take --report=json to print a compile failure as one JSON object\n"
                         +"A build writes build/validators/<name>/validator.flat, validator.plutus, validator.plutus.json (Julc format) and abi.json (Elci schema)\n"
                         +"for each [validators.<name>] group; an [entrypoint] function project writes build/validator.flat, validator.plutus and abi.json.");return 0;
             }
             if(args[0].equals("--version")){System.out.println("elci "+org.elci.driver.BuildInfo.VERSION+" / julc "+ElciCompiler.JULC_VERSION);return 0;}
+            if(json&&!Set.of("check","build","eval","test").contains(args[0]))throw new IllegalArgumentException("ELCI4001: --report=json applies to check, build, eval and test");
             if(args[0].equals("init"))return ProjectInitializer.run(Arrays.copyOfRange(args,1,args.length));
-            if(args[0].equals("test"))return test(Arrays.copyOfRange(args,1,args.length));
+            if(args[0].equals("test"))return test(json,Arrays.copyOfRange(args,1,args.length));
             if(!Set.of("check","build","eval","apply").contains(args[0]))throw new IllegalArgumentException("Expected init, check, build, eval, test or apply; see --help");
             String directory=null;var selected=new LinkedHashSet<String>();var parameters=new LinkedHashMap<String,String>();Path appliedOutput=null;boolean builtins=false;
             for(int i=1;i<args.length;i++) {
@@ -75,8 +80,27 @@ public final class Main {
                 Files.writeString(output.resolve("abi.json"),manifest);
             }
             System.out.println(result.module()+"."+result.function()+": checked; "+flat.length+" FLAT bytes; "+result.target().profileId());return 0;
-        } catch(Diagnostic e) {System.err.println(e.render(files,source));return 1;}
-        catch(Exception e){System.err.println("elci: "+e.getMessage());return 1;}
+        } catch(Diagnostic e) {System.err.println(json?e.json(files,source):e.explain(files,source));return 1;}
+        catch(ValidatorDiagnostic e) {System.err.println(json?e.diagnostic.json(e.files,e.fallback):e.where+"\n"+e.diagnostic.explain(e.files,e.fallback));return 1;}
+        catch(Exception e){System.err.println(json?failure(e.getMessage()):"elci: "+e.getMessage());return 1;}
+    }
+
+    /** A diagnostic in one named validator group, with where to render it. */
+    private static final class ValidatorDiagnostic extends RuntimeException {
+        final String where;final Diagnostic diagnostic;final java.util.function.Function<String,String> files;final String fallback;
+        ValidatorDiagnostic(String where,Diagnostic diagnostic,java.util.function.Function<String,String> files,String fallback) {
+            super(where+"\n"+diagnostic.render(files,fallback),diagnostic);
+            this.where=where;this.diagnostic=diagnostic;this.files=files;this.fallback=fallback;
+        }
+    }
+
+    /** A failure without a source location, in the JSON report's shape. */
+    private static String failure(String message) {
+        String text=message==null?"":message;
+        var coded=java.util.regex.Pattern.compile("^(ELCI\\d{4}): ").matcher(text);
+        String code=coded.find()?Diagnostic.quote(coded.group(1)):"null";
+        if(!code.equals("null"))text=text.substring(coded.end());
+        return "{\"code\":"+code+",\"path\":null,\"line\":null,\"column\":null,\"message\":"+Diagnostic.quote(text)+",\"hints\":[],\"excerpt\":null}";
     }
 
     /**
@@ -96,7 +120,7 @@ public final class Main {
                 build=new ElciCompiler().compileValidator(sources,group.spec(),project.javaModules(),new CompilerOptions(),librarySources);
             } catch(Diagnostic e) {
                 java.util.function.Function<String,String> files=module->{try{return project.source(module).toString();}catch(RuntimeException x){return null;}};
-                throw new IllegalArgumentException(where(project,group)+"\n"+e.render(files,sourceFor(project,group,e)),e);
+                throw new ValidatorDiagnostic(where(project,group),e,files,sourceFor(project,group,e));
             } catch(BackendException e) {
                 throw new IllegalArgumentException(where(project,group)+": backend rejected the validator: "+e.getMessage(),e);
             } catch(IllegalArgumentException e) {
@@ -119,7 +143,7 @@ public final class Main {
      * {@code elci test}: run source-level tests (ADR-006) and report each with its budget.
      * Properties run {@code --fuzz} times (100) from {@code --seed} (random, and printed).
      */
-    private static int test(String... args) throws Exception {
+    private static int test(boolean json,String... args) throws Exception {
         String directory=null,match=null;
         Long seed=null;Integer runs=null;
         for(int i=0;i<args.length;i++) {
@@ -137,7 +161,7 @@ public final class Main {
         var runner=new org.elci.test.TestRunner(project,settings);
         java.util.List<org.elci.test.TestRunner.Outcome> outcomes;
         try {outcomes=runner.run(match);}
-        catch(Diagnostic e){System.err.println(e.render(files,"<tests>"));return 1;}
+        catch(Diagnostic e){System.err.println(json?e.json(files,"<tests>"):e.explain(files,"<tests>"));return 1;}
         int failed=0;
         boolean properties=false;
         for(var outcome:outcomes) {

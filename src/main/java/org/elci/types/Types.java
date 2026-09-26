@@ -81,6 +81,31 @@ public final class Types {
         return show(type, false, new IdentityHashMap<>(), taken);
     }
 
+    /** Several types shown with one naming, so a variable shared between them keeps its name. */
+    public static List<String> showAll(List<Ty> types) {
+        var taken = new HashSet<String>();
+        types.forEach(t -> rigidNames(t, taken));
+        var names = new IdentityHashMap<Object, String>();
+        return types.stream().map(t -> show(t, false, names, taken)).toList();
+    }
+
+    /**
+     * The first pair of type constructors that differ inside two types that failed to unify, like
+     * {@code String} and {@code Int} inside {@code List String} and {@code List Int}; null when
+     * they no longer differ.
+     */
+    public static List<Ty> conflict(Ty a, Ty b) {
+        a = prune(a);
+        b = prune(b);
+        if (!(a instanceof Con x) || !(b instanceof Con y)) return null;
+        if (!x.name.equals(y.name) || x.args.size() != y.args.size()) return List.of(a, b);
+        for (int i = 0; i < x.args.size(); i++) {
+            var inner = conflict(x.args.get(i), y.args.get(i));
+            if (inner != null) return inner;
+        }
+        return null;
+    }
+
     private static void rigidNames(Ty type, Set<String> into) {
         type = prune(type);
         if (!(type instanceof Con c)) return;
