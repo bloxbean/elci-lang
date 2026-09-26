@@ -171,8 +171,9 @@ Julc's backend, which produces the script:
 - **Julc libraries and Java interop.** Map a Julc on-chain Java library (math, intervals, values, byte strings
   and more) in `elci.toml` and import it like an Elm module. Elci compiles the library's Java source to
   on-chain code. It doesn't run that Java on your machine.
-- **Typed collections and bytes.** `Map k v` works like Elm's `Dict`, `Array a` gives constant-time indexed
-  reads, and `Bytes` exposes the Plutus byte-string builtins, including hashes and bitwise operations.
+- **Typed collections and bytes.** `Dict k v` is Elm's `Dict`, stored as a sorted Plutus map, `Map k v`
+  holds the ledger's own maps, `Array a` gives constant-time indexed reads, and `Bytes` exposes the Plutus
+  byte-string builtins, including hashes and bitwise operations.
 - **A native CLI.** Build `elci` as a GraalVM native executable that starts fast and needs no Java at
   runtime, or run the JVM version.
 

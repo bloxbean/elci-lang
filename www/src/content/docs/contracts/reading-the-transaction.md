@@ -58,7 +58,8 @@ donation ctx =
     Data.fromOptional ctx.txInfo.treasuryDonation
 ```
 
-`Map` fields work with the bundled `Map` module (`import Map`), in the style of Elm's `Dict`.
+`Map` fields work with the bundled `Map` module (`import Map`). They are the ledger's own maps: their keys,
+such as `Credential` and `ScriptPurpose`, are not comparable, so they are not `Dict`s.
 
 ## Ledger types
 

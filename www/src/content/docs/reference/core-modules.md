@@ -1,13 +1,13 @@
 ---
 title: Core modules
-description: Exact signatures and semantics of Elci's core library, imported by default as in Elm, and of the Map, Array, Bytes, Julc.Data and Debug modules.
+description: Exact signatures and semantics of Elci's core library, imported by default as in Elm, and of the Dict, Map, Array, Bytes, Julc.Data and Debug modules.
 sidebar:
   order: 3
 ---
 
 This page lists every function the compiler provides without configuration: the `Basics` prelude, the
-`List`, `Maybe`, `Result`, `Tuple` and `String` modules that every module imports, and the `Map`, `Array`,
-`Bytes`, `Julc.Data` and `Debug` modules. Signatures are exact; the notes describe behavior, failure
+`List`, `Maybe`, `Result`, `Tuple` and `String` modules that every module imports, and the `Dict`, `Map`,
+`Array`, `Bytes`, `Julc.Data` and `Debug` modules. Signatures are exact; the notes describe behavior, failure
 cases and cost. Names, argument orders and edge cases follow Elm 0.19's core library; the few differences
 are listed [at the end](#differences-from-elm).
 
@@ -29,8 +29,8 @@ So `max`, `compare`, `Just` and `Ok` work unqualified, and `List.map`, `String.f
 work qualified. Writing one of these imports yourself is allowed; an `exposing` list then adds names, as
 in `import List exposing (head)`.
 
-`Bytes`, `Map`, `Array` and `Julc.Data` need an explicit import, as Elm's `Dict` and `Array` do. Using
-one without it names the import to add:
+`Bytes`, `Dict`, `Map`, `Array` and `Julc.Data` need an explicit import, as `Dict` and `Array` do in Elm.
+Using one without it names the import to add:
 
 ```text
 src/Main.elm:6:5: ELCI2104: Bytes.fromString needs the Bytes module; add `import Bytes`
@@ -71,19 +71,21 @@ script, so the default imports cost nothing.
 | `Maybe a` | `Nothing`, `Just a`; functions in [`Maybe`](#maybe) |
 | `Result error value` | `Ok value`, `Err error`; functions in [`Result`](#result) |
 | `Order` | `LT`, `EQ`, `GT`, the result of `compare` |
-| `Map k v` | association maps; functions in [`Map`](#map) |
+| `Dict k v` | dictionaries with comparable keys, kept sorted; functions in [`Dict`](#dict) |
+| `Map k v` | the ledger's association maps; functions in [`Map`](#map) |
 | `Array a` | constant-time indexed arrays; functions in [`Array`](#array) |
 | `JulcOptional a` | Julc's optional, returned by some Java library functions |
 
 Tuples of two or three elements, closed records and your own custom types complete the picture; see the
-[language reference](/reference/language/). `Map` and `Array` are type names you can use without
-importing their modules. As with Elm's `Dict`, you may also write `import Map exposing (Map)`,
-`import Array exposing (Array)` or `Map.Map`.
+[language reference](/reference/language/). `Dict`, `Map` and `Array` are type names you can use without
+importing their modules. You may also write them as in Elm, with `import Dict exposing (Dict)` or
+qualified as `Dict.Dict`, and likewise for `Map` and `Array`. The compiler's own modules qualify their types
+the same way: `Bytes.Bytes` after `import Bytes`, and `Data.Data` after `import Julc.Data as Data`.
 
 `Maybe`, `Just` and `Nothing` are built into the compiler. A module can't declare constructors named
 `Just`, `Nothing`, `True` or `False` (`ELCI2011: Nothing is a constructor of the built-in Maybe type;
-choose another name`), or types named `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Map`,
-`Array` or `Float` (`ELCI2011: Bytes is a built-in type; choose another name`).
+choose another name`), or types named `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Dict`,
+`Map`, `Array` or `Float` (`ELCI2011: Bytes is a built-in type; choose another name`).
 
 ## Comparable types
 
@@ -99,8 +101,8 @@ choose another name`), or types named `Int`, `Bool`, `String`, `Bytes`, `Data`, 
 | lists of a comparable type | lexicographic; a proper prefix comes first |
 | tuples of comparable types | component by component |
 
-`Bool`, `()`, records, custom types, `Maybe`, `Result`, `Map`, `Array`, `Data`, functions and ledger
-records such as `TxOutRef` are not comparable. Sort them by a comparable key with `List.sortBy`, or with
+`Bool`, `()`, records, custom types, `Maybe`, `Result`, `Dict`, `Map`, `Array`, `Data`, functions and
+ledger records such as `TxOutRef` are not comparable. Sort them by a comparable key with `List.sortBy`, or with
 your own order and `List.sortWith`. Every order is total and agrees with `==`: `compare x y == EQ` exactly
 when `x == y`. The arithmetic operators remain `Int`-only.
 
@@ -111,7 +113,8 @@ src/Main.elm:6:17: ELCI2003: The operator < needs comparable values, but Bool, i
 ```
 
 A generic function that compares its arguments names its type variable `comparable`, as in Elm; see
-[constrained type variables](/reference/language/#constrained-type-variables).
+[constrained type variables](/reference/language/#constrained-type-variables). The keys of a
+[`Dict`](#dict) are comparable too.
 
 ## `Basics`
 
@@ -384,11 +387,160 @@ for a missing function lists what the module has:
 src/Main.elm:6:5: ELCI2104: Elci's String module has no toInt. It has append, concat, fromInt, isEmpty, join
 ```
 
+## `Dict`
+
+`import Dict exposing (Dict)`. A `Dict k v` is Elm's dictionary, with Elm's functions, argument orders and
+results. It is stored as a Plutus map whose keys are strictly ascending in the
+[comparable order](#comparable-types), so every dictionary has exactly one representation. Keys are
+comparable types: `Int`, `String`, `Bytes`, ledger hashes such as `PubKeyHash`, and lists and tuples of
+these. Values may be any type with a Data encoding.
+
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `empty` | `Dict k v` | |
+| `singleton` | `comparable -> v -> Dict comparable v` | |
+| `insert` | `comparable -> v -> Dict comparable v -> Dict comparable v` | replaces an existing binding |
+| `update` | `comparable -> (Maybe v -> Maybe v) -> Dict comparable v -> Dict comparable v` | `Nothing` removes the key, `Just v` sets it |
+| `remove` | `comparable -> Dict comparable v -> Dict comparable v` | |
+| `isEmpty` | `Dict k v -> Bool` | |
+| `member` | `comparable -> Dict comparable v -> Bool` | |
+| `get` | `comparable -> Dict comparable v -> Maybe v` | `Nothing` when the key is absent |
+| `size` | `Dict k v -> Int` | |
+| `keys` | `Dict k v -> List k` | in ascending order |
+| `values` | `Dict k v -> List v` | in ascending key order |
+| `toList` | `Dict k v -> List ( k, v )` | in ascending key order |
+| `fromList` | `List ( comparable, v ) -> Dict comparable v` | for a repeated key, the last pair wins |
+| `map` | `(k -> a -> b) -> Dict k a -> Dict k b` | |
+| `foldl` | `(k -> v -> b -> b) -> b -> Dict k v -> b` | from the smallest key |
+| `foldr` | `(k -> v -> b -> b) -> b -> Dict k v -> b` | from the largest key |
+| `filter` | `(comparable -> v -> Bool) -> Dict comparable v -> Dict comparable v` | |
+| `partition` | `(comparable -> v -> Bool) -> Dict comparable v -> ( Dict comparable v, Dict comparable v )` | `( passing, failing )` |
+| `union` | `Dict comparable v -> Dict comparable v -> Dict comparable v` | for a key in both, the left value wins |
+| `intersect` | `Dict comparable v -> Dict comparable v -> Dict comparable v` | the left bindings whose keys the right has |
+| `diff` | `Dict comparable a -> Dict comparable b -> Dict comparable a` | the left bindings whose keys the right lacks |
+| `merge` | `(comparable -> a -> result -> result) -> (comparable -> a -> b -> result -> result) -> (comparable -> b -> result -> result) -> Dict comparable a -> Dict comparable b -> result -> result` | see below |
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+import Dict exposing (Dict)
+
+
+stock : Dict String Int
+stock =
+    Dict.fromList [ ( "pear", 5 ), ( "apple", 3 ), ( "fig", 0 ), ( "apple", 4 ) ]
+
+
+main : ( List ( String, Int ), ( Maybe Int, Bool ), List String )
+main =
+    ( Dict.toList (Dict.insert "kiwi" 2 stock)
+    , ( Dict.get "apple" stock, Dict.member "plum" stock )
+    , Dict.keys (Dict.filter (\_ count -> count > 0) stock)
+    )
+```
+
+```text
+$ elci eval
+( [( "apple", 4 ), ( "fig", 0 ), ( "kiwi", 2 ), ( "pear", 5 )], ( Just 4, False ), ["apple", "pear"] )
+cpu 77921806, mem 309819
+```
+
+The bindings come out in key order, whatever order they went in, and the second `"apple"` replaced the
+first. Combining two dictionaries follows Elm too. `merge` folds over both in ascending key order, with one
+step for keys only in the left dictionary, one for keys in both and one for keys only in the right:
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+import Dict exposing (Dict)
+
+
+left : Dict Int String
+left =
+    Dict.fromList [ ( 1, "a" ), ( 2, "b" ) ]
+
+
+right : Dict Int String
+right =
+    Dict.fromList [ ( 2, "x" ), ( 3, "y" ) ]
+
+
+main : ( ( List ( Int, String ), List Int, List Int ), ( List String, Bool ) )
+main =
+    ( ( Dict.toList (Dict.union left right)
+      , Dict.keys (Dict.intersect left right)
+      , Dict.keys (Dict.diff left right)
+      )
+    , ( Dict.merge
+            (\key _ result -> result ++ [ "only left " ++ String.fromInt key ])
+            (\key _ _ result -> result ++ [ "both " ++ String.fromInt key ])
+            (\key _ result -> result ++ [ "only right " ++ String.fromInt key ])
+            left
+            right
+            []
+      , Dict.insert 2 "b" (Dict.singleton 1 "a") == left
+      )
+    )
+```
+
+```text
+$ elci eval
+( ( [( 1, "a" ), ( 2, "b" ), ( 3, "y" )], [2], [1] ), ( ["only left 1", "both 2", "only right 3"], True ) )
+cpu 116952501, mem 457650
+```
+
+**Equality.** `==` compares bindings: two dictionaries are equal when they have the same keys with equal
+values, however they were built. The values need equality themselves, so a `Dict Int (Map Int Int)` can't
+be compared (`ELCI2003`). Dictionaries are not comparable.
+
+**Cost.** A `Dict` is a list of pairs, not a tree as in Elm:
+
+- `get`, `member`, `insert`, `remove` and `update` walk from the smallest key and stop at the first key
+  that isn't smaller than the one they look for. They are O(n), at about 1.1 million CPU units per key
+  passed. Small keys are found fastest, and a missing key costs half a scan on average.
+- `fromList` is a stable merge sort: O(n log n), and O(n) when the pairs are already in key order. For 50
+  entries it cost about 0.28 billion CPU units with sorted input and 0.66 billion with shuffled input,
+  against 1.5 billion for `Map.fromList`.
+- `size`, `keys`, `values`, `toList`, the folds, `map`, `filter` and `partition` are single passes.
+  `union`, `intersect`, `diff` and `merge` walk both dictionaries once: O(n + m).
+
+**In Data.** A `Dict` encodes as a Plutus map with its keys in ascending order. Decoding checks the order:
+a map whose keys are not strictly ascending, because they are out of order or repeated, fails to decode.
+The check applies to datums, redeemers, parameters, `Julc.Data.decode` and property-test arguments, and to
+every `Dict` inside them: in records, tuples, custom types, `Maybe`, `Result`, Julc optionals, lists and
+map values. It costs about 1.1 million CPU units per entry. Without it, a datum could place a key after a
+larger one, where `member` and `get` stop before reaching it;
+[datums and redeemers](/contracts/datums-and-redeemers/#dictionaries-in-data) shows the attack.
+`elci apply` rejects such a parameter:
+
+```text
+elci: ELCI4001: parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats
+```
+
+Two rules keep every decoded `Dict` checked. Checking the order needs comparable keys, so a `Dict` with
+other keys can't be decoded from Data:
+
+```text
+src/Main.elm:9:5: ELCI2003: A Dict decoded from Data needs comparable keys, to check that they are in order; Bool is not comparable. Use a Map instead
+```
+
+And a Java library's generic function can't be used at a type that contains a `Dict`, because the library
+could build one without the check:
+
+```text
+src/Main.elm:14:18: ELCI3003: Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; pass a Map or a List and build the Dict with Dict.fromList
+```
+
+**`Dict` or `Map`?** Use a `Dict` for data you build or look up by a comparable key, including datums. Use a
+[`Map`](#map) for the ledger's own maps, such as `txInfo.withdrawals` and `txInfo.redeemers`, and for keys
+that are not comparable.
+
 ## `Map`
 
-`import Map`. A `Map k v` works like Elm's `Dict`, but it is the ledger's representation: a list of
-key/value pairs, compared by the keys' Data encoding. Keys and values may be any type with a Data
-encoding, including records and ledger types; keys need not be comparable.
+`import Map`. A `Map k v` is the ledger's map representation: a list of key/value pairs, compared by the
+keys' Data encoding. The transaction's maps, such as `txInfo.withdrawals`, `txInfo.redeemers` and
+`txInfo.datums`, are `Map`s. Keys and values may be any type with a Data encoding, including records,
+custom types and ledger types; keys need not be comparable.
 
 | Function | Type | Behavior |
 | --- | --- | --- |
@@ -406,6 +558,7 @@ encoding, including records and ledger types; keys need not be comparable.
 | `toList` | `Map k v -> List ( k, v )` | in map order |
 | `fromList` | `List ( k, v ) -> Map k v` | inserts the pairs in list order |
 | `foldl` | `(k -> v -> b -> b) -> b -> Map k v -> b` | in map order |
+| `foldr` | `(k -> v -> b -> b) -> b -> Map k v -> b` | in reverse map order |
 | `filter` | `(k -> v -> Bool) -> Map k v -> Map k v` | keeps map order |
 | `map` | `(k -> a -> b) -> Map k a -> Map k b` | keeps map order |
 
@@ -435,20 +588,26 @@ main =
 ```text
 $ elci eval
 ( Map.fromList [( "fig", 7 ), ( "pear", 5 ), ( "apple", 3 )], Map.fromList [( "fig", 7 ), ( "pear", 5 )], Just 5 )
-cpu 58597935, mem 218057
+cpu 36520840, mem 151709
 ```
 
-Avoid making results depend on map order. To process the bindings in key order, sort them:
-`List.sortBy Tuple.first (Map.toList prices)`.
+Avoid making results depend on map order. To process the bindings in key order, sort them,
+`List.sortBy Tuple.first (Map.toList prices)`, or keep them in a [`Dict`](#dict).
 
 **No equality.** `==` on maps is rejected (`ELCI2003`). Compare the lookups you care about.
 
-**Cost.** `get`, `member`, `insert`, `remove`, `update` and `size` scan the pairs: O(n). `fromList`,
-`filter` and `map` insert every pair, so they are O(n²). Building a 50-entry map with `fromList` cost
-about 2.76 billion CPU units. See [costs and performance](/advanced/costs/).
+**Repeated keys.** A map built in Elci never repeats a key, but a map decoded from Data can, because
+decoding doesn't check a `Map`'s keys. In such a map, `get` returns the first binding of the key, `remove`
+and `insert` remove every binding of it, and `map` and `filter` keep every binding.
 
-A map whose key and value types nothing determines can't be compiled, because the map operations
-are specialized for them. `Map.size Map.empty` on its own fails at the call:
+**Cost.** `get`, `member`, `insert`, `remove` and `update` scan the pairs from the front: O(n), at about 1.1
+million CPU units per key passed. `size`, `keys`, `values`, `toList`, the folds, `filter` and `map` are
+single passes. `fromList` checks each key against the pairs before it, so it is O(n²): building a 50-entry
+map cost about 1.5 billion CPU units. With comparable keys, `Dict.fromList` is much cheaper. See
+[costs and performance](/advanced/costs/#maps-and-dictionaries).
+
+A map or dictionary whose key and value types nothing determines can't be compiled, because the
+operations are specialized for them. `Map.size Map.empty` on its own fails at the call:
 
 ```text
 src/Main.elm:8:5: ELCI3001: `Map.size` is used here at a type that is not known (Map a b -> Int); add a type annotation, for example to a let binding
@@ -562,8 +721,8 @@ inlineAmount datum =
 ```
 
 - **Supported types.** `Int`, `Bool`, `String`, `Bytes`, `Data`, your records and custom types, tuples,
-  `Maybe`, `Result`, `Order`, lists, maps and optionals of these, and imported types whose provider
-  approves decoding or encoding (for example `PubKeyHash` or `TxOutRef`). The rest are rejected with
+  `Maybe`, `Result`, `Order`, lists, dictionaries, maps and optionals of these, and imported types whose
+  provider approves decoding or encoding (for example `PubKeyHash` or `TxOutRef`). The rest are rejected with
   `ELCI3003`: `()`, functions, `Array`, and ledger types without a checkable layout such as `Value` or
   `TxOut`.
 - **Known types for decoding.** `decode` must know the type it creates where it is used. If inference
@@ -572,6 +731,7 @@ inlineAmount datum =
   and the optional adapters don't need to know it: `Data.encode Nothing` is `Constr 0`.
 - **Strict decoding.** `decode` never returns a `Maybe` for malformed input. A value of the wrong shape,
   such as an integer where a record is expected, fails with an error like `UnConstrData: not ConstrData`.
+  A `Dict` whose keys are not strictly ascending fails too.
 - **Optionals.** Julc's optional tags `Some` as 0 and `None` as 1, the reverse of `Maybe`. The adapters
   swap the tags without decoding the payload.
 - **Opaque.** `Data` has no `==` and no order; decode it first.
@@ -629,8 +789,9 @@ tests. See [debugging and budgets](/testing/debugging/).
 | `number`, `Float` | `Int` only | no floating point on-chain |
 | Bytes are not comparable | `Bytes` and ledger hashes are comparable | they are the natural keys on Cardano |
 | two imports exposing one name are ambiguous | a name listed in `exposing (...)` takes precedence over a default import | the intent is explicit |
+| `Dict` is a balanced tree: `get` and `insert` are O(log n) | `Dict` is a Plutus map with sorted keys: `get` and `insert` are O(n), `fromList` O(n log n) | a tree would not encode as a Plutus map, and rebalancing it on-chain costs more than scanning the small maps contracts use |
 | `Debug.log`, `Debug.todo`, `Debug.toString` | `Debug.trace message value` | traces are the on-chain log |
 | `Result` has no fixed encoding | `Ok` is constructor 0, `Err` constructor 1 | values cross the script boundary as Data |
 
-Elm's `Dict`, `Set` and `Char` modules and most of `String` are not available; `Map` covers keyed data
-today. [Coming from Elm](/learn/coming-from-elm/) lists every other difference.
+Elm's `Set` and `Char` modules and most of `String` are not available. [Coming from
+Elm](/learn/coming-from-elm/) lists every other difference.

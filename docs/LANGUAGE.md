@@ -22,10 +22,11 @@ separate milestones.
 | Custom types | Generic and regular recursive unions; declaration-order tags |
 | Patterns | Nested constructors/lists/tuples/records, aliases, unit and Bool/Int/String literals |
 | Pattern coverage | Nested exhaustiveness and usefulness analysis; duplicate/unreachable branches rejected |
-| Equality and ordering | Structural equality for eligible primitives, lists, tuples, records and unions; `comparable` ordering for `Int`, `String`, bytes, ledger hashes, lists and tuples |
+| Equality and ordering | Structural equality for eligible primitives, lists, tuples, records, unions and `Dict`; `comparable` ordering for `Int`, `String`, bytes, ledger hashes, lists and tuples |
 | Ledger access | Typed record views, transaction fields, nominal hash types, approved constructors/patterns/equality of ledger sums and records |
 | Data conversions | `Julc.Data.decode`/`encode` strict codecs and Julc optional ↔ `Maybe` adapters |
-| Maps and bytes | Typed `Map k v` (Elm `Dict`-style) and complete byte-string builtins in `Bytes` |
+| Dictionaries and maps | Elm's `Dict k v`, stored as a Plutus map with ascending keys ([ADR-009](../adr/009-dict-native-value-and-map.md)), and the ledger's `Map k v` |
+| Bytes | Complete byte-string builtins in `Bytes` |
 | Arrays | `Array a` with O(1) `get` and `length` (PV11 arrays, Elm `Array`-style) |
 | Java libraries | Concrete exports, generic Java templates specialized per use, and Julc's programmatic list exports |
 | Validators | Named `[validators.<name>]` groups with spend, mint, withdraw, certify, vote and propose handlers, deployment parameters and required/optional/absent spending datums; `[entrypoint]` functions for `eval` |
@@ -93,7 +94,8 @@ independent ties.
 `==` and `/=` support Int, Bool, String, unit, raw bytes, matching nominal
 byte-backed ledger hashes, lists, tuples, closed records and regular recursive
 unions whose reachable fields are themselves equality-capable. Both operands are
-evaluated once from left to right. Functions, opaque Data and imported values
+evaluated once from left to right. Two `Dict` values are equal when they have
+the same bindings. Functions, opaque Data, `Map` and imported values
 without verified equality are rejected at compile time. `<`, `<=`, `>`, `>=` and
 `compare` order comparable values: `Int` numerically, `String` by UTF-8 bytes,
 `Bytes` and byte-string ledger hashes lexicographically (`lessThanByteString`),
@@ -188,8 +190,8 @@ stable nominal identity. `Maybe a`, `Nothing`, and `Just` are built in, with
 they are not silently interchangeable. The core `Result` type has `Ok` tag zero and
 `Err` tag one, the reverse of PlutusTx's `Either`. Modules cannot declare the
 constructors `Just`, `Nothing`, `True` or `False`, or types named after the
-built-in types (`Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Map`,
-`Array`, `Float`).
+built-in types (`Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Dict`,
+`Map`, `Array`, `Float`).
 
 Cases must be exhaustive. Patterns can nest constructors, exact-length lists,
 cons, tuples, closed-record field selections, aliases, unit, and Bool, Int or
@@ -212,9 +214,10 @@ and `Debug`. A module's own declarations shadow imports. Two imports that expose
 things under one name make it ambiguous where it is used (`ELCI2102`), except that
 a name listed explicitly in `exposing` takes precedence over a default import. An
 import cannot be aliased to a default module's name. The core module names
-(`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Array`) and the
-reserved names `Dict`, `Set`, `Value` and `Elci` cannot name a project module or a
-`[java-modules]` key.
+(`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`) and
+the reserved names `Set`, `Value` and `Elci` cannot name a project module or a
+`[java-modules]` key, and neither can a name that starts with `Elci.`. The core
+library's internal `Elci.Assoc` module cannot be imported by project modules.
 
 Configure a Java library mapping in `elci.toml`, then write normal Elm imports:
 
@@ -298,21 +301,55 @@ These modules are imported explicitly:
 
 | Module | Functions |
 | --- | --- |
-| `Map` | `empty`, `singleton`, `get`, `member`, `insert`, `remove`, `update`, `size`, `isEmpty`, `keys`, `values`, `toList`, `fromList`, `foldl`, `filter`, `map` |
+| `Dict` | `empty`, `singleton`, `insert`, `update`, `remove`, `isEmpty`, `member`, `get`, `size`, `keys`, `values`, `toList`, `fromList`, `map`, `foldl`, `foldr`, `filter`, `partition`, `union`, `intersect`, `diff`, `merge` |
+| `Map` | `empty`, `singleton`, `get`, `member`, `insert`, `remove`, `update`, `size`, `isEmpty`, `keys`, `values`, `toList`, `fromList`, `foldl`, `foldr`, `filter`, `map` |
 | `Array` | `empty`, `fromList`, `toList`, `toIndexedList`, `length`, `isEmpty`, `get`, `initialize`, `repeat`, `map`, `indexedMap`, `foldl`, `foldr`, `filter`, `slice` |
 | `Julc.Data` | `decode`, `encode`, `fromOptional`, `toOptional` (below) |
 | `Bytes` | see the table below |
 
-The types `Map` and `Array` are always in scope. As with Elm's `Dict`, you may still
-write `import Map exposing (Map)` or `Map.Map`.
+The types `Dict`, `Map` and `Array` are always in scope. As in Elm, you may still
+write `import Dict exposing (Dict)` or `Dict.Dict`, and likewise for `Map` and
+`Array`. `Bytes.Bytes` and `Data.Data` (after `import Julc.Data as Data`) name the
+compiler's own types the same way.
 
-**`Map k v`** works like Elm's `Dict`: `Map.get key map : Maybe v`, and
-`Map.insert key value map` replaces an existing binding. A map is the ledger's
-representation: an association list compared by the keys' Data encoding, so
-lookups are O(n). Keys and values can be any Data-encodable type, including Elci
-records and ledger types, and `keys`, `values` and `toList` follow map order. The
-module is Elci source over Julc's `TypedMapLib` templates, so it shares the
-`JulcMap` lowering that Java validators use.
+**`Dict k v`** is Elm's dictionary, with Elm's names, argument orders and
+results. It is a Plutus map whose keys are strictly ascending in the `comparable`
+order, so each dictionary has one representation and `==` compares bindings.
+`keys`, `values`, `toList` and the folds follow ascending key order; `fromList`
+keeps the last binding of a repeated key; `union` prefers the left dictionary.
+
+- **Costs:** `get`, `member`, `insert`, `remove` and `update` stop at the first
+  key that is not smaller, at about 1.1M CPU per key passed. `fromList` is a
+  stable merge sort of the input's ascending runs: O(n log n), and O(n) for sorted
+  input. The other operations are single passes or merges.
+- **Data:** a `Dict` encodes as a Plutus map with ascending keys. Decoding one,
+  at any depth, requires strictly ascending keys and fails otherwise: in
+  `Julc.Data.decode`, in validator datums, redeemers and parameters (checked
+  around the handler on every run), and in property-test arguments, which are
+  generated sorted. `elci apply` rejects a parameter whose `Dict` keys are
+  unsorted or repeated. Without the check, a datum with an out-of-order key could
+  make `member` answer wrongly. The check reaches a `Dict` inside records,
+  tuples, unions, `Maybe`, `Result`, Julc optionals, lists and map values. It
+  needs comparable keys, so a decoded `Dict` with other keys is `ELCI2003`, and a
+  Java library generic instantiated at a type containing a `Dict` is `ELCI3003`,
+  since the library could build one without the check.
+- **Implementation:** the module is Elci source over `Elci.Assoc`, compiler
+  intrinsics that walk the pair list and compare keys at their type.
+
+**`Map k v`** is the ledger's association list: `Map.get key map : Maybe v`, and
+`Map.insert key value map` replaces an existing binding and puts it first. Keys
+are compared by their Data encoding, so they may be any Data-encodable type,
+including Elci records and unions and ledger types such as `Credential`; `keys`,
+`values` and `toList` follow map order. The ledger's own maps
+(`txInfo.withdrawals`, `txInfo.redeemers`) are `Map`s. Lookups, `insert` and
+`remove` are O(n), at about 1.1M CPU per key passed; `map`, `filter`, `toList`
+and the folds are single passes; `fromList` is O(n²). Maps built in Elci never
+repeat a key; a map decoded from Data may, and then `get` returns the first
+binding, `remove` and `insert` remove every binding of the key, and `map` and
+`filter` keep every binding. The module uses Julc's
+`TypedMapLib` templates for `empty`, `size`, `isEmpty`, `keys` and `values`, and
+`Elci.Assoc` for the rest, where `Int`, byte-string and `String` keys compare
+with their own builtins instead of `EqualsData`.
 
 **`Array a`** works like Elm's `Array`: `Array.get index array : Maybe a` is
 `Nothing` outside the array, and `slice` counts negative indexes from the end. An
@@ -376,7 +413,7 @@ inlineAmount datum =
 
 The converted type must be concrete where the conversion is used: annotate it
 when inference cannot tell. `decode` and `encode` work for primitives, Elci
-records and unions, lists, maps and optionals of these, and imported types
+records and unions, lists, dictionaries, maps and optionals of these, and imported types
 approving DECODE_STRICT or ENCODE. Types without a checkable layout, such as
 `Value` or `TxOut`, are rejected with `ELCI3003`. Decoding never becomes a
 `Maybe` on malformed input; a failed decode fails the transaction.
@@ -405,7 +442,8 @@ order. Every handler of the group receives all of them as leading arguments, and
 their types must agree across handlers. Parameter, datum and redeemer types must
 have a strict Data boundary: the same rules as datums and redeemers below. Each
 parameter is decoded once when the script is applied. As with Julc Java `@Param`
-fields, parameters are decoded but not validated on-chain.
+fields, parameters are decoded but not validated on-chain, except that the key
+order of a `Dict` inside them is checked on every run.
 
 A spending datum is `required` by default: a missing datum fails. With `optional`,
 the handler receives `Just datum` or `Nothing`. The present datum is still strictly

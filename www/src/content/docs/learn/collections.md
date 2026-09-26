@@ -1,12 +1,13 @@
 ---
-title: Lists, maps and arrays
-description: Work with Elci's three collections, List, Map and Array, write your own list functions with recursion, and choose the right one for on-chain cost.
+title: Lists, dictionaries, maps and arrays
+description: Work with Elci's collections, List, Dict, Map and Array, write your own list functions with recursion, and choose the right one for on-chain cost.
 sidebar:
   order: 5
 ---
 
-Elci has three collection types. `List` is the everyday sequence, `Map` stores key/value pairs like Elm's
-`Dict`, and `Array` gives constant-time indexed reads. This page covers all three, and what they cost on-chain.
+Elci has four collection types. `List` is the everyday sequence, `Dict` stores values under comparable keys
+as Elm's `Dict` does, `Map` is the ledger's own key/value map, and `Array` gives constant-time indexed reads.
+This page covers all four, and what they cost on-chain.
 
 ## Lists
 
@@ -175,25 +176,25 @@ cpu 67631155, mem 300118
 The sorts are stable: `carol` and `bob` bid the same amount and keep their order. Sorting costs budget, so
 sort on-chain only when the result depends on the order.
 
-## Maps
+## Dictionaries
 
-`Map k v` stores values of type `v` under keys of type `k`, like Elm's `Dict`. Write `import Map` to use its
-functions. The type name `Map` is always in scope, and `import Map exposing (Map)` works too, as it would
-with Elm's `Dict`.
+`Dict k v` stores values of type `v` under keys of type `k`, with Elm's `Dict` API. Import it as in Elm,
+with `import Dict exposing (Dict)`. Keys must be comparable: `Int`, `String`, `Bytes`, ledger hashes such as
+`PubKeyHash`, and lists and tuples of these.
 
 ```elm title="src/Main.elm"
 module Main exposing (main)
 
-import Map
+import Dict exposing (Dict)
 
 
 type alias Balances =
-    Map String Int
+    Dict String Int
 
 
 deposit : String -> Int -> Balances -> Balances
 deposit owner amount balances =
-    Map.update owner
+    Dict.update owner
         (\current ->
             case current of
                 Just balance ->
@@ -207,32 +208,115 @@ deposit owner amount balances =
 
 balanceOf : String -> Balances -> Int
 balanceOf owner balances =
-    case Map.get owner balances of
-        Just balance ->
-            balance
-
-        Nothing ->
-            0
+    Maybe.withDefault 0 (Dict.get owner balances)
 
 
-main : Int
+main : ( List ( String, Int ), Int )
 main =
     let
         balances =
-            Map.empty
+            Dict.empty
+                |> deposit "carol" 70
                 |> deposit "alice" 100
                 |> deposit "bob" 40
                 |> deposit "alice" 25
     in
-    balanceOf "alice" balances * 1000 + balanceOf "carol" balances + Map.size balances
+    ( Dict.toList balances, balanceOf "dave" balances )
 ```
 
 ```text
-125002
-cpu 43209649, mem 141913
+( [( "alice", 125 ), ( "bob", 40 ), ( "carol", 70 )], 0 )
+cpu 37768518, mem 158024
 ```
 
-Alice has 125, Carol has nothing (0), and the map has 2 keys.
+Alice has 125, and Dave has no balance, so `balanceOf` gives 0. The bindings come out in key order, not in
+the order they went in.
+
+The module has all of Elm's `Dict` functions, with the same names, argument orders and results:
+
+| Group | Functions |
+| --- | --- |
+| Build | `empty`, `singleton`, `insert`, `update`, `remove` |
+| Query | `isEmpty`, `member`, `get`, `size` |
+| Lists | `keys`, `values`, `toList`, `fromList` |
+| Transform | `map`, `foldl`, `foldr`, `filter`, `partition` |
+| Combine | `union`, `intersect`, `diff`, `merge` |
+
+[Core modules](/reference/core-modules/#dict) has every signature. A `Dict` is stored as a Plutus map
+whose keys are kept in ascending order. What that means for you:
+
+- **Key order, always.** `keys`, `values`, `toList` and the folds follow ascending key order, as in Elm.
+  `fromList` keeps the last value of a repeated key, and `union` prefers the left dictionary's value.
+- **`==` works.** Two dictionaries with the same bindings are equal, however they were built:
+
+  ```elm title="src/Main.elm"
+  module Main exposing (main)
+
+  import Dict
+
+
+  main : ( List String, Bool )
+  main =
+      let
+          scores =
+              Dict.fromList [ ( "carol", 7 ), ( "alice", 9 ), ( "bob", 4 ), ( "alice", 5 ) ]
+      in
+      ( Dict.keys scores
+      , scores == Dict.fromList [ ( "bob", 4 ), ( "alice", 5 ), ( "carol", 7 ) ]
+      )
+  ```
+
+  ```text
+  ( ["alice", "bob", "carol"], True )
+  cpu 73414533, mem 282640
+  ```
+
+- **Lookups are O(n).** A `Dict` is a list of pairs, not a tree. `get`, `member`, `insert` and `remove`
+  walk from the smallest key and stop at the first key that isn't smaller, at about 1.1 million CPU units
+  per key passed. `fromList` sorts, in O(n log n).
+- **Datums can hold dictionaries.** A `Dict` encodes as a Plutus map with sorted keys. A datum, redeemer or
+  parameter whose keys are out of order or repeated fails to decode, so an attacker can't hide a key where
+  lookups stop early. See [datums and redeemers](/contracts/datums-and-redeemers/#dictionaries-in-data).
+
+## Maps
+
+`Map k v` is the ledger's own key/value map: an unsorted list of pairs, with keys compared by their Data
+encoding. The transaction's maps are `Map`s, such as `txInfo.withdrawals` (`Map Credential Int`) and
+`txInfo.redeemers` (`Map ScriptPurpose Data`). Their keys are not comparable, so they can't be `Dict`s.
+Use a `Map` for those, and for keys of your own that are not comparable, such as a custom type. Write
+`import Map` to use its functions; the type name `Map` is always in scope.
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+import Map exposing (Map)
+
+
+type Asset
+    = Ada
+    | Token String
+
+
+holdings : Map Asset Int
+holdings =
+    Map.fromList [ ( Ada, 2000000 ), ( Token "GOLD", 5 ) ]
+
+
+main : ( Maybe Int, Maybe Int, List Asset )
+main =
+    ( Map.get (Token "GOLD") holdings
+    , Map.get (Token "SILVER") holdings
+    , Map.keys (Map.insert (Token "SILVER") 1 holdings)
+    )
+```
+
+```text
+( Just 5, Nothing, [Token "SILVER", Token "GOLD", Ada] )
+cpu 30055770, mem 101862
+```
+
+`Asset` is a custom type, so it can't be a `Dict` key, but it can be a `Map` key. The new key
+`Token "SILVER"` comes first.
 
 | Function | Type |
 | --- | --- |
@@ -247,18 +331,18 @@ Alice has 125, Carol has nothing (0), and the map has 2 keys.
 | `size`, `isEmpty` | `Map k v -> Int`, `Map k v -> Bool` |
 | `keys`, `values` | `Map k v -> List k`, `Map k v -> List v` |
 | `toList` | `Map k v -> List ( k, v )` |
-| `foldl` | `(k -> v -> b -> b) -> b -> Map k v -> b` |
+| `foldl`, `foldr` | `(k -> v -> b -> b) -> b -> Map k v -> b` |
 | `filter` | `(k -> v -> Bool) -> Map k v -> Map k v` |
 | `map` | `(k -> a -> b) -> Map k a -> Map k b` |
 
-A `Map` uses the ledger's own map representation: a list of key/value pairs, with keys compared by their
-Data encoding. That has consequences:
+Because a `Map` is the ledger's representation:
 
-- **Lookups are O(n).** `get`, `member`, `insert` and `remove` scan the pairs. That's fine for small maps;
-  keep large ones off-chain.
-- **Maps are not sorted.** `keys`, `values` and `toList` follow the map's own order. Currently `insert` and
-  `fromList` put a new key at the front, and `map` and `filter` keep the existing order. Sort the bindings
-  when you need key order: `List.sortBy Tuple.first (Map.toList balances)`.
+- **Lookups are O(n).** `get`, `member`, `insert` and `remove` scan the pairs from the front, at about 1.1
+  million CPU units per key passed. Building a map with `fromList` is O(n²). That's fine for small maps;
+  for your own data with comparable keys, a `Dict` builds faster.
+- **Maps are not sorted.** `keys`, `values` and `toList` follow the map's own order. `insert` and
+  `fromList` put a new key at the front, and `map` and `filter` keep the existing order. When you need key
+  order, sort the bindings with `List.sortBy Tuple.first`, or use a `Dict`.
 
   ```elm title="src/Main.elm"
   module Main exposing (main)
@@ -275,7 +359,7 @@ Data encoding. That has consequences:
 
   ```text
   [0, 2, 1, 3]
-  cpu 30194529, mem 102748
+  cpu 26382535, mem 110836
   ```
 
 - **Maps can't be compared with `==`:**
@@ -290,7 +374,7 @@ ledger types such as `PubKeyHash`.
 ## Arrays
 
 `Array a` is an immutable sequence with **constant-time** `get` and `length`, like Elm's `Array`. It is a
-Plutus V3 array (CIP-138). As with `Map`, import the module for its functions:
+Plutus V3 array (CIP-138). As with `Dict` and `Map`, import the module for its functions:
 
 ```elm title="src/Main.elm"
 module Main exposing (main)
@@ -381,7 +465,8 @@ Both results are 459, and both build the same list. The array version also conve
 on the lookups: each `nth` walks up to 90 elements, while each `Array.get` takes a constant number of steps.
 
 - Use a **List** for data, and when you process every element once (`map`, `filter`, `foldl`, `any`).
-- Use a **Map** for small keyed collections, especially ones that come from ledger data.
+- Use a **Dict** for data you build or look up by a comparable key, including datums.
+- Use a **Map** for the ledger's maps, such as `txInfo.withdrawals`, and for keys that are not comparable.
 - Use an **Array** when you read many elements by index. Convert once, then read many times.
 
 [Costs and performance](/advanced/costs/) goes deeper into budgets.

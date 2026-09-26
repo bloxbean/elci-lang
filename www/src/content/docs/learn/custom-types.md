@@ -371,4 +371,5 @@ you walk any recursive structure, including lists. Every step costs budget, so k
 
 ## Next
 
-[Lists, maps and arrays](/learn/collections/) covers Elci's collection types and what they cost.
+[Lists, dictionaries, maps and arrays](/learn/collections/) covers Elci's collection types and what they
+cost.

@@ -93,8 +93,7 @@ public final class Lowering {
         for (var parameter : parameters) {
             String name = fresh("argument");
             names.add(name);
-            var decode = codec(parameter, LibraryRequest.Codec.Direction.DECODE_STRICT, token);
-            body = new PirTerm.App(body, new PirTerm.App(decode, new PirTerm.Var(name, new PirType.DataType())));
+            body = new PirTerm.App(body, new PirTerm.App(strictDecoder(parameter, token), new PirTerm.Var(name, new PirType.DataType())));
         }
         for (int i = names.size() - 1; i >= 0; i--) body = new PirTerm.Lam(names.get(i), new PirType.DataType(), body);
         return PirLinker.link(specialized, body);
@@ -395,6 +394,8 @@ public final class Lowering {
                             new PirTerm.Trace(new PirTerm.Var(message, new PirType.StringType()),
                                     new PirTerm.Var(value, valueType))));
                 }
+                if (n.name().startsWith(org.elci.modules.Modules.ASSOC_PREFIX))
+                    yield assocIntrinsic(n.name().substring(org.elci.modules.Modules.ASSOC_PREFIX.length()), type(n, map));
                 if (n.name().startsWith(org.elci.modules.Modules.BYTES_PREFIX))
                     yield bytesIntrinsic(n.name().substring(org.elci.modules.Modules.BYTES_PREFIX.length()));
                 if (n.name().startsWith(org.elci.modules.Modules.DATA_PREFIX))
@@ -983,6 +984,643 @@ public final class Lowering {
         return new PirTerm.Var(symbol, fnType);
     }
 
+    // ----- Elci.Assoc (ADR-009): association lists as Plutus maps, walked pair by pair. -----
+
+    /**
+     * An {@code Elci.Assoc} function at its concrete use type.
+     * <ul>
+     *   <li>{@code find}, {@code has}, {@code delete} compare keys by their Data encoding, as
+     *       {@code Map} does;</li>
+     *   <li>{@code get}, {@code member}, {@code insert}, {@code remove} assume ascending keys and
+     *       stop at the first key that is not smaller, comparing with the {@code comparable}
+     *       ordering;</li>
+     *   <li>{@code runs}, {@code merge} and {@code dedupe} sort: ascending runs, a stable merge,
+     *       and the last of equal adjacent keys.</li>
+     * </ul>
+     */
+    private PirTerm assocIntrinsic(String function, Ty use) {
+        var parts = new ArrayList<Ty>();
+        Ty rest = prune(use);
+        while (rest instanceof Con c && c.name().equals("->")) {
+            parts.add(c.args().get(0));
+            rest = prune(c.args().get(1));
+        }
+        parts.add(rest);
+        // The key and value types come from the map at the function's map position: keys and
+        // values may themselves be maps. `fromDistinct` has its map as its result.
+        int position = switch (function) {
+            case "find", "has", "delete", "get", "member", "remove" -> 1;
+            case "cons", "insert" -> 2;
+            case "fromDistinct" -> parts.size() - 1;
+            default -> 0;
+        };
+        var map = (Con) prune(parts.get(position));
+        Ty k = map.args().get(0), v = map.args().get(1);
+        var pairs = pir(con("Map", k, v));
+        return switch (function) {
+            case "toMap", "fromMap" -> {
+                String x = fresh("map");
+                yield new PirTerm.Lam(x, pairs, new PirTerm.Var(x, pairs));
+            }
+            case "cons" -> {
+                String key = fresh("key"), value = fresh("value"), tail = fresh("pairs");
+                yield new PirTerm.Lam(key, pir(k), new PirTerm.Lam(value, pir(v), new PirTerm.Lam(tail, pairs,
+                        call(DefaultFun.MkCons, pair(new PirTerm.Var(key, pir(k)), k, new PirTerm.Var(value, pir(v)), v),
+                                new PirTerm.Var(tail, pairs)))));
+            }
+            case "toList" -> assocToList(k, v);
+            case "fromDistinct" -> assocFromDistinct(k, v);
+            case "find", "has" -> assocFind(k, v, function.equals("find"));
+            case "delete" -> assocDelete(k, v);
+            case "get", "member" -> assocLookup(k, v, function.equals("get"));
+            case "insert" -> assocInsert(k, v);
+            case "remove" -> assocRemove(k, v);
+            case "ascending" -> assocAscending(k, v);
+            case "runs" -> assocRuns(k, v);
+            case "reverse" -> assocReverse(k, v);
+            case "merge" -> assocMerge(k, v);
+            case "dedupe" -> assocDedupe(k, v);
+            default -> throw new IllegalArgumentException("Unknown Elci.Assoc function " + function);
+        };
+    }
+
+    /** {@code (key, value)} as a Plutus map entry. */
+    private PirTerm pair(PirTerm key, Ty keyType, PirTerm value, Ty valueType) {
+        return call(DefaultFun.MkPairData, PirHelpers.wrapEncode(key, pir(keyType)), PirHelpers.wrapEncode(value, pir(valueType)));
+    }
+
+    /**
+     * A shared definition, generated once per key: {@code build} receives the definition's own
+     * variable, for recursion, and returns its body.
+     */
+    private PirTerm shared(String key, String hint, PirType type, java.util.function.Function<PirTerm.Var, PirTerm> build) {
+        if (instances.containsKey(key)) return new PirTerm.Var(instances.get(key), type);
+        String symbol = fresh(hint);
+        instances.put(key, symbol);
+        specialized.put(symbol, null);
+        specializedTypes.put(symbol, type);
+        specialized.put(symbol, build.apply(new PirTerm.Var(symbol, type)));
+        return new PirTerm.Var(symbol, type);
+    }
+
+    /**
+     * {@code letrec go = \\p1 .. pn -> body in go a1 .. an}: a local loop, so arguments that stay
+     * the same, such as the key searched for, are captured instead of passed at every step.
+     */
+    private PirTerm loop(String hint, List<String> parameters, List<PirType> types, PirType result,
+                         java.util.function.Function<PirTerm.Var, PirTerm> body, List<PirTerm> arguments) {
+        String go = fresh(hint);
+        var goType = arrow(java.util.stream.Stream.concat(types.stream(), java.util.stream.Stream.of(result))
+                .toArray(PirType[]::new));
+        var self = new PirTerm.Var(go, goType);
+        PirTerm lambda = body.apply(self);
+        for (int i = parameters.size() - 1; i >= 0; i--) lambda = new PirTerm.Lam(parameters.get(i), types.get(i), lambda);
+        PirTerm call = self;
+        for (var argument : arguments) call = new PirTerm.App(call, argument);
+        return new PirTerm.LetRec(List.of(new PirTerm.Binding(go, lambda)), call);
+    }
+
+    private static PirType arrow(PirType... types) {
+        PirType result = types[types.length - 1];
+        for (int i = types.length - 2; i >= 0; i--) result = new PirType.FunType(types[i], result);
+        return result;
+    }
+
+    private static final PirType ENTRY = new PirType.PairType(new PirType.DataType(), new PirType.DataType());
+
+    // Keys compare at their cheapest faithful form. EqualsData has a large fixed cost, so Int and
+    // byte-string keys compare with their own builtins, and String keys by their UTF-8 bytes,
+    // which is both their order and their encoding: a key is never decoded to text.
+
+    /** The type keys are ordered at: a String key orders as its UTF-8 bytes. */
+    private Ty orderType(Ty k) {
+        return ((Con) prune(k)).name().equals("String") ? con("Bytes") : k;
+    }
+
+    /** A map entry's Data key, ready to order. */
+    private PirTerm orderKey(Ty k, PirTerm data) {
+        return ((Con) prune(k)).name().equals("String") ? call(DefaultFun.UnBData, data) : PirHelpers.wrapDecode(data, pir(k));
+    }
+
+    /** A searched key, ready to order. */
+    private PirTerm orderSearch(Ty k, PirTerm search) {
+        return ((Con) prune(k)).name().equals("String") ? call(DefaultFun.EncodeUtf8, search) : search;
+    }
+
+    private enum KeyForm { INTEGER, BYTES, UTF8, DATA }
+
+    private KeyForm keyForm(Ty k) {
+        String name = ((Con) prune(k)).name();
+        if (name.equals("Int")) return KeyForm.INTEGER;
+        if (name.equals("String")) return KeyForm.UTF8;
+        if (inference.byteEquality(name)) return KeyForm.BYTES;
+        return KeyForm.DATA;
+    }
+
+    /** A searched key in the form {@link #keyMatches} compares against. */
+    private PirTerm matchTarget(Ty k, PirTerm search) {
+        return switch (keyForm(k)) {
+            case INTEGER, BYTES -> search;
+            case UTF8 -> call(DefaultFun.EncodeUtf8, search);
+            case DATA -> PirHelpers.wrapEncode(search, pir(k));
+        };
+    }
+
+    private PirType matchTargetType(Ty k) {
+        return switch (keyForm(k)) {
+            case INTEGER -> new PirType.IntegerType();
+            case BYTES, UTF8 -> new PirType.ByteStringType();
+            case DATA -> new PirType.DataType();
+        };
+    }
+
+    /** Whether a map entry's Data key equals a target from {@link #matchTarget}. */
+    private PirTerm keyMatches(Ty k, PirTerm data, PirTerm target) {
+        return switch (keyForm(k)) {
+            case INTEGER -> call(DefaultFun.EqualsInteger, call(DefaultFun.UnIData, data), target);
+            case BYTES, UTF8 -> call(DefaultFun.EqualsByteString, call(DefaultFun.UnBData, data), target);
+            case DATA -> call(DefaultFun.EqualsData, data, target);
+        };
+    }
+
+    /** Whether two entries' Data keys are equal. */
+    private PirTerm keysEqual(Ty k, PirTerm left, PirTerm right) {
+        return switch (keyForm(k)) {
+            case INTEGER -> call(DefaultFun.EqualsInteger, call(DefaultFun.UnIData, left), call(DefaultFun.UnIData, right));
+            case BYTES, UTF8 -> call(DefaultFun.EqualsByteString, call(DefaultFun.UnBData, left), call(DefaultFun.UnBData, right));
+            case DATA -> call(DefaultFun.EqualsData, left, right);
+        };
+    }
+
+    private static PirTerm unit() {
+        return new PirTerm.Const(Constant.unit());
+    }
+
+    /** The pairs as a list of tuples, in order. */
+    private PirTerm assocToList(Ty k, Ty v) {
+        var pairs = pir(con("Map", k, v));
+        var list = pir(con("List", con("Tuple", k, v)));
+        return shared("$assoc.toList:" + k + "," + v, "assocToList", arrow(pairs, list), self -> {
+            String xs = fresh("pairs"), head = fresh("pair");
+            var xv = new PirTerm.Var(xs, pairs);
+            var hv = new PirTerm.Var(head, ENTRY);
+            PirTerm nil = call(DefaultFun.MkNilData, unit());
+            PirTerm fields = call(DefaultFun.MkCons, call(DefaultFun.FstPair, hv),
+                    call(DefaultFun.MkCons, call(DefaultFun.SndPair, hv), nil));
+            PirTerm tuple = call(DefaultFun.ConstrData, new PirTerm.Const(Constant.integer(BigInteger.ZERO)), fields);
+            PirTerm body = new PirTerm.IfThenElse(call(DefaultFun.NullList, xv), nil,
+                    new PirTerm.Let(head, call(DefaultFun.HeadList, xv),
+                            call(DefaultFun.MkCons, tuple, new PirTerm.App(self, call(DefaultFun.TailList, xv)))));
+            return new PirTerm.Lam(xs, pairs, body);
+        });
+    }
+
+    /** Tuples as pairs, in the same order; the caller vouches for the keys. */
+    private PirTerm assocFromDistinct(Ty k, Ty v) {
+        var pairs = pir(con("Map", k, v));
+        var list = pir(con("List", con("Tuple", k, v)));
+        return shared("$assoc.fromDistinct:" + k + "," + v, "assocFromDistinct", arrow(list, pairs), self -> {
+            String xs = fresh("tuples"), fields = fresh("fields");
+            var xv = new PirTerm.Var(xs, list);
+            var fv = new PirTerm.Var(fields, new PirType.ListType(new PirType.DataType()));
+            PirTerm entry = call(DefaultFun.MkPairData, call(DefaultFun.HeadList, fv),
+                    call(DefaultFun.HeadList, call(DefaultFun.TailList, fv)));
+            PirTerm body = new PirTerm.IfThenElse(call(DefaultFun.NullList, xv), call(DefaultFun.MkNilPairData, unit()),
+                    new PirTerm.Let(fields, call(DefaultFun.SndPair, call(DefaultFun.UnConstrData, call(DefaultFun.HeadList, xv))),
+                            call(DefaultFun.MkCons, entry, new PirTerm.App(self, call(DefaultFun.TailList, xv)))));
+            return new PirTerm.Lam(xs, list, body);
+        });
+    }
+
+    /** {@code find} (Just the value) or {@code has}: the first pair whose key's Data equals the key's. */
+    private PirTerm assocFind(Ty k, Ty v, boolean value) {
+        var pairs = pir(con("Map", k, v));
+        var result = value ? pir(con("Elci.Maybe", v)) : new PirType.BoolType();
+        return shared("$assoc." + (value ? "find:" : "has:") + k + "," + v, value ? "assocFind" : "assocHas",
+                arrow(pir(k), pairs, result), self -> {
+            String search = fresh("search"), xs = fresh("pairs"), target = fresh("target"), rest = fresh("rest"),
+                    head = fresh("pair");
+            var tv = new PirTerm.Var(target, matchTargetType(k));
+            var rv = new PirTerm.Var(rest, pairs);
+            var hv = new PirTerm.Var(head, ENTRY);
+            PirTerm absent = value ? new PirTerm.DataConstr(0, result, List.of()) : bool(false);
+            PirTerm present = value
+                    ? new PirTerm.DataConstr(1, result, List.of(PirHelpers.wrapDecode(call(DefaultFun.SndPair, hv), pir(v))))
+                    : bool(true);
+            PirTerm scan = loop("scan", List.of(rest), List.of(pairs), result, go ->
+                    new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), absent,
+                            new PirTerm.Let(head, call(DefaultFun.HeadList, rv),
+                                    new PirTerm.IfThenElse(keyMatches(k, call(DefaultFun.FstPair, hv), tv), present,
+                                            new PirTerm.App(go, call(DefaultFun.TailList, rv))))),
+                    List.of(new PirTerm.Var(xs, pairs)));
+            return new PirTerm.Lam(search, pir(k), new PirTerm.Lam(xs, pairs,
+                    new PirTerm.Let(target, matchTarget(k, new PirTerm.Var(search, pir(k))), scan)));
+        });
+    }
+
+    /**
+     * The pairs without any whose key's Data equals the key's: a map decoded from Data may repeat
+     * a key, and after {@code remove} it must be absent.
+     */
+    private PirTerm assocDelete(Ty k, Ty v) {
+        var pairs = pir(con("Map", k, v));
+        return shared("$assoc.delete:" + k + "," + v, "assocDelete", arrow(pir(k), pairs, pairs), self -> {
+            String search = fresh("search"), xs = fresh("pairs"), target = fresh("target"), rest = fresh("rest"),
+                    head = fresh("pair");
+            var tv = new PirTerm.Var(target, matchTargetType(k));
+            var rv = new PirTerm.Var(rest, pairs);
+            var hv = new PirTerm.Var(head, ENTRY);
+            PirTerm scan = loop("scan", List.of(rest), List.of(pairs), pairs, go ->
+                    new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), rv,
+                            new PirTerm.Let(head, call(DefaultFun.HeadList, rv),
+                                    new PirTerm.IfThenElse(keyMatches(k, call(DefaultFun.FstPair, hv), tv),
+                                            new PirTerm.App(go, call(DefaultFun.TailList, rv)),
+                                            call(DefaultFun.MkCons, hv, new PirTerm.App(go, call(DefaultFun.TailList, rv)))))),
+                    List.of(new PirTerm.Var(xs, pairs)));
+            return new PirTerm.Lam(search, pir(k), new PirTerm.Lam(xs, pairs,
+                    new PirTerm.Let(target, matchTarget(k, new PirTerm.Var(search, pir(k))), scan)));
+        });
+    }
+
+    /** {@code get} (Just the value) or {@code member} on ascending keys. */
+    private PirTerm assocLookup(Ty k, Ty v, boolean value) {
+        var pairs = pir(con("Map", k, v));
+        var result = value ? pir(con("Elci.Maybe", v)) : new PirType.BoolType();
+        return shared("$assoc." + (value ? "get:" : "member:") + k + "," + v, value ? "assocGet" : "assocMember",
+                arrow(pir(k), pairs, result), self -> {
+            String search = fresh("search"), xs = fresh("pairs"), rest = fresh("rest"), head = fresh("pair"), key = fresh("key"),
+                    ordered = fresh("ordered");
+            var sv = new PirTerm.Var(search, pir(k));
+            var ov = new PirTerm.Var(ordered, pir(orderType(k)));
+            var rv = new PirTerm.Var(rest, pairs);
+            var hv = new PirTerm.Var(head, ENTRY);
+            var kv = new PirTerm.Var(key, pir(orderType(k)));
+            PirTerm absent = value ? new PirTerm.DataConstr(0, result, List.of()) : bool(false);
+            PirTerm present = value
+                    ? new PirTerm.DataConstr(1, result, List.of(PirHelpers.wrapDecode(call(DefaultFun.SndPair, hv), pir(v))))
+                    : bool(true);
+            PirTerm scan = loop("scan", List.of(rest), List.of(pairs), result, go ->
+                    new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), absent,
+                            new PirTerm.Let(head, call(DefaultFun.HeadList, rv),
+                                    new PirTerm.Let(key, orderKey(k, call(DefaultFun.FstPair, hv)),
+                                            new PirTerm.IfThenElse(less(orderType(k), kv, ov, true),
+                                                    new PirTerm.App(go, call(DefaultFun.TailList, rv)),
+                                                    new PirTerm.IfThenElse(less(orderType(k), ov, kv, true), absent, present))))),
+                    List.of(new PirTerm.Var(xs, pairs)));
+            return new PirTerm.Lam(search, pir(k), new PirTerm.Lam(xs, pairs,
+                    new PirTerm.Let(ordered, orderSearch(k, sv), scan)));
+        });
+    }
+
+    /** Bind a key among ascending keys; rebuilds only up to its position. */
+    private PirTerm assocInsert(Ty k, Ty v) {
+        var pairs = pir(con("Map", k, v));
+        return shared("$assoc.insert:" + k + "," + v, "assocInsert", arrow(pir(k), pir(v), pairs, pairs), self -> {
+            String search = fresh("search"), value = fresh("value"), xs = fresh("pairs"), entry = fresh("entry"),
+                    rest = fresh("rest"), head = fresh("pair"), key = fresh("key"), ordered = fresh("ordered");
+            var sv = new PirTerm.Var(search, pir(k));
+            var ov = new PirTerm.Var(ordered, pir(orderType(k)));
+            var ev = new PirTerm.Var(entry, ENTRY);
+            var rv = new PirTerm.Var(rest, pairs);
+            var hv = new PirTerm.Var(head, ENTRY);
+            var kv = new PirTerm.Var(key, pir(orderType(k)));
+            PirTerm scan = loop("scan", List.of(rest), List.of(pairs), pairs, go ->
+                    new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), call(DefaultFun.MkCons, ev, rv),
+                            new PirTerm.Let(head, call(DefaultFun.HeadList, rv),
+                                    new PirTerm.Let(key, orderKey(k, call(DefaultFun.FstPair, hv)),
+                                            new PirTerm.IfThenElse(less(orderType(k), kv, ov, true),
+                                                    call(DefaultFun.MkCons, hv, new PirTerm.App(go, call(DefaultFun.TailList, rv))),
+                                                    new PirTerm.IfThenElse(less(orderType(k), ov, kv, true), call(DefaultFun.MkCons, ev, rv),
+                                                            call(DefaultFun.MkCons, ev, call(DefaultFun.TailList, rv))))))),
+                    List.of(new PirTerm.Var(xs, pairs)));
+            return new PirTerm.Lam(search, pir(k), new PirTerm.Lam(value, pir(v), new PirTerm.Lam(xs, pairs,
+                    new PirTerm.Let(entry, pair(sv, k, new PirTerm.Var(value, pir(v)), v),
+                            new PirTerm.Let(ordered, orderSearch(k, sv), scan)))));
+        });
+    }
+
+    /** Remove a key among ascending keys; rebuilds only up to its position. */
+    private PirTerm assocRemove(Ty k, Ty v) {
+        var pairs = pir(con("Map", k, v));
+        return shared("$assoc.remove:" + k + "," + v, "assocRemove", arrow(pir(k), pairs, pairs), self -> {
+            String search = fresh("search"), xs = fresh("pairs"), rest = fresh("rest"), head = fresh("pair"), key = fresh("key"),
+                    ordered = fresh("ordered");
+            var sv = new PirTerm.Var(search, pir(k));
+            var ov = new PirTerm.Var(ordered, pir(orderType(k)));
+            var rv = new PirTerm.Var(rest, pairs);
+            var hv = new PirTerm.Var(head, ENTRY);
+            var kv = new PirTerm.Var(key, pir(orderType(k)));
+            PirTerm scan = loop("scan", List.of(rest), List.of(pairs), pairs, go ->
+                    new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), rv,
+                            new PirTerm.Let(head, call(DefaultFun.HeadList, rv),
+                                    new PirTerm.Let(key, orderKey(k, call(DefaultFun.FstPair, hv)),
+                                            new PirTerm.IfThenElse(less(orderType(k), kv, ov, true),
+                                                    call(DefaultFun.MkCons, hv, new PirTerm.App(go, call(DefaultFun.TailList, rv))),
+                                                    new PirTerm.IfThenElse(less(orderType(k), ov, kv, true), rv, call(DefaultFun.TailList, rv)))))),
+                    List.of(new PirTerm.Var(xs, pairs)));
+            return new PirTerm.Lam(search, pir(k), new PirTerm.Lam(xs, pairs,
+                    new PirTerm.Let(ordered, orderSearch(k, sv), scan)));
+        });
+    }
+
+    /** Whether the keys are strictly ascending, and so distinct. */
+    private PirTerm assocAscending(Ty k, Ty v) {
+        var pairs = pir(con("Map", k, v));
+        return shared("$assoc.ascending:" + k + "," + v, "assocAscending", arrow(pairs, new PirType.BoolType()), self -> {
+            String xs = fresh("pairs"), previous = fresh("previous"), rest = fresh("rest"), key = fresh("key");
+            var xv = new PirTerm.Var(xs, pairs);
+            var pv = new PirTerm.Var(previous, pir(orderType(k)));
+            var rv = new PirTerm.Var(rest, pairs);
+            var kv = new PirTerm.Var(key, pir(orderType(k)));
+            PirTerm after = loop("after", List.of(previous, rest), List.of(pir(orderType(k)), pairs), new PirType.BoolType(), go ->
+                    new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), bool(true),
+                            new PirTerm.Let(key, orderKey(k, call(DefaultFun.FstPair, call(DefaultFun.HeadList, rv))),
+                                    new PirTerm.IfThenElse(less(orderType(k), pv, kv, true),
+                                            new PirTerm.App(new PirTerm.App(go, kv), call(DefaultFun.TailList, rv)), bool(false)))),
+                    List.of(orderKey(k, call(DefaultFun.FstPair, call(DefaultFun.HeadList, xv))),
+                            call(DefaultFun.TailList, xv)));
+            return new PirTerm.Lam(xs, pairs, new PirTerm.IfThenElse(call(DefaultFun.NullList, xv), bool(true), after));
+        });
+    }
+
+    /** The pairs split into maximal runs of strictly ascending keys, in order. */
+    private PirTerm assocRuns(Ty k, Ty v) {
+        var pairs = pir(con("Map", k, v));
+        var runs = pir(con("List", con("Map", k, v)));
+        return shared("$assoc.runs:" + k + "," + v, "assocRuns", arrow(pairs, runs), self -> {
+            String xs = fresh("pairs"), previous = fresh("previous"), current = fresh("current"), rest = fresh("rest"),
+                    head = fresh("pair"), key = fresh("key"), acc = fresh("acc"), items = fresh("items");
+            var xv = new PirTerm.Var(xs, pairs);
+            var pv = new PirTerm.Var(previous, pir(orderType(k)));
+            var cv = new PirTerm.Var(current, pairs);
+            var rv = new PirTerm.Var(rest, pairs);
+            var hv = new PirTerm.Var(head, ENTRY);
+            var kv = new PirTerm.Var(key, pir(orderType(k)));
+            // A run is collected in reverse, then turned around once it ends.
+            var accv = new PirTerm.Var(acc, pairs);
+            var iv = new PirTerm.Var(items, pairs);
+            java.util.function.Function<PirTerm, PirTerm> finish = reversed -> call(DefaultFun.MapData,
+                    loop("reverse", List.of(items, acc), List.of(pairs, pairs), pairs, go ->
+                            new PirTerm.IfThenElse(call(DefaultFun.NullList, iv), accv,
+                                    new PirTerm.App(new PirTerm.App(go, call(DefaultFun.TailList, iv)),
+                                            call(DefaultFun.MkCons, call(DefaultFun.HeadList, iv), accv))),
+                            List.of(reversed, call(DefaultFun.MkNilPairData, unit()))));
+            PirTerm collect = loop("collect", List.of(previous, current, rest), List.of(pir(orderType(k)), pairs, pairs), runs, go ->
+                    new PirTerm.IfThenElse(call(DefaultFun.NullList, rv),
+                            call(DefaultFun.MkCons, finish.apply(cv), call(DefaultFun.MkNilData, unit())),
+                            new PirTerm.Let(head, call(DefaultFun.HeadList, rv),
+                                    new PirTerm.Let(key, orderKey(k, call(DefaultFun.FstPair, hv)),
+                                            new PirTerm.IfThenElse(less(orderType(k), pv, kv, true),
+                                                    new PirTerm.App(new PirTerm.App(new PirTerm.App(go, kv),
+                                                            call(DefaultFun.MkCons, hv, cv)), call(DefaultFun.TailList, rv)),
+                                                    call(DefaultFun.MkCons, finish.apply(cv),
+                                                            new PirTerm.App(new PirTerm.App(new PirTerm.App(go, kv),
+                                                                    call(DefaultFun.MkCons, hv, call(DefaultFun.MkNilPairData, unit()))),
+                                                                    call(DefaultFun.TailList, rv))))))),
+                    List.of(orderKey(k, call(DefaultFun.FstPair, call(DefaultFun.HeadList, xv))),
+                            call(DefaultFun.MkCons, call(DefaultFun.HeadList, xv), call(DefaultFun.MkNilPairData, unit())),
+                            call(DefaultFun.TailList, xv)));
+            return new PirTerm.Lam(xs, pairs,
+                    new PirTerm.IfThenElse(call(DefaultFun.NullList, xv), call(DefaultFun.MkNilData, unit()), collect));
+        });
+    }
+
+    /** The pairs in reverse order, one pass. */
+    private PirTerm assocReverse(Ty k, Ty v) {
+        var pairs = pir(con("Map", k, v));
+        return shared("$assoc.reverse:" + k + "," + v, "assocReverse", arrow(pairs, pairs), self -> {
+            String xs = fresh("pairs"), rest = fresh("rest"), acc = fresh("acc");
+            var rv = new PirTerm.Var(rest, pairs);
+            var av = new PirTerm.Var(acc, pairs);
+            return new PirTerm.Lam(xs, pairs, loop("reverse", List.of(rest, acc), List.of(pairs, pairs), pairs, go ->
+                    new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), av,
+                            new PirTerm.App(new PirTerm.App(go, call(DefaultFun.TailList, rv)),
+                                    call(DefaultFun.MkCons, call(DefaultFun.HeadList, rv), av))),
+                    List.of(new PirTerm.Var(xs, pairs), call(DefaultFun.MkNilPairData, unit()))));
+        });
+    }
+
+    /** A stable merge of two runs with ascending keys: on equal keys the left pair comes first. */
+    private PirTerm assocMerge(Ty k, Ty v) {
+        var pairs = pir(con("Map", k, v));
+        return shared("$assoc.merge:" + k + "," + v, "assocMerge", arrow(pairs, pairs, pairs), self -> {
+            String left = fresh("left"), right = fresh("right"), lk = fresh("leftKey"), rk = fresh("rightKey");
+            var lv = new PirTerm.Var(left, pairs);
+            var rv = new PirTerm.Var(right, pairs);
+            var lkv = new PirTerm.Var(lk, pir(orderType(k)));
+            var rkv = new PirTerm.Var(rk, pir(orderType(k)));
+            PirTerm body = new PirTerm.IfThenElse(call(DefaultFun.NullList, lv), rv,
+                    new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), lv,
+                            new PirTerm.Let(lk, orderKey(k, call(DefaultFun.FstPair, call(DefaultFun.HeadList, lv))),
+                                    new PirTerm.Let(rk, orderKey(k, call(DefaultFun.FstPair, call(DefaultFun.HeadList, rv))),
+                                            new PirTerm.IfThenElse(less(orderType(k), rkv, lkv, true),
+                                                    call(DefaultFun.MkCons, call(DefaultFun.HeadList, rv),
+                                                            new PirTerm.App(new PirTerm.App(self, lv), call(DefaultFun.TailList, rv))),
+                                                    call(DefaultFun.MkCons, call(DefaultFun.HeadList, lv),
+                                                            new PirTerm.App(new PirTerm.App(self, call(DefaultFun.TailList, lv)), rv)))))));
+            return new PirTerm.Lam(left, pairs, new PirTerm.Lam(right, pairs, body));
+        });
+    }
+
+    /** Of each run of pairs with equal keys, the last. Comparable keys have one Data encoding each. */
+    private PirTerm assocDedupe(Ty k, Ty v) {
+        var pairs = pir(con("Map", k, v));
+        return shared("$assoc.dedupe:" + k + "," + v, "assocDedupe", arrow(pairs, pairs), self -> {
+            String xs = fresh("pairs"), head = fresh("pair"), tail = fresh("tail");
+            var xv = new PirTerm.Var(xs, pairs);
+            var hv = new PirTerm.Var(head, ENTRY);
+            var tv = new PirTerm.Var(tail, pairs);
+            PirTerm body = new PirTerm.IfThenElse(call(DefaultFun.NullList, xv), xv,
+                    new PirTerm.Let(head, call(DefaultFun.HeadList, xv),
+                            new PirTerm.Let(tail, call(DefaultFun.TailList, xv),
+                                    new PirTerm.IfThenElse(call(DefaultFun.NullList, tv), xv,
+                                            new PirTerm.IfThenElse(keysEqual(k, call(DefaultFun.FstPair, hv),
+                                                            call(DefaultFun.FstPair, call(DefaultFun.HeadList, tv))),
+                                                    new PirTerm.App(self, tv),
+                                                    call(DefaultFun.MkCons, hv, new PirTerm.App(self, tv)))))));
+            return new PirTerm.Lam(xs, pairs, body);
+        });
+    }
+
+    // ----- Dict at the Data boundary (ADR-009): decoding requires strictly ascending keys. -----
+
+    /** Julc's strict decoder, and for a type containing a Dict, the check that its keys ascend (ADR-009). */
+    private PirTerm strictDecoder(Ty type, Token token) {
+        PirTerm decoder = codec(type, LibraryRequest.Codec.Direction.DECODE_STRICT, token);
+        if (!containsDict(type)) return decoder;
+        requireOrderedKeys(type, token, new HashSet<>());
+        String d = fresh("data");
+        var dv = new PirTerm.Var(d, new PirType.DataType());
+        return new PirTerm.Lam(d, new PirType.DataType(), new PirTerm.IfThenElse(new PirTerm.App(dictCheck(type), dv),
+                new PirTerm.App(decoder, dv), unsortedDict(pir(type))));
+    }
+
+    /** Checking a Dict's order at the boundary needs its keys to be comparable. */
+    private void requireOrderedKeys(Ty type, Token token, Set<String> visiting) {
+        if (!(prune(type) instanceof Con c) || c.name().equals("->") || !visiting.add(c.toString())) return;
+        if (c.name().equals("Dict") && !inference.comparableCapable(c.args().getFirst()))
+            throw new Diagnostic("ELCI2003", token, "A Dict decoded from Data needs comparable keys, to check that they are"
+                    + " in order; " + Types.show(c.args().getFirst()) + " is not comparable. Use a Map instead");
+        c.args().forEach(a -> requireOrderedKeys(a, token, visiting));
+        unionFields(c).values().forEach(fields -> fields.forEach(f -> requireOrderedKeys(f, token, visiting)));
+    }
+
+    /** Whether values of {@code type} contain a Dict, through lists, tuples, records, maps and custom types. */
+    public boolean containsDict(Ty type) {
+        return containsDict(type, new HashSet<>());
+    }
+
+    private boolean containsDict(Ty type, Set<String> visiting) {
+        if (!(prune(type) instanceof Con c)) return false;
+        if (c.name().equals("Dict")) return true;
+        if (c.name().equals("->") || !visiting.add(c.toString())) return false;
+        try {
+            for (Ty argument : c.args()) if (containsDict(argument, visiting)) return true;
+            for (var field : unionFields(c).values())
+                for (Ty t : field) if (containsDict(t, visiting)) return true;
+            return false;
+        } finally {
+            visiting.remove(c.toString());
+        }
+    }
+
+    /** The field types of each constructor tag of a custom type (including Maybe and Result), or none. */
+    private Map<Integer, List<Ty>> unionFields(Con c) {
+        var result = new LinkedHashMap<Integer, List<Ty>>();
+        for (var union : inference.unions.values())
+            if (inference.nominal(union.name()).equals(c.name())) {
+                var variables = new HashMap<String, Ty>();
+                for (int i = 0; i < union.parameters().size(); i++) variables.put(union.parameters().get(i), c.args().get(i));
+                int tag = 0;
+                for (var variant : union.variants())
+                    result.put(tag++, variant.fields().stream().map(f -> inference.annotatedPublic(f, variables)).toList());
+            }
+        return result;
+    }
+
+    /**
+     * {@code \data -> Bool} for a Data value of {@code type}: whether every Dict in it has strictly
+     * ascending keys. Shared per type, so recursive types check recursively.
+     */
+    private PirTerm dictCheck(Ty type) {
+        var c = (Con) prune(type);
+        var data = new PirType.DataType();
+        return shared("$validDicts:" + c, "validDicts", arrow(data, new PirType.BoolType()), self -> {
+            String d = fresh("data");
+            var dv = new PirTerm.Var(d, data);
+            return new PirTerm.Lam(d, data, dictCheckBody(c, dv));
+        });
+    }
+
+    private PirTerm dictCheckBody(Con c, PirTerm.Var dv) {
+        var data = new PirType.DataType();
+        switch (c.name()) {
+            case "Dict", "Map" -> {
+                Ty k = c.args().get(0), v = c.args().get(1);
+                var pairs = pir(con("Map", k, v));
+                String ps = fresh("pairs"), entry = fresh("entry");
+                var pv = new PirTerm.Var(ps, pairs);
+                var ev = new PirTerm.Var(entry, ENTRY);
+                PirTerm entries = bool(true);
+                if (containsDict(v)) entries = new PirTerm.App(dictCheck(v), call(DefaultFun.SndPair, ev));
+                if (containsDict(k)) entries = and(new PirTerm.App(dictCheck(k), call(DefaultFun.FstPair, ev)), entries);
+                PirTerm each = entries instanceof PirTerm.Const ? bool(true) : every(pv, ENTRY, entry, entries);
+                PirTerm ordered = c.name().equals("Dict") ? new PirTerm.App(assocAscending(k, v), pv) : bool(true);
+                return new PirTerm.Let(ps, call(DefaultFun.UnMapData, dv), and(ordered, each));
+            }
+            case "List" -> {
+                String xs = fresh("items"), item = fresh("item");
+                return new PirTerm.Let(xs, call(DefaultFun.UnListData, dv),
+                        every(new PirTerm.Var(xs, new PirType.ListType(data)), data, item,
+                                new PirTerm.App(dictCheck(c.args().getFirst()), new PirTerm.Var(item, data))));
+            }
+            default -> {
+                // Tuples and records are constructor 0 with positional fields; custom types dispatch on
+                // the tag; a Julc optional is Some (0) or None (1).
+                Map<Integer, List<Ty>> variants = c.name().equals("Tuple") || c.name().startsWith("Record:")
+                        ? Map.of(0, c.args())
+                        : c.name().equals("JulcOptional") ? Map.of(0, c.args(), 1, List.of()) : unionFields(c);
+                if (variants.isEmpty())
+                    throw new IllegalArgumentException("A Dict inside " + Types.show(c)
+                            + " cannot be checked at the Data boundary");
+                String p = fresh("constr"), tag = fresh("tag"), fields = fresh("fields");
+                var tv = new PirTerm.Var(tag, new PirType.IntegerType());
+                var fv = new PirTerm.Var(fields, new PirType.ListType(data));
+                PirTerm body = bool(true);
+                for (var variant : new java.util.TreeMap<>(variants).descendingMap().entrySet()) {
+                    PirTerm checks = bool(true);
+                    var types = variant.getValue();
+                    for (int i = types.size() - 1; i >= 0; i--)
+                        if (containsDict(types.get(i))) {
+                            PirTerm field = fv;
+                            for (int j = 0; j < i; j++) field = call(DefaultFun.TailList, field);
+                            checks = and(new PirTerm.App(dictCheck(types.get(i)), call(DefaultFun.HeadList, field)), checks);
+                        }
+                    if (!(checks instanceof PirTerm.Const))
+                        body = new PirTerm.IfThenElse(call(DefaultFun.EqualsInteger, tv,
+                                new PirTerm.Const(Constant.integer(variant.getKey()))), checks, body);
+                }
+                var pairType = new PirType.PairType(new PirType.IntegerType(), new PirType.ListType(data));
+                return new PirTerm.Let(p, call(DefaultFun.UnConstrData, dv),
+                        new PirTerm.Let(tag, call(DefaultFun.FstPair, new PirTerm.Var(p, pairType)),
+                                new PirTerm.Let(fields, call(DefaultFun.SndPair, new PirTerm.Var(p, pairType)), body)));
+            }
+        }
+    }
+
+    private static PirTerm and(PirTerm left, PirTerm right) {
+        if (left instanceof PirTerm.Const) return right;
+        if (right instanceof PirTerm.Const) return left;
+        return new PirTerm.IfThenElse(left, right, bool(false));
+    }
+
+    /** Whether {@code check} (over the variable {@code name}) holds for every element of {@code list}. */
+    private PirTerm every(PirTerm list, PirType element, String name, PirTerm check) {
+        String rest = fresh("rest");
+        var listType = element instanceof PirType.PairType ? new PirType.ListType(element) : new PirType.ListType(element);
+        var rv = new PirTerm.Var(rest, listType);
+        return loop("every", List.of(rest), List.of(listType), new PirType.BoolType(), go ->
+                new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), bool(true),
+                        new PirTerm.Let(name, call(DefaultFun.HeadList, rv),
+                                new PirTerm.IfThenElse(check, new PirTerm.App(go, call(DefaultFun.TailList, rv)), bool(false)))),
+                List.of(list));
+    }
+
+    /**
+     * A handler that first checks the Dicts in its arguments (ADR-009): the ledger's strict
+     * boundary decodes a Dict as a map, so its key order is checked here. Returns the handler
+     * unchanged when no argument contains a Dict.
+     */
+    public PirTerm guardDicts(PirTerm handler, Ty type, Token token) {
+        var arguments = new ArrayList<Ty>();
+        Ty rest = prune(type);
+        while (rest instanceof Con c && c.name().equals("->")) {
+            arguments.add(c.args().get(0));
+            rest = prune(c.args().get(1));
+        }
+        if (arguments.stream().noneMatch(this::containsDict)) return handler;
+        arguments.forEach(argument -> requireOrderedKeys(argument, token, new HashSet<>()));
+        var names = new ArrayList<String>();
+        PirTerm call = handler, condition = bool(true);
+        for (Ty argument : arguments) {
+            String name = fresh("argument");
+            names.add(name);
+            var variable = new PirTerm.Var(name, pir(argument));
+            call = new PirTerm.App(call, variable);
+            if (containsDict(argument))
+                condition = and(condition, new PirTerm.App(dictCheck(argument), PirHelpers.wrapEncode(variable, pir(argument))));
+        }
+        PirTerm body = new PirTerm.IfThenElse(condition, call, unsortedDict(pir(rest)));
+        for (int i = arguments.size() - 1; i >= 0; i--) body = new PirTerm.Lam(names.get(i), pir(arguments.get(i)), body);
+        return body;
+    }
+
+    /** The failure when a decoded Dict's keys are out of order, with a trace saying so. */
+    private static PirTerm unsortedDict(PirType type) {
+        return new PirTerm.Trace(new PirTerm.Const(Constant.string("Dict keys are not strictly ascending")),
+                new PirTerm.Error(type));
+    }
+
     /** Component {@code index} of a tuple value (a tag-zero constructor with positional fields). */
     private static PirTerm component(PirTerm tuple, int index, PirType type) {
         PirTerm fields = call(DefaultFun.SndPair, call(DefaultFun.UnConstrData, tuple));
@@ -1005,7 +1643,7 @@ public final class Lowering {
             throw new Diagnostic("ELCI3001", token, "Cannot determine the type converted by Julc.Data." + function
                     + "; add a type annotation");
         return switch (function) {
-            case "decode" -> codec(output, LibraryRequest.Codec.Direction.DECODE_STRICT, token);
+            case "decode" -> strictDecoder(output, token);
             case "encode" -> codec(input, LibraryRequest.Codec.Direction.ENCODE, token);
             case "fromOptional" -> retag(pir(input), pir(output), 0, 1);
             case "toOptional" -> retag(pir(input), pir(output), 1, 0);
@@ -1174,6 +1812,12 @@ public final class Lowering {
             Ty argument = variables.get(parameter.name());
             if (argument == null || !Types.concrete(argument))
                 throw new Diagnostic("ELCI3001", token, "Cannot determine type argument " + parameter.name() + " of " + export);
+            // A Java library cannot keep a Dict's keys in order: it could return an unchecked one.
+            if (containsDict(argument) && org.elci.modules.Modules.CORE_LIBRARIES.values().stream()
+                    .noneMatch(owner -> scheme.symbol().startsWith(owner + ".")))
+                throw new Diagnostic("ELCI3003", token, "Type argument " + parameter.name() + " = " + Types.show(argument)
+                        + " of " + export + " contains a Dict, which a Java library cannot keep sorted; pass a Map"
+                        + " or a List and build the Dict with Dict.fromList");
             if (parameter.constraints().contains(LibraryScheme.Constraint.DATA_ENCODABLE)
                     && !TypeReferences.dataEncodable(pir(argument)))
                 throw new Diagnostic("ELCI3003", token, "Type argument " + parameter.name() + " = " + prune(argument)
@@ -1195,6 +1839,8 @@ public final class Lowering {
             case "Int", "Bool", "String", "Bytes", "Data", "Unit" -> new LibraryType.Reference(c.name(), List.of());
             case "List", "Map", "JulcOptional", "Array" ->
                     new LibraryType.Reference(c.name(), c.args().stream().map(a -> reference(a, producerTypes)).toList());
+            // A Dict is a Map to libraries; only the core library's may carry one (instantiate).
+            case "Dict" -> new LibraryType.Reference("Map", c.args().stream().map(a -> reference(a, producerTypes)).toList());
             case "->" -> new LibraryType.Reference("Function",
                     c.args().stream().map(a -> reference(a, producerTypes)).toList());
             case "ScriptContext" -> new LibraryType.Reference("org.julclang.ledger.ScriptContext", List.of());
@@ -1272,7 +1918,8 @@ public final class Lowering {
         return switch (c.name()) {
             case "Bytes" -> new PirType.ByteStringType();
             case "Data", Types.AMBIGUOUS -> new PirType.DataType();
-            case "Map" -> {
+            // A Dict is a Map whose keys are strictly ascending (ADR-009).
+            case "Map", "Dict" -> {
                 var key = pir(c.args().get(0));
                 var value = pir(c.args().get(1));
                 requireEncodable(key);

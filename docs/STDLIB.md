@@ -64,11 +64,16 @@ signatures of many Java `ListsLib` methods. For example:
 List.map (\value -> value + 1) [ 1, 2, 3 ]
 ```
 
-`Map` (`import Map`) provides typed association maps in the style of Elm's `Dict`.
+`Dict` (`import Dict exposing (Dict)`) is Elm's dictionary, with Elm's whole API:
+comparable keys, kept strictly ascending in a Plutus map
+([ADR-009](../adr/009-dict-native-value-and-map.md)). `Map` (`import Map`) is the
+ledger's association map, for ledger data and keys that are not comparable.
 `Array` (`import Array`) provides constant-time indexed arrays in the style of Elm's
-`Array`. Both are described in the
+`Array`. All three are described in the
 [language guide](LANGUAGE.md#compiler-provided-modules). They are Elci source over
-Julc's `TypedMapLib` and `TypedArrayLib`, which need no `[java-modules]` entry.
+Julc's `TypedMapLib` and `TypedArrayLib`, which need no `[java-modules]` entry, and
+over `Elci.Assoc`, compiler intrinsics for association lists that only core
+modules may import.
 
 `Julc.Data` provides explicit `decode`, `encode`, `fromOptional` and `toOptional`
 conversions. `Bytes` wraps byte-string builtins (`fromString`, `length`, `append`,
@@ -78,7 +83,7 @@ additionally see the `Expect`, `Scenario` and `Property` test library
 ([Testing](TESTING.md)). `Julc.Ledger` exposes ledger types and supported fields
 rather than an ordinary Java function library.
 
-Still missing compared with Elm's core: `Dict` and `Set` (use `Map`), `Char`, most
+Still missing compared with Elm's core: `Set` (use a `Dict k Bool`), `Char`, most
 of `String`, `map4`/`map5`, and every `Float` function.
 
 ## Julc library availability
@@ -250,7 +255,8 @@ custom types and other imports within the supported Elci language profile.
 Use `exposing (TypeName(..))` to export a custom type and its constructors.
 Module paths must match names, imports must be acyclic, and duplicate module
 ownership is rejected. The core module names (`Basics`, `List`, `Maybe`, `Result`,
-`String`, `Tuple`, `Map`, `Array`) and `Dict`, `Set`, `Value` and `Elci` are reserved.
+`String`, `Tuple`, `Map`, `Dict`, `Array`) and `Set`, `Value`, `Elci` and names
+starting with `Elci.` are reserved.
 
 Run the [complete example](../examples/elci-library/README.md):
 

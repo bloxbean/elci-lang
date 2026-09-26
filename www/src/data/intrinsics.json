@@ -1,5 +1,5 @@
 {
-  "description": "Signatures of Elci's compiler-provided functions that have no Elci source: the Bytes, Julc.Data and Debug modules, the Basics intrinsics (not, modBy, remainderBy and the ^ operator) and the built-in constructors. Basics, List, Maybe, Result, String, Tuple, Map and Array are Elci source modules bundled with the compiler; Expect, Scenario and Property are the test library. Every module imports Basics exposing (..), List, Maybe exposing (Maybe(..)), Result exposing (Result(..)), String, Tuple and Debug by default, as in Elm. Every signature was type-checked with the Elci CLI.",
+  "description": "Signatures of Elci's compiler-provided functions that have no Elci source: the Bytes, Julc.Data and Debug modules, the Basics intrinsics (not, modBy, remainderBy and the ^ operator) and the built-in constructors. Basics, List, Maybe, Result, String, Tuple, Dict, Map and Array are Elci source modules bundled with the compiler; Expect, Scenario and Property are the test library. Every module imports Basics exposing (..), List, Maybe exposing (Maybe(..)), Result exposing (Result(..)), String, Tuple and Debug by default, as in Elm. Every signature was type-checked with the Elci CLI.",
   "compiler": "elci 0.1.0-dev / julc 0.1.0-gb-5a3378b",
   "modules": [
     {
@@ -167,7 +167,7 @@
         {
           "name": "decode",
           "signature": "Data -> a",
-          "summary": "Julc's strict decoder for the concrete type a: checks tags, arity and fields; malformed Data fails the script (never a Maybe). a must be known where it is used; annotate when inference cannot tell. Rejected (ELCI3003) for (), functions, Array, Value and types containing Value."
+          "summary": "Julc's strict decoder for the concrete type a: checks tags, arity and fields; malformed Data fails the script (never a Maybe), and so does a Dict whose keys are not strictly ascending. a must be known where it is used; annotate when inference cannot tell. Rejected (ELCI3003) for (), functions, Array, Value and types containing Value."
         },
         {
           "name": "encode",
@@ -228,7 +228,7 @@
     {
       "module": "(built in)",
       "import": null,
-      "summary": "Constructors built into the compiler; Just and Nothing are exposed through the default import Maybe exposing (Maybe(..)). A module may not declare constructors with these names, or types named Int, Bool, String, Bytes, Data, List, Maybe, Map, Array or Float.",
+      "summary": "Constructors built into the compiler; Just and Nothing are exposed through the default import Maybe exposing (Maybe(..)). A module may not declare constructors with these names, or types named Int, Bool, String, Bytes, Data, List, Maybe, Dict, Map, Array or Float.",
       "constructors": [
         {
           "name": "Just",

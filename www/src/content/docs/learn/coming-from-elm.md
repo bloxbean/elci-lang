@@ -1,6 +1,6 @@
 ---
 title: Coming from Elm
-description: What carries over from Elm 0.19 to Elci and what changes, from the program model and the core library to Data encoding, Map and strict decoding.
+description: What carries over from Elm 0.19 to Elci and what changes, from the program model and the core library to Data encoding, Dict, Map and strict decoding.
 sidebar:
   order: 7
 ---
@@ -63,7 +63,7 @@ Elm, `n // 0` evaluates to `0`. In Elci, it fails the script, as do `modBy 0` an
 | `comparable`, `appendable`, `compappend` | Constrained type variables | The same. `Bytes` and ledger hashes such as `PubKeyHash` are also comparable |
 | `number` | `Int` or `Float` | Not available: write `Int` |
 | `2 ^ -1` | `0.5` | Fails the script |
-| `==` on functions | Runtime crash | Compile error, as for maps and opaque `Data` |
+| `==` on functions | Runtime crash | Compile error, as for `Map` and opaque `Data` |
 | Extensible records `{ r \| x : Int }` | Available | Not available. Records are closed |
 | Accessor functions (`.price`) | Available | Not available. Use `\item -> item.price` |
 | Let-polymorphism | Values and functions | Only for non-expansive bindings (functions, lambdas, plain values) |
@@ -108,8 +108,7 @@ Elci's core library is Elm's, imported by default in every module:
 | `map4` and `map5` in `List`, `Maybe` and `Result` | Not available. Nest `map3`, or use `case` |
 | `String.length`, `toInt`, `split`, `slice`, `fromFloat`… | Not available. `Bytes.length (Bytes.fromString s)` is the byte length |
 | `Char` | Not available |
-| `Dict` | `Map` (`import Map`); see below |
-| `Set` | Not available. Use a `Map k Bool` or a `List` |
+| `Set` | Not available. Use a `Dict k Bool` or a `List` |
 | `Debug.log`, `Debug.todo`, `Debug.toString` | `Debug.trace : String -> a -> a`, and `String.fromInt` for numbers |
 
 A name Elci lacks is an error that says what to use or lists what the module has:
@@ -121,19 +120,31 @@ A name Elci lacks is an error that says what to use or lists what the module has
 
 One import rule differs from Elm: a name you list explicitly, as in `import Utils exposing (clamp)`,
 takes precedence over the default import of `Basics.clamp` instead of being ambiguous. Modules outside the
-default imports, `Bytes`, `Map`, `Array` and `Julc.Data`, need their own imports, as Elm's `Dict` and
-`Array` do.
+default imports, `Bytes`, `Dict`, `Map`, `Array` and `Julc.Data`, need their own imports, as `Dict` and
+`Array` do in Elm.
 
-## Map, Array and Dict
+## Dict, Map and Array
 
-| | Elm `Dict` | Elci `Map` |
+`Dict` has all of Elm's `Dict` API, but it is stored differently:
+
+| | Elm `Dict` | Elci `Dict` |
 | --- | --- | --- |
-| Import | `import Dict exposing (Dict)` | `import Map exposing (Map)`, or just `import Map`: the type `Map k v` is always in scope |
-| Keys | `comparable` | Any type with a Data encoding, including records and ledger types |
-| Structure | Balanced tree, sorted by key | The ledger's association list, not sorted |
-| `get`, `insert`, `remove` | O(log n) | O(n) |
-| `==` | Supported | Not supported |
-| API | Large | `empty`, `singleton`, `fromList`, `get`, `member`, `insert`, `remove`, `update`, `size`, `isEmpty`, `keys`, `values`, `toList`, `foldl`, `filter`, `map` |
+| Import | `import Dict exposing (Dict)` | The same; the type `Dict k v` is always in scope |
+| Keys | `comparable` | `comparable`, which includes `Bytes` and ledger hashes such as `PubKeyHash` |
+| Structure | Balanced tree | A Plutus map with its keys in ascending order |
+| `get`, `insert`, `remove` | O(log n) | O(n): they stop at the first key that isn't smaller |
+| `fromList` | O(n log n) | O(n log n), and O(n) for sorted input |
+| Order of `keys`, `toList` and the folds | Ascending keys | The same |
+| `==` | Compares bindings | The same |
+
+In a datum, redeemer or parameter, a `Dict` is a Plutus map with sorted keys, and a map whose keys are out
+of order or repeated fails to decode.
+
+Elci also has `Map`, which Elm doesn't. A `Map k v` is the ledger's own map: an unsorted association list
+whose keys may be any type with a Data encoding, such as `Credential`. The transaction's maps, such as
+`txInfo.withdrawals` and `txInfo.redeemers`, are `Map`s. A map keeps its own order (`insert` puts a key
+first), has no `==`, and `Map.fromList` is O(n²). Use `Dict` for keyed data of your own, and `Map` where the
+ledger or a key that isn't comparable requires it.
 
 `Array` resembles Elm's `Array`: `get` returns a `Maybe` and `slice` accepts negative indexes. It has no `set`,
 `push` or `append`, and an array can't be stored in data (datums, redeemers, records, lists and so on).
@@ -153,6 +164,8 @@ parameter is **Plutus Data**, and the encoding is derived from your types:
 | `Maybe a` | `Nothing` is constructor 0, `Just` is constructor 1 |
 | `Result e a` | `Ok` is constructor 0, `Err` is constructor 1: the reverse of PlutusTx's `Either` |
 | `List a` | A Data list |
+| `Dict k v` | A Data map with its keys in ascending order |
+| `Map k v` | A Data map, in the map's order |
 | `Int`, `Bytes`, `String` | An integer, a byte string, and UTF-8 bytes |
 
 `Maybe`'s tags are the reverse of those used by Julc's Java `Optional` and the ledger's own optional values,

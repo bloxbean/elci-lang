@@ -29,20 +29,23 @@ These need an import but no configuration:
 
 | Module | Import | What it gives you |
 | --- | --- | --- |
-| `Map` | `import Map` | typed association maps in the style of Elm's `Dict` |
+| `Dict` | `import Dict exposing (Dict)` | Elm's dictionaries: comparable keys, kept sorted |
+| `Map` | `import Map` | the ledger's association maps, for ledger data and keys that aren't comparable |
 | `Array` | `import Array` | arrays with constant-time `get` and `length` |
 | `Bytes` | `import Bytes` | byte-string builtins: slicing, integers, bits, hashes |
 | `Julc.Data` | `import Julc.Data as Data` | explicit `decode`, `encode` and optional/`Maybe` adapters |
 | `Julc.Ledger` | `import Julc.Ledger exposing (...)` | ledger types such as `ScriptContext`, `PubKeyHash` and `TxOutRef` |
 
-The types `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe` (with `Just` and `Nothing`), `Map` and
-`Array` are built in.
+The types `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe` (with `Just` and `Nothing`), `Dict`,
+`Map` and `Array` are built in.
 
-`Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String`, `Map` and `Array` are written in Elci itself, and
-compiled with your code; a function you don't call is never compiled into your script. `Map` and `Array`
-sit on top of Julc's typed map and array libraries. Every signature is on the
-[core modules](/reference/core-modules/) reference page, and [lists, maps and arrays](/learn/collections/)
-teaches them. Bytes get their own page: [bytes, hashes and bits](/advanced/bytes-and-crypto/).
+`Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String`, `Dict`, `Map` and `Array` are written in Elci
+itself, and compiled with your code; a function you don't call is never compiled into your script. `Dict`,
+`Map` and `Array` sit on top of Julc's typed map and array libraries and of list operations the compiler
+specializes for their key and value types. Every signature is on the
+[core modules](/reference/core-modules/) reference page, and
+[lists, dictionaries, maps and arrays](/learn/collections/) teaches them. Bytes get their own page:
+[bytes, hashes and bits](/advanced/bytes-and-crypto/).
 
 ## Julc's Java libraries
 
@@ -275,14 +278,14 @@ last. [Bytes, hashes and bits](/advanced/bytes-and-crypto/) covers both.
 Most `ListsLib` and `MapLib` exports work on `List Data` and `Map Data Data`, so you must encode every
 element with `Julc.Data.encode` first. Examples are `ListsLib.containsInt : List Data -> Int -> Bool`,
 `ListsLib.hasDuplicateInts : List Data -> Bool` and `MapLib.lookup : Map Data Data -> Data -> JulcOptional Data`.
-Prefer the typed core `List` and `Map` modules. `ListsLib`'s generic `map`, `filter`, `any`, `all`, `find`
-and `foldl` are covered in [Java libraries](/advanced/java-libraries/).
+Prefer the typed core `List`, `Dict` and `Map` modules. `ListsLib`'s generic `map`, `filter`, `any`, `all`,
+`find` and `foldl` are covered in [Java libraries](/advanced/java-libraries/).
 
 ## What is missing
 
 - **BLS12-381** (`BlsLib`) and **native values** (`NativeValueLib`) have no usable exports yet.
 - **`Value` arithmetic** is limited to what `ValuesLib` provides; you cannot inspect a `Value` directly.
-- **Parts of Elm's core** are not available yet: `Dict` and `Set` (use `Map`), `Char`, most of `String`
+- **Parts of Elm's core** are not available yet: `Set` (use a `Dict k Bool`), `Char`, most of `String`
   (`length`, `toInt`, `split` and so on), and the `Float` functions. Write small helpers yourself or use
   the Java libraries above.
 

@@ -24,6 +24,12 @@ final class Data {
         return ElciValues.show(data, type, namedTypes, nested);
     }
 
+    /** As {@link #show(PlutusData, PirType, Map, boolean)}, following the Elci source type (a Dict or a Map). */
+    static String show(PlutusData data, PirType type, Map<String, PirType> namedTypes, boolean nested,
+                       org.elci.types.Types.Ty source) {
+        return ElciValues.show(data, type, namedTypes, nested, source);
+    }
+
     /** The fields of an Elci record by name; records encode fields in name order. */
     static Map<String, PlutusData> record(PlutusData data, PirType type) {
         if (!(type instanceof PirType.RecordType record))

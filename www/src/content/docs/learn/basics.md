@@ -184,7 +184,7 @@ To work with fractions, scale your integers. For example, store a percentage in 
 
 | Operator | Meaning |
 | --- | --- |
-| `==`, `/=` | Equal, not equal. Works on numbers, strings, bytes, lists, tuples, records and custom types, but not on functions or maps |
+| `==`, `/=` | Equal, not equal. Works on numbers, strings, bytes, lists, tuples, records, custom types and dictionaries, but not on functions or `Map`s |
 | `<`, `<=`, `>`, `>=` | Ordering, for comparable types: numbers, strings, bytes, and lists and tuples of them |
 | `&&`, `\|\|` | And, or. The right side is evaluated only when needed |
 | `not` | Negation: `not True` is `False` |

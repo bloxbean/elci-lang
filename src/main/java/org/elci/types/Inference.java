@@ -401,7 +401,8 @@ public final class Inference {
             return null;
         if (c.name().equals("->") || c.name().equals("Data") || c.name().equals("ScriptContext"))
             return type;
-        if (c.name().equals("List") || c.name().equals("Tuple") || c.name().startsWith("Record:")) {
+        if (c.name().equals("List") || c.name().equals("Tuple") || c.name().equals("Dict")
+                || c.name().startsWith("Record:")) {
             for (Ty argument : c.args()) {
                 Ty offending = notEquatable(argument, visiting);
                 if (offending != null) return offending;
@@ -442,7 +443,7 @@ public final class Inference {
                 throw new Diagnostic("ELCI2012", token, "Tuples require two or three elements");
         } else if (name.equals("->")) expected = 2;
         else if (name.equals("List") || name.equals("JulcOptional") || name.equals("Array")) expected = 1;
-        else if (name.equals("Map")) expected = 2;
+        else if (name.equals("Map") || name.equals("Dict")) expected = 2;
         else if (!name.contains(".") && Character.isLowerCase(name.charAt(0))) expected = 0;
         else if (Set.of("Int", "Bool", "String", "Unit", "Bytes", "Data", "ScriptContext")
                         .contains(name)

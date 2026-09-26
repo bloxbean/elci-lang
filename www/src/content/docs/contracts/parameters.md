@@ -57,10 +57,10 @@ The rules:
   .../treasury/src/Treasury.elm:28:1: ELCI2014: Handler Treasury.withdraw does not have the withdraw signature admin -> redeemer -> ScriptContext -> Bool that [validators.treasury] needs (1 parameter); its type is Int -> () -> ScriptContext -> Bool (Type mismatch: expected Int, found PubKeyHash)
   ```
 
-- **Boundary types only.** Parameters follow the same rules as datums and redeemers: records, custom types, lists, maps and ledger types such as `PubKeyHash` or `TxOutRef` are fine; functions, arrays and `Value` are not. See [Datums and redeemers](/contracts/datums-and-redeemers/).
+- **Boundary types only.** Parameters follow the same rules as datums and redeemers: records, custom types, lists, dictionaries, maps and ledger types such as `PubKeyHash` or `TxOutRef` are fine; functions, arrays and `Value` are not. See [Datums and redeemers](/contracts/datums-and-redeemers/).
 - **Names** start with a lowercase letter and use letters, digits and `_`.
 
-Parameters are decoded when the script is applied, but the script doesn't validate them on-chain. `elci apply` checks them off-chain instead, as shown below.
+Parameters are decoded when the script is applied, but the script doesn't validate them on-chain. `elci apply` checks them off-chain instead, as shown below. The one exception is a `Dict`: the script checks its key order on every run, as it does in a datum.
 
 ## Testing with parameters
 
@@ -240,7 +240,7 @@ Each value is one JSON object in the detailed schema:
 | `{"int": 42}` | integer | `Int` |
 | `{"bytes": "0a1b"}` | byte string, as hex | `Bytes`, hashes, `String` (the UTF-8 bytes) |
 | `{"list": [ ... ]}` | list | `List a` |
-| `{"map": [{"k": ..., "v": ...}]}` | map | `Map k v` |
+| `{"map": [{"k": ..., "v": ...}]}` | map | `Dict k v` (keys in ascending order), `Map k v` |
 | `{"constructor": 0, "fields": [ ... ]}` | constructor | records, custom types, `Bool`, `Maybe`, tuples, `()`, `TxOutRef` |
 
 Build values with the [encoding rules](/contracts/datums-and-redeemers/): a record is constructor 0 with its fields sorted by name, `True` is `{"constructor": 1, "fields": []}`, and a `TxOutRef` is `{"constructor": 0, "fields": [{"bytes": "<transaction id>"}, {"int": <index>}]}`. The parser accepts integers, hex strings, arrays and objects; strings with escape sequences are not supported.
@@ -259,7 +259,19 @@ elci: ELCI4001: parameter limits is not a well-formed Record:maximum,minimum [In
 elci: ELCI4001: parameter admin is not a well-formed org.julclang.ledger.PubKeyHash value
 ```
 
-(from `{"int": 42}`). Other mistakes are reported the same way:
+(from `{"int": 42}`). A `Dict` must list its keys in ascending order, each once, so `apply` also rejects
+
+```json
+{"map": [{"k": {"int": 2}, "v": {"int": 10}}, {"k": {"int": 1}, "v": {"int": 5}}]}
+```
+
+for a parameter `caps : Dict Int Int`:
+
+```text
+elci: ELCI4001: parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats
+```
+
+Other mistakes are reported the same way:
 
 | Mistake | Message |
 | --- | --- |

@@ -10,10 +10,10 @@ import java.util.*;
 public final class Modules {
     /** Core modules written in Elci and bundled with the compiler. */
     public static final List<String> CORE_MODULES =
-            List.of("Basics", "List", "Maybe", "Result", "String", "Tuple", "Map", "Array");
+            List.of("Basics", "List", "Maybe", "Result", "String", "Tuple", "Map", "Dict", "Array");
     /** Core modules whose type is built in, and may still be named as in Elm: {@code Map.Map}, {@code exposing (Map)}. */
-    private static final Map<String, String> BUILTIN_TYPES = Map.of("Map", "Map", "Array", "Array", "List", "List",
-            "Maybe", "Maybe", "String", "String");
+    private static final Map<String, String> BUILTIN_TYPES = Map.of("Map", "Map", "Dict", "Dict", "Array", "Array",
+            "List", "List", "Maybe", "Maybe", "String", "String");
     /**
      * Elm's default imports (ADR-008), added to every project and test module. Their names have
      * the lowest priority: a module's own declarations and its explicit imports take precedence,
@@ -37,10 +37,10 @@ public final class Modules {
     public static final String BASICS_PREFIX = "$basics.";
     public static final List<String> BASICS_FUNCTIONS = List.of("not", "modBy", "remainderBy");
     /** Module names reserved for later phases of the core library (ADR-008): {@code Dict}, {@code Set}, {@code Value}. */
-    private static final List<String> RESERVED_MODULES = List.of("Dict", "Set", "Value", "Elci");
+    private static final List<String> RESERVED_MODULES = List.of("Set", "Value", "Elci");
     /** Built-in type names, which no module may declare again: core modules refer to them. */
     private static final Set<String> BUILT_IN_TYPES =
-            Set.of("Int", "Bool", "String", "Bytes", "Data", "List", "Maybe", "Map", "Array", "Unit", "Tuple", "Float");
+            Set.of("Int", "Bool", "String", "Bytes", "Data", "List", "Maybe", "Map", "Dict", "Array", "Unit", "Tuple", "Float");
     /** Elm functions Elci does not provide, with what to use instead. */
     private static final Map<String, String> ELM_ALTERNATIVES = Map.of(
             "Debug.log", "use Debug.trace message value, which returns value",
@@ -91,11 +91,20 @@ public final class Modules {
             "fromIntBigEndian", "fromIntLittleEndian", "toIntBigEndian", "toIntLittleEndian",
             "and", "or", "xor", "complement", "shift", "rotate", "testBit", "countSetBits", "findFirstSetBit",
             "blake2b224", "blake2b256", "sha256", "sha3_256", "keccak256", "ripemd160");
+    /**
+     * The core library's internal association-list operations (ADR-009): only core modules may
+     * import them, because some trust their callers (sorted or distinct keys).
+     */
+    public static final String ASSOC_MODULE = "Elci.Assoc";
+    public static final String ASSOC_PREFIX = "$assoc.";
+    public static final List<String> ASSOC_FUNCTIONS = List.of("toList", "fromDistinct", "cons", "reverse", "find",
+            "has", "delete", "get", "member", "insert", "remove", "ascending", "runs", "merge", "dedupe", "toMap", "fromMap");
     /** Intrinsic modules without source: their functions and resolved-name prefixes. */
     private static final Map<String, Map.Entry<String, List<String>>> INTRINSICS = Map.of(
             DATA_MODULE, Map.entry(DATA_PREFIX, DATA_FUNCTIONS),
             DEBUG_MODULE, Map.entry(DEBUG_PREFIX, DEBUG_FUNCTIONS),
-            BYTES_MODULE, Map.entry(BYTES_PREFIX, BYTES_FUNCTIONS));
+            BYTES_MODULE, Map.entry(BYTES_PREFIX, BYTES_FUNCTIONS),
+            ASSOC_MODULE, Map.entry(ASSOC_PREFIX, ASSOC_FUNCTIONS));
 
     private final Map<String, Ast.Module> available = new LinkedHashMap<>();
     /** The default imports added to modules, by identity: they bind names only where nothing else does. */
@@ -109,11 +118,12 @@ public final class Modules {
     public Modules(Map<String, String> sources, Map<String, String> javaModules) {
         this.javaModules = javaModules;
         for (String name : javaModules.keySet())
-            if (CORE_MODULES.contains(name) || RESERVED_MODULES.contains(name) || DEFAULT_IMPORTS.containsKey(name))
+            if (CORE_MODULES.contains(name) || RESERVED_MODULES.contains(name) || DEFAULT_IMPORTS.containsKey(name)
+                    || name.startsWith("Elci."))
                 throw new IllegalArgumentException("ELCI4001: [java-modules] may not map " + name
                         + ", a module name of Elci's core library");
         for (String name : sources.keySet())
-            if (RESERVED_MODULES.contains(name))
+            if (RESERVED_MODULES.contains(name) || name.startsWith("Elci."))
                 throw new Diagnostic("ELCI2104", new Token(name, Token.Kind.NAME, 0, 1, 1, name),
                         "The module name " + name + " is reserved for Elci's core library; rename this module");
         var allSources = new LinkedHashMap<>(sources);
@@ -162,6 +172,10 @@ public final class Modules {
                             if (BUILT_IN_CONSTRUCTORS.containsKey(variant.name()))
                                 throw new Diagnostic("ELCI2011", union.token(), variant.name() + " is a constructor of the"
                                         + " built-in " + BUILT_IN_CONSTRUCTORS.get(variant.name()) + " type; choose another name");
+                    for (var imp : module.imports())
+                        if (imp.module().equals(ASSOC_MODULE) && !CORE_MODULES.contains(name))
+                            throw new Diagnostic("ELCI2104", imp.token(), ASSOC_MODULE
+                                    + " is internal to Elci's core library; use Map or Dict");
                     for (var imp : module.imports())
                         if (DEFAULT_IMPORTS.containsKey(imp.alias()) && !imp.alias().equals(imp.module()))
                             throw new Diagnostic("ELCI2104", imp.token(), "The alias " + imp.alias()
@@ -411,6 +425,9 @@ public final class Modules {
                     var functions = INTRINSICS.get(imp.module()).getValue();
                     for (String function : functions)
                         scope.name(imp.alias() + "." + function, intrinsicPrefix + function, named, imp.module() + "." + function);
+                    // Their types can be named qualified too, like `Map.Map`: `Data.Data`, `Bytes.Bytes`.
+                    if (imp.module().equals(DATA_MODULE)) scope.type(imp.alias() + ".Data", "Data", named, null);
+                    if (imp.module().equals(BYTES_MODULE)) scope.type(imp.alias() + ".Bytes", "Bytes", named, null);
                     for (String exposed : imp.exposing()) {
                         if (exposed.equals(".."))
                             for (String function : functions)
@@ -652,7 +669,7 @@ public final class Modules {
                     name = entry.getValue() + t.name().substring(entry.getKey().length());
         if (name == null) {
             if (t.name().startsWith("Record:")
-                    || Set.of("Int", "Bool", "String", "Unit", "Bytes", "Data", "Map", "Array", "JulcOptional", "List", "Maybe", "Tuple", "->")
+                    || Set.of("Int", "Bool", "String", "Unit", "Bytes", "Data", "Map", "Dict", "Array", "JulcOptional", "List", "Maybe", "Tuple", "->")
                             .contains(t.name())
                     || !t.name().contains(".") && Character.isLowerCase(t.name().charAt(0)))
                 name = t.name();

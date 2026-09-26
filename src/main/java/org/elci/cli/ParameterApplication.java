@@ -49,7 +49,8 @@ final class ParameterApplication {
             throw new IllegalArgumentException("ELCI4001: validator " + validator + ": ABI drift from "
                     + group.expectedAbi() + "; parameters were not applied");
         var values = new ArrayList<PlutusData>();
-        for (var parameter : build.parameters()) {
+        for (int i = 0; i < build.parameters().size(); i++) {
+            var parameter = build.parameters().get(i);
             var data = parse(project.root(), parameter.name(), arguments.get(parameter.name()));
             var check = BoundaryPrograms.check(parameter.type(), build.namedTypes(), options);
             var result = JulcVm.create().evaluateWithArgs(check, build.target().ledgerTarget(), List.of(data), null,
@@ -57,6 +58,9 @@ final class ParameterApplication {
             if (!(result instanceof EvalResult.Success))
                 throw new IllegalArgumentException("ELCI4001: parameter " + parameter.name()
                         + " is not a well-formed " + parameter.source() + " value");
+            if (!build.canonical().get(i).apply(data).equals(data))
+                throw new IllegalArgumentException("ELCI4001: parameter " + parameter.name()
+                        + " has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats");
             values.add(data);
         }
         var applied = build.program().applyParams(values.toArray(PlutusData[]::new));

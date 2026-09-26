@@ -40,7 +40,7 @@ parser, `ELCI20` from type checking, `ELCI21` from modules and imports, `ELCI3` 
 | `ELCI1002` | Malformed or unsupported syntax |
 | `ELCI2001` | Invalid pattern or expression form |
 | `ELCI2002` | Type mismatch or infinite type |
-| `ELCI2003` | Unsupported equality, ordering or append type; a constrained type variable that is missing or misnamed |
+| `ELCI2003` | Unsupported equality, ordering or append type; a constrained type variable that is missing or misnamed; a `Dict` decoded from Data whose keys aren't comparable |
 | `ELCI2004` | Missing required top-level signature |
 | `ELCI2005` | Unknown value name |
 | `ELCI2006` | Duplicate binder or unreachable pattern |
@@ -59,8 +59,8 @@ parser, `ELCI20` from type checking, `ELCI21` from modules and imports, `ELCI3` 
 | `ELCI2105` | Unsupported Java export signature, with the provider's reason |
 | `ELCI3001` | The inferred program cannot be lowered, such as `Julc.Data.decode` or a Java library generic at a type nothing determines |
 | `ELCI3002` | Specialization limit or polymorphic recursion |
-| `ELCI3003` | A generic library type argument or a Data conversion needs a Data encoding |
-| `ELCI4001` | Invalid project configuration or command-line request, including a `[java-modules]` key that names a core module |
+| `ELCI3003` | A generic library type argument or a Data conversion needs a Data encoding; a Java library generic used at a type containing a `Dict` |
+| `ELCI4001` | Invalid project configuration or command-line request, including a `[java-modules]` key that names a core module and an `elci apply` parameter that doesn't fit its type |
 | `ELCI4002` | Julc's backend rejected the generated code |
 | `ELCI4003` | The Julc backend lacks a capability the program needs |
 
@@ -186,12 +186,14 @@ src/Main.elm:11:12: ELCI2003: The operator == cannot compare Int -> Int values: 
 ```
 
 Equality is rejected for functions, `Data`, `Map`, `Array` and imported types without approved
-equality. When the offending type is inside another, the message names it:
+equality. A `Dict` has equality when its values do. When the offending type is inside another, the message
+names it:
 `The operator == cannot compare List (Int -> Int) values: Int -> Int is part of them, and functions have no
 equality`. `++` needs a `String` or a `List`: `1 ++ 2` gives
 `ELCI2003: The operator ++ appends String or List values, not Int`.
 
-**Fix:** compare the values you care about, such as a map's lookups or a decoded datum.
+**Fix:** compare the values you care about, such as a map's lookups or a decoded datum, or keep keyed data
+in a `Dict`, which has equality.
 
 Ordering (`<`, `compare`, `max`, `List.sort` and the rest) needs a
 [comparable type](/reference/core-modules/#comparable-types). The message names the operation and the part
@@ -240,6 +242,15 @@ src/Main.elm:6:10: ELCI2003: The operator > compares values of type `a`, but the
 ```text
 src/Main.elm:4:1: ELCI2003: The annotation of `total` uses `number`, Elm's type variable for Int or Float. Elci has one number type: write Int
 ```
+
+Decoding a `Dict` checks that its keys are in order, so a `Dict` in a datum, a redeemer, a parameter or a
+`Julc.Data.decode` result needs comparable keys:
+
+```text
+src/Main.elm:9:5: ELCI2003: A Dict decoded from Data needs comparable keys, to check that they are in order; Bool is not comparable. Use a Map instead
+```
+
+**Fix:** use a `Map`, whose keys may be any type with a Data encoding.
 
 ### `ELCI2004`: missing signature
 
@@ -545,14 +556,14 @@ A qualified name that a core module lacks lists what the module has. For Elm fun
 provide, the message says what to use instead:
 
 ```text
-src/Main.elm:8:5: ELCI2104: Elci's Map module has no lookup. It has empty, filter, foldl, fromList, get, insert, isEmpty, keys, map, member, remove, singleton, size, toList, update, values
+src/Main.elm:8:5: ELCI2104: Elci's Map module has no lookup. It has empty, filter, foldl, foldr, fromList, get, insert, isEmpty, keys, map, member, remove, singleton, size, toList, update, values
 src/Main.elm:6:5: ELCI2104: Elci has no Debug.log; use Debug.trace message value, which returns value
 src/Main.elm:6:5: ELCI2104: Elci has no String.length; a String is UTF-8 text; Bytes.length (Bytes.fromString s) is its byte length
 src/Main.elm:6:5: ELCI2104: Elci has no Bytes.lessThan; bytes are comparable: write a < b
 ```
 
-Using a module that isn't imported by default, such as `Bytes`, `Map`, `Array` or `Julc.Data`, without
-its import names the import to add:
+Using a module that isn't imported by default, such as `Bytes`, `Dict`, `Map`, `Array` or `Julc.Data`,
+without its import names the import to add:
 
 ```text
 src/Main.elm:6:5: ELCI2104: Bytes.fromString needs the Bytes module; add `import Bytes`
@@ -579,9 +590,12 @@ Core module names are reserved, for modules and for aliases (see
 
 ```text
 src/String.elm:1:1: ELCI2104: The module name String is taken by Elci's core library; rename this module
-src/Dict.elm:1:1: ELCI2104: The module name Dict is reserved for Elci's core library; rename this module
+src/Set.elm:1:1: ELCI2104: The module name Set is reserved for Elci's core library; rename this module
 src/Main.elm:3:1: ELCI2104: The alias String names a core module that every module imports; choose another alias for Utils
 ```
+
+Modules whose names start with `Elci.` belong to the core library too, and the one it uses internally can't
+be imported: `ELCI2104: Elci.Assoc is internal to Elci's core library; use Map or Dict`.
 
 A name that two imports expose, one of them possibly a default import, is `ELCI2102` where you use it:
 
@@ -678,6 +692,15 @@ src/Main.elm:9:5: ELCI3003: No strict decoder for org.julclang.ledger.Value: The
 **Fix:** use a Data-encodable type. Functions, `()`, `Array`, `Value` and types containing a `Value`
 have no encoding.
 
+A Java library's generic function can't be used at a type that contains a `Dict`. The library could build
+the dictionary itself and skip the check that its keys are in order:
+
+```text
+src/Main.elm:14:18: ELCI3003: Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; pass a Map or a List and build the Dict with Dict.fromList
+```
+
+**Fix:** pass the library a `Map` or a `List`, and build the `Dict` with `Dict.fromList`.
+
 ## Configuration and backend errors
 
 ### `ELCI4001`: configuration or command line
@@ -686,10 +709,12 @@ have no encoding.
 elci: ELCI4001: unknown validator 'treasury'; configured: main
 elci: ELCI4001: eval runs an [entrypoint] function; test validators with elci test
 elci: ELCI4001: parameter owner is not a well-formed org.julclang.ledger.PubKeyHash value
+elci: ELCI4001: parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats
 ```
 
-The message says what to change. The [CLI](/reference/cli/) and [`elci.toml`](/reference/configuration/)
-references list the others. Some configuration errors have no code yet; they are listed below.
+The message says what to change. A `Dict` parameter must list its keys in ascending order, each once; see
+[parameterized validators](/contracts/parameters/#what-apply-checks). The [CLI](/reference/cli/) and
+[`elci.toml`](/reference/configuration/) references list the others. Some configuration errors have no code yet; they are listed below.
 
 ### `ELCI4002` and `ELCI4003`: backend
 

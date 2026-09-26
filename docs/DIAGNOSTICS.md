@@ -9,7 +9,7 @@ renders them as `path:line:column: code: message`.
 | `ELCI1002` | Malformed or unsupported syntax |
 | `ELCI2001` | Invalid pattern or expression form |
 | `ELCI2002` | Type mismatch or infinite type |
-| `ELCI2003` | Unsupported equality, ordering or append type; a constrained type variable (`comparable`, `appendable`) missing or misnamed, or `number` |
+| `ELCI2003` | Unsupported equality, ordering or append type; a constrained type variable (`comparable`, `appendable`) missing or misnamed, or `number`; a `Dict` decoded from Data whose keys are not comparable |
 | `ELCI2004` | Missing required top-level signature |
 | `ELCI2005` | Unknown value name |
 | `ELCI2006` | Duplicate binder or unreachable pattern |
@@ -28,8 +28,8 @@ renders them as `path:line:column: code: message`.
 | `ELCI2105` | Unsupported Java export signature, with provider reason |
 | `ELCI3001` | PIR lowering cannot represent the inferred program, such as `Julc.Data.decode` or a generic Java export at a type nothing determines |
 | `ELCI3002` | Specialization or polymorphic-recursion limit |
-| `ELCI3003` | Generic library type argument violates the export's constraint (for example `DATA_ENCODABLE`) |
-| `ELCI4001` | Invalid project configuration or CLI request, including a `[java-modules]` key that names a core module |
+| `ELCI3003` | Generic library type argument violates the export's constraint (for example `DATA_ENCODABLE`), or contains a `Dict`, which a Java library could build without the key-order check |
+| `ELCI4001` | Invalid project configuration or CLI request, including a `[java-modules]` key that names a core module and an `elci apply` parameter that doesn't fit its type (such as a `Dict` whose keys are not strictly ascending) |
 | `ELCI4002` | Julc backend rejected generated PIR; reported at the Elci declaration it names, with the `JULC00xx` code |
 | `ELCI4003` | The Julc backend lacks a contract revision or capability the program needs |
 

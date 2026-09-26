@@ -276,7 +276,8 @@ exactly what the ledger could send.
 - **`Bytes` and `String`:** up to 64 bytes. Byte strings are sometimes 28 or 32
   bytes long, the size of a hash. A parameter typed `PubKeyHash`, `ScriptHash`,
   `ValidatorHash` or `PolicyId` is exactly 28 bytes; `TxId` and `DatumHash` are 32.
-- **Lists and `Map`s:** grow with the run. Map keys are distinct.
+- **Lists, `Map`s and `Dict`s:** grow with the run. Map keys are distinct; a `Dict`'s keys
+  are also sorted, as decoding requires.
 - **Records, unions, `Maybe` and tuples:** built from their fields, with every
   constructor used.
 - **Recursive unions:** stay finite, and their first runs use the shallowest

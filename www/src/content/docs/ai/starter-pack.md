@@ -25,7 +25,8 @@ This page is optimized for AI ingestion, not for humans. For the tutorial, see
 - **No Elm packages.** `elm.json` is not used. There is no package manager.
 - **Elm's core library, partly.** `Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String` and `Debug` are
   imported by default, as in Elm, with Elm's names and argument orders, but `String` has only five
-  functions and `Debug` only `trace`. `Dict`, `Set`, `Char` and `Float` **do not exist** (section 3.3).
+  functions and `Debug` only `trace`. `Dict` exists with Elm's API (`import Dict exposing (Dict)`); `Set`,
+  `Char` and `Float` **do not exist** (section 3.3).
 - **Strict, not lazy.** Every `let` value and every function argument is evaluated (section 4).
 - **Configuration decides deployment.** Handlers are ordinary functions; `elci.toml` says which
   function serves which ledger purpose (section 2).
@@ -106,7 +107,8 @@ purpose = "function"
 6. `expected-abi = "path"`: `check`, `build` and `apply` fail if the ABI (`abi.json`) differs.
 7. `[java-modules]`: `"Module.Name" = "fully.qualified.Class"`. You choose the module name. `Julc.TypedMap`
    and `Julc.TypedArray` are reserved, and so are the core module names (`Basics`, `List`, `Maybe`,
-   `Result`, `String`, `Tuple`, `Map`, `Array`, `Dict`, `Set`, `Value`, `Elci`).
+   `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`, `Set`, `Value`, `Elci`) and names starting with
+   `Elci.`.
 8. `[tests]`: `source-directories`, default `["tests"]`.
 9. TOML subset: one `key = value` per line; values are quoted strings without escapes or single-line
    arrays of quoted strings; comments are whole lines starting with `#` (no trailing comments); unknown
@@ -130,8 +132,8 @@ purpose = "function"
   except where a value is created: `Data.decode` and generic Java functions (`ELCI3001`).
 - Self-recursion and mutually recursive functions (top-level or local).
 - Types: `Int` (arbitrary precision), `Bool`, `String`, `()`, `Bytes`, `Data`, `List a`, `Maybe a`,
-  `Result error value`, `Order`, `Map k v`, `Array a`, tuples of 2 or 3, closed records, custom types
-  (generic, recursive).
+  `Result error value`, `Order`, `Dict k v` (comparable keys), `Map k v`, `Array a`, tuples of 2 or 3,
+  closed records, custom types (generic, recursive).
 - `type alias R = { x : Int }` (also a constructor `R 1`); `type T a = A a | B`.
 - Records: `{ x = 1 }`, `r.x`, `{ r | x = 2 }`, destructuring `{ x, y }` in parameters and `let`.
 - `case` with nested patterns: constructors, `[]`, `[ a, b ]`, `a :: rest`, tuples, record fields, `as`,
@@ -159,9 +161,11 @@ purpose = "function"
 | `port module`, `import Html` | `ELCI1002` / `ELCI2101` |
 | Polymorphic recursion, recursive values (`a = b + 1`, `b = a + 1`) | `ELCI2002` / `ELCI2008` |
 | `==` on functions, `Data`, `Map`, `Array`, `Value` | `ELCI2003` |
-| `<`, `compare`, `List.sort` on `Bool`, records, custom types, `Maybe`, `Map`, `Data`, `TxOutRef` | `ELCI2003`; use `List.sortBy` with a key |
-| Module or alias named `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Array`, `Dict`, `Set`, `Value`, `Elci` | `ELCI2104` |
-| Constructors named `Just`, `Nothing`, `True`, `False`; types named `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Map`, `Array`, `Float` | `ELCI2011` |
+| `<`, `compare`, `List.sort` on `Bool`, records, custom types, `Maybe`, `Dict`, `Map`, `Data`, `TxOutRef` | `ELCI2003`; use `List.sortBy` with a key |
+| `Dict` keys that are not comparable (`Dict.get` on a `Dict Credential Int`; a `Dict Bool Int` in a datum or `Data.decode`) | `ELCI2003`; use a `Map` |
+| A Java library generic at a type containing a `Dict` | `ELCI3003`; pass a `Map` or `List`, then `Dict.fromList` |
+| Module named `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`, `Set`, `Value`, `Elci` or `Elci.*`; alias named after a default import (`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Debug`) | `ELCI2104` |
+| Constructors named `Just`, `Nothing`, `True`, `False`; types named `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Dict`, `Map`, `Array`, `Float` | `ELCI2011` |
 | `f <\| x \|> g`, `f << g >> h` (opposite associativity mixed) | `ELCI1002`; add parentheses |
 | `Tuple a b`, `Unit` as type names | `ELCI2012`; write `( a, b )`, `()` |
 
@@ -172,8 +176,7 @@ purpose = "function"
 | `String.length s` | `Bytes.length (Bytes.fromString s)` (UTF-8 byte count) |
 | `String.toInt`, `split`, `slice`, `toUpper` and other `String.*` | none; keep numbers as `Int` and bytes as `Bytes`. `String` has only `fromInt`, `isEmpty`, `append`, `concat`, `join` |
 | `String.fromFloat`, `toFloat`, `round`, `sqrt`, `pi` | none; no `Float`: use scaled `Int` |
-| `Dict` | `Map` (`import Map`) |
-| `Set` | `Map k Bool` or a `List` (`Map k ()` is rejected: `()` has no Data encoding) |
+| `Set` | `Dict k Bool` or a `List` (`Dict k ()` is rejected: `()` has no Data encoding) |
 | `Char`, `'a'` | none |
 | `List.map4`, `Maybe.map4`, `Result.map5`, … | nest `map3`, or `case` |
 | `Debug.log`, `Debug.toString`, `Debug.todo` | `Debug.trace : String -> a -> a`; `String.fromInt` for numbers |
@@ -238,8 +241,8 @@ cpu 65205046, mem 276517
 7. **Failure:** a runtime failure (division by zero, out-of-range byte, failed decode) or a handler result
    of `False` rejects the transaction. There are no exceptions to catch.
 8. **Equality** (`==`, `/=`): Int, Bool, String, `()`, Bytes, ledger hashes of the same type, lists, tuples,
-   records, `Maybe` and custom types of these; imported types with approved equality. Both operands are
-   evaluated once, left to right.
+   records, `Maybe`, `Dict` (same bindings) and custom types of these; imported types with approved
+   equality. Not `Map`. Both operands are evaluated once, left to right.
 9. **Ordering** (`<`, `<=`, `>`, `>=`, `compare`, `min`, `max`, `List.sort`): Int numerically; String by
    UTF-8 bytes (`"Zebra" < "apple"`); Bytes and ledger hashes lexicographically by unsigned byte, a
    proper prefix first (`#ff` > `#0001`); lists lexicographically; tuples by component. Every order agrees
@@ -266,7 +269,8 @@ Datums, redeemers and parameters cross the script boundary as Plutus Data and ar
 | `Result e a` | `Ok x` = constructor 0 `[x]`; `Err e` = constructor 1 `[e]` (the **reverse** of PlutusTx `Either`) |
 | `Order` | `LT`, `EQ`, `GT` = constructors 0, 1, 2 |
 | `JulcOptional a` (Java `Optional`) | `Some x` = constructor 0 `[x]`; `None` = constructor 1 |
-| `List a` / `Map k v` | list / map |
+| `List a` / `Map k v` | list / map (in the map's order) |
+| `Dict k v` | map with **strictly ascending keys**; unsorted or repeated keys fail to decode (datum, redeemer, parameter, `Data.decode`) |
 | `Array a`, functions | **no encoding**; cannot be stored in data (`ELCI2013`) |
 
 ```elm
@@ -318,11 +322,13 @@ concrete types.
 | `mint`, `withdraw`, `certify`, `vote`, `propose` | `params -> redeemer -> ScriptContext -> Bool` |
 
 - Datum, redeemer and parameter types need a strict Data boundary: your records and custom types, `Int`,
-  `Bool`, `String`, `Bytes`, `()`, tuples, lists, maps, `Maybe`, and ledger types such as `PubKeyHash`,
-  `TxOutRef`, `Credential`. Not: functions, `Array`, `ScriptContext`, `TxOut`, `TxInfo`, `Value`.
+  `Bool`, `String`, `Bytes`, `()`, tuples, lists, `Dict`, `Map`, `Maybe`, and ledger types such as
+  `PubKeyHash`, `TxOutRef`, `Credential`. Not: functions, `Array`, `ScriptContext`, `TxOut`, `TxInfo`,
+  `Value`.
 - Use `()` for an unused redeemer or datum. Only the selected handler's datum and redeemer are decoded.
 - A validator always checks the purpose; purposes without a handler are rejected.
-- Parameters are decoded but **not validated on-chain**; `elci apply` validates them off-chain.
+- Parameters are decoded but **not validated on-chain**; `elci apply` validates them off-chain. Exception:
+  the key order of a `Dict` (in a datum, redeemer or parameter) is checked on every run.
 
 ## 7. The script context and ledger types
 
@@ -412,7 +418,7 @@ import Tuple
 import Debug
 ```
 
-`Bytes`, `Map`, `Array` and `Julc.Data` need explicit imports. Using one without its import is
+`Bytes`, `Dict`, `Map`, `Array` and `Julc.Data` need explicit imports. Using one without its import is
 `` ELCI2104: Bytes.fromString needs the Bytes module; add `import Bytes` ``. Machine-readable signatures of
 every module are in `/ai/catalog.json`.
 
@@ -521,9 +527,41 @@ concat : List String -> String
 join : String -> List String -> String           -- join ", " [ "a", "b" ] == "a, b"
 ```
 
-**Map** (`import Map` or `import Map exposing (Map)`; association list by key's Data encoding; O(n)
-lookups; `insert` puts the binding first; `fromList`, `filter` and `map` are O(n²) and `filter`/`map` keep
-order; no `==`):
+**Dict** (`import Dict exposing (Dict)`; Elm's API; a Plutus map with keys strictly ascending; keys must be
+comparable; `keys`/`toList`/folds in ascending key order; `get`/`member`/`insert`/`remove` O(n), stopping at
+the first key not smaller; `fromList` O(n log n), last binding wins; `union` prefers the left; `==` compares
+bindings):
+
+```text
+empty : Dict k v
+singleton : comparable -> v -> Dict comparable v
+insert : comparable -> v -> Dict comparable v -> Dict comparable v
+update : comparable -> (Maybe v -> Maybe v) -> Dict comparable v -> Dict comparable v
+remove : comparable -> Dict comparable v -> Dict comparable v
+isEmpty : Dict k v -> Bool
+member : comparable -> Dict comparable v -> Bool
+get : comparable -> Dict comparable v -> Maybe v
+size : Dict k v -> Int
+keys : Dict k v -> List k
+values : Dict k v -> List v
+toList : Dict k v -> List ( k, v )
+fromList : List ( comparable, v ) -> Dict comparable v
+map : (k -> a -> b) -> Dict k a -> Dict k b
+foldl : (k -> v -> b -> b) -> b -> Dict k v -> b          -- smallest key first
+foldr : (k -> v -> b -> b) -> b -> Dict k v -> b          -- largest key first
+filter : (comparable -> v -> Bool) -> Dict comparable v -> Dict comparable v
+partition : (comparable -> v -> Bool) -> Dict comparable v -> ( Dict comparable v, Dict comparable v )
+union : Dict comparable v -> Dict comparable v -> Dict comparable v
+intersect : Dict comparable v -> Dict comparable v -> Dict comparable v
+diff : Dict comparable a -> Dict comparable b -> Dict comparable a
+merge : (comparable -> a -> result -> result) -> (comparable -> a -> b -> result -> result) -> (comparable -> b -> result -> result) -> Dict comparable a -> Dict comparable b -> result -> result
+```
+
+**Map** (`import Map` or `import Map exposing (Map)`; the ledger's association list, keys compared by Data
+encoding, any Data-encodable key; O(n) lookups; `insert` puts the binding first; `fromList` is O(n²);
+`filter`/`map` are O(n) and keep order; no `==`. A map decoded from Data may repeat a key: `get` returns
+the first binding, `remove`/`insert` drop every binding of it. Use it for ledger maps such as
+`txInfo.withdrawals` and for keys that are not comparable; use `Dict` otherwise):
 
 ```text
 empty : Map k v
@@ -540,6 +578,7 @@ values : Map k v -> List v
 toList : Map k v -> List ( k, v )
 fromList : List ( k, v ) -> Map k v
 foldl : (k -> v -> b -> b) -> b -> Map k v -> b
+foldr : (k -> v -> b -> b) -> b -> Map k v -> b
 filter : (k -> v -> Bool) -> Map k v -> Map k v
 map : (k -> a -> b) -> Map k a -> Map k b
 ```
@@ -694,7 +733,8 @@ subject comes **first**.
 | `ByteString.toHex`, `intToDecimalString` (`ByteStringLib`) | `Bytes -> Bytes`, `Int -> Bytes` |
 
 Unsupported signatures (for example `MathLib.divMod`, all of `BlsLib`) are `ELCI2105`. Generic Java
-methods are specialized per use; type arguments must be Data-encodable (`ELCI3003`).
+methods are specialized per use; type arguments must be Data-encodable and must not contain a `Dict`
+(`ELCI3003`).
 
 ## 10. The CLI loop
 
@@ -712,7 +752,8 @@ Run from the project directory (or pass it as the first argument). Exit status i
    validator.plutus.json, abi.json}`; `--validator <name>` selects.
 5. `elci apply --validator <name> --param name=<json>`: applies parameters, checking them off-chain.
    JSON is cardano-cli detailed schema: `{"int": 5}`, `{"bytes": "hex"}`, `{"list": [...]}`,
-   `{"map": [{"k": ..., "v": ...}]}`, `{"constructor": 0, "fields": [...]}`; `@file` reads a file.
+   `{"map": [{"k": ..., "v": ...}]}`, `{"constructor": 0, "fields": [...]}`; `@file` reads a file. A `Dict`
+   parameter must list its keys strictly ascending (integers numerically, bytes lexicographically).
 
 Error format: `path:line:col: ELCIxxxx: message`; for a validator the first line is
 `elci: .../elci.toml:<line>: [validators.<name>]`. Configuration errors start with `elci:`.
@@ -744,8 +785,8 @@ Error format: `path:line:col: ELCIxxxx: message`; for a validator the first line
 | `ELCI2105` | `...MathLib.divMod: Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>` | use another export |
 | `ELCI3001` | `Cannot determine the type converted by Julc.Data.decode; add a type annotation` | annotate (`let xs : List Int`) |
 | `ELCI3002` | specialization limit (256) | remove polymorphic recursion |
-| `ELCI3003` | `Type argument T = Unit of firstOr must have a Plutus Data encoding`, `No strict decoder for ...Value` | Data-encodable type |
-| `ELCI4001` | `unknown validator 'x'`, `eval runs an [entrypoint] function; test validators with elci test`, `ABI drift from ...` | fix config or command |
+| `ELCI3003` | `Type argument T = Unit of firstOr must have a Plutus Data encoding`, `No strict decoder for ...Value`, `Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; ...` | Data-encodable type; no `Dict` through Java generics |
+| `ELCI4001` | `unknown validator 'x'`, `eval runs an [entrypoint] function; test validators with elci test`, `ABI drift from ...`, `parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats` | fix config or command; sort `Dict` keys |
 | `ELCI4002`, `ELCI4003` | backend rejected or lacks a capability | compiler issue; report it |
 | (none) | `Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"`, `Unknown configuration key: [project] name` | fix `elci.toml` |
 
@@ -754,10 +795,10 @@ A failing scenario that was never run prints `cannot prepare validator 'badge': 
 
 ## 12. Anti-patterns agents get wrong
 
-1. **Using Elm APIs Elci lacks** (`Dict`, `Set`, `Debug.log`, `String.length`, `String.toInt`,
+1. **Using Elm APIs Elci lacks** (`Set`, `Debug.log`, `String.length`, `String.toInt`,
    `List.map4`, `.field`). Use section 3.3. The core functions in section 8 do exist; use them rather than
    writing your own or mapping `Julc.Math`.
-2. **Forgetting imports.** `Map`, `Array`, `Bytes`, `Julc.Data` must be imported; `Basics`, `List`,
+2. **Forgetting imports.** `Dict`, `Map`, `Array`, `Bytes`, `Julc.Data` must be imported; `Basics`, `List`,
    `Maybe`, `Result`, `String`, `Tuple` and `Debug` are implicit. `Julc.*` Java modules also need a
    `[java-modules]` mapping.
 3. **Omitting type signatures** on top-level declarations (`ELCI2004`).
@@ -770,7 +811,8 @@ A failing scenario that was never run prints `cannot prepare validator 'badge': 
 9. **Assuming `Maybe` = Java `Optional`** tags: convert with `Data.fromOptional` / `Data.toOptional`.
 10. **Ignoring the `-1` sentinel** of `Interval.finiteLowerBound`/`finiteUpperBound`.
 11. **Storing `Array` in data**, or building big maps with `Map.fromList` (quadratic; a 100-entry map
-    exceeds a transaction's CPU budget). Keep lists in data, convert with `Array.fromList` once.
+    exceeds a transaction's memory budget). Keep lists in data, convert with `Array.fromList` once; build
+    keyed data with `Dict.fromList` (O(n log n)).
 12. **`Data.decode` without a known type** (`ELCI3001`). Annotate the binding.
 13. **Missing `Scenario.parameters`**: a scenario must pass every validator parameter, in order.
 14. **Importing `Expect`/`Scenario`/`Property` from `src`** (`ELCI2101`). They are for `tests/` only.
@@ -785,6 +827,12 @@ A failing scenario that was never run prints `cannot prepare validator 'badge': 
 22. **Reading a PlutusTx `Either` as `Result`.** `Ok` is constructor 0 and `Err` 1, the reverse of
     `Left`/`Right`.
 23. **Expensive `Maybe.withDefault` defaults.** The default is always evaluated; use `case` instead.
+24. **`Map` for your own keyed data.** Use `Dict` when keys are comparable: it is sorted, has `==` and
+    builds in O(n log n). Keep `Map` for ledger maps (`txInfo.withdrawals`, `txInfo.redeemers`) and keys
+    that are not comparable.
+25. **Unsorted `Dict` data.** A `Dict` in a datum, redeemer or parameter must have strictly ascending keys,
+    or it fails to decode. Build test data with `Data.encode (Dict.fromList ...)`; off-chain, sort keys in
+    Elci's order, not CBOR's canonical order (which puts shorter byte strings first).
 
 ## 13. Canonical examples
 
@@ -1085,7 +1133,7 @@ validator badge: applied 1 parameter(s); hash d051482496116cc565cc69bfeae7b970dc
 ```elm title="src/Main.elm"
 module Main exposing (main)
 
-import Map exposing (Map)
+import Dict exposing (Dict)
 
 
 type alias Purchase =
@@ -1094,14 +1142,14 @@ type alias Purchase =
     }
 
 
-prices : Map String Int
+prices : Dict String Int
 prices =
-    Map.fromList [ ( "apple", 3 ), ( "pear", 5 ) ]
+    Dict.fromList [ ( "apple", 3 ), ( "pear", 5 ) ]
 
 
 lineTotal : Purchase -> Maybe Int
 lineTotal purchase =
-    Maybe.map (\price -> price * purchase.quantity) (Map.get purchase.item prices)
+    Maybe.map (\price -> price * purchase.quantity) (Dict.get purchase.item prices)
 
 
 total : List Purchase -> Int
@@ -1129,14 +1177,14 @@ main =
 ```text
 $ elci eval
 ( 11, Nothing )
-cpu 49328067, mem 164996
+cpu 43542823, mem 172473
 trace: no price for kiwi
 ```
 
 ## 14. Checklist before generating Elci code
 
 1. Is every top-level declaration annotated, and every module name equal to its file path?
-2. Did I avoid every Elm API in section 3.3 and import `Map`/`Array`/`Bytes`/`Julc.Data` where used?
+2. Did I avoid every Elm API in section 3.3 and import `Dict`/`Map`/`Array`/`Bytes`/`Julc.Data` where used?
 3. Does each handler match section 6, with parameters first, and is it exposed and listed in `elci.toml`?
 4. Are datum, redeemer and parameter types Data-encodable (no functions, `Array`, `Value`, `TxOut`)?
 5. Do I compare `PubKeyHash` with `PubKeyHash` (or `.hash` with `Bytes`), never mixed?

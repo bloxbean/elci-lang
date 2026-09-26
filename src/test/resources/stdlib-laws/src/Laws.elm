@@ -1,4 +1,4 @@
-module Laws exposing (consistent, flipOrder, isOrdered, main, occurrences, small, transitive)
+module Laws exposing (consistent, flipOrder, isOrdered, lastValue, main, occurrences, small, strictlyAscending, transitive)
 
 {-| Helpers for the standard library's law tests (ADR-008).
 -}
@@ -69,3 +69,31 @@ transitive a b c =
 
     else
         True
+
+
+{-| Whether the values are strictly ascending, and so distinct.
+-}
+strictlyAscending : List comparable -> Bool
+strictlyAscending items =
+    case items of
+        first :: second :: rest ->
+            first < second && strictlyAscending (second :: rest)
+
+        _ ->
+            True
+
+
+{-| The value of the last pair with the key, if any.
+-}
+lastValue : k -> List ( k, v ) -> Maybe v
+lastValue key pairs =
+    List.foldl
+        (\( k, v ) found ->
+            if k == key then
+                Just v
+
+            else
+                found
+        )
+        Nothing
+        pairs

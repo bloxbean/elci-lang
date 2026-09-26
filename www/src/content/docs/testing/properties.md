@@ -279,6 +279,7 @@ Every generated argument is a valid value of its type. It is produced as Plutus 
 | `TxId`, `DatumHash` parameter | exactly 32 bytes | 32 zero bytes |
 | `TokenName` parameter | 0 to 32 bytes | `#(empty)` |
 | `List a`, `Map k v` | grow with the run; map keys are distinct | shorter lists and maps |
+| `Dict k v` | grow with the run; keys are sorted and distinct, as decoding requires | smaller dictionaries, still sorted |
 | records, tuples | built from their fields | each field shrinks |
 | unions, `Maybe` | every constructor is used | earlier constructors, such as `Nothing` |
 | recursive unions | always finite; the first runs use the shallowest constructors | their own subterms |

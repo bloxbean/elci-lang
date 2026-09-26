@@ -31,7 +31,7 @@ preview: the profile below is implemented and tested, and everything outside it 
 | Custom types | Generic and recursive unions; `Maybe` is built in, and `Result` and `Order` come from the core library. |
 | Patterns | Nested constructors, lists, cons, tuples, record fields, `as`, `_`, unit, and `Bool`, `Int` and `String` literals. Exhaustiveness and reachability are checked. |
 | Equality and order | Structural `==` and `/=` for equality-capable types, and `<`, `compare` and sorting for comparable types (below). |
-| Maps and arrays | `Map k v` (like Elm's `Dict`) and `Array a` (constant-time `get`). |
+| Dictionaries, maps and arrays | `Dict k v` (Elm's `Dict`, stored as a sorted Plutus map), `Map k v` (the ledger's association map) and `Array a` (constant-time `get`). |
 | Bytes | The `Bytes` module: every byte-string builtin. |
 | Ledger access | Typed views of the script context, nominal hash types, approved constructors, patterns and equality. |
 | Data conversions | `Julc.Data.decode` and `encode`, optional adapters. |
@@ -40,8 +40,8 @@ preview: the profile below is implemented and tested, and everything outside it 
 | Tests | `elci test` with unit tests, transaction scenarios and property tests. |
 
 **Not supported:** `Float`, `/` and `number`, typeclasses and user-defined constraints, extensible
-records and row polymorphism, higher-rank types, polymorphic recursion, ports and effects, Elm's `Dict`,
-`Set` and `Char` modules and most of `String`, record accessor functions such as `.name`, character
+records and row polymorphism, higher-rank types, polymorphic recursion, ports and effects, Elm's `Set` and
+`Char` modules and most of `String`, record accessor functions such as `.name`, character
 literals, hexadecimal literals, `%`, tuples of four or more, and Elm packages.
 
 ## Syntax summary
@@ -187,8 +187,8 @@ import Tuple
 import Debug
 ```
 
-`Bytes`, `Map`, `Array`, `Julc.Data` and Java library modules are imported explicitly. Names resolve as in
-Elm, with one addition:
+`Bytes`, `Dict`, `Map`, `Array`, `Julc.Data` and Java library modules are imported explicitly. Names resolve
+as in Elm, with one addition:
 
 - A module's own declarations shadow every import.
 - Two imports that expose different things under one name make it ambiguous where it is used
@@ -202,20 +202,21 @@ Elm, with one addition:
 
 ### Reserved names
 
-- **Module names.** `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map` and `Array` are core
-  modules, and `Dict`, `Set`, `Value` and `Elci` are reserved for the core library. A project module can't
-  use these names, and neither can a `[java-modules]` key:
+- **Module names.** `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict` and `Array` are
+  core modules, and `Set`, `Value` and `Elci` are reserved for the core library. Neither a project module
+  nor a `[java-modules]` key can use these names, or a name that starts with `Elci.`:
 
   ```text
   src/String.elm:1:1: ELCI2104: The module name String is taken by Elci's core library; rename this module
-  src/Dict.elm:1:1: ELCI2104: The module name Dict is reserved for Elci's core library; rename this module
+  src/Set.elm:1:1: ELCI2104: The module name Set is reserved for Elci's core library; rename this module
+  src/Elci/Tools.elm:1:1: ELCI2104: The module name Elci.Tools is reserved for Elci's core library; rename this module
   elci: ELCI4001: [java-modules] may not map Value, a module name of Elci's core library
   ```
 
   `Bytes`, `Debug` and `Julc.Data` belong to the compiler as well.
 - **Constructors and types.** A module can't declare constructors named `Just`, `Nothing`, `True` or
-  `False`, or types named `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Map`, `Array` or
-  `Float`:
+  `False`, or types named `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Dict`, `Map`, `Array`
+  or `Float`:
 
   ```text
   src/Main.elm:4:6: ELCI2011: Nothing is a constructor of the built-in Maybe type; choose another name
@@ -326,8 +327,9 @@ This is also how elm-format writes negative arguments, so formatted code keeps i
 ## Equality
 
 `==` and `/=` work on `Int`, `Bool`, `String`, `()`, `Bytes`, ledger hashes of the same type, and lists,
-tuples, records, `Maybe` and custom types whose contents are all equality-capable. Imported types use
-the equality their provider approves (Java `equals`). Both operands are evaluated once, left to right.
+tuples, records, `Maybe`, `Dict` and custom types whose contents are all equality-capable. Two dictionaries
+are equal when they have the same bindings. Imported types use the equality their provider approves (Java
+`equals`). Both operands are evaluated once, left to right.
 
 Rejected with `ELCI2003`: functions, `Data`, `Map`, `Array`, the ledger `Value` and types that contain one,
 and imported types without approved equality. The message names the part that has no equality:
@@ -347,8 +349,8 @@ src/Main.elm:6:21: ELCI2003: The operator == cannot compare List (Int -> Int) va
   `TxId` and the other hashes), ordered lexicographically by unsigned byte, a proper prefix first;
 - lists of a comparable type, lexicographically, and tuples of comparable types, component by component.
 
-`Bool`, `()`, records, custom types, `Maybe`, `Map`, `Array`, `Data`, functions and ledger records such as
-`TxOutRef` are not comparable (`ELCI2003`). Every order is total and agrees with `==`. Comparing `Int`
+`Bool`, `()`, records, custom types, `Maybe`, `Dict`, `Map`, `Array`, `Data`, functions and ledger records
+such as `TxOutRef` are not comparable (`ELCI2003`). Every order is total and agrees with `==`. Comparing `Int`
 values uses the integer builtins; byte strings use `lessThanByteString` and `lessThanEqualsByteString`;
 `String` encodes both sides to UTF-8 and compares the bytes; lists and tuples use a comparison function
 generated once per type.
@@ -533,7 +535,8 @@ use a fixed encoding:
 | `Order` | `LT`, `EQ` and `GT` are constructors 0, 1 and 2, no fields |
 | `JulcOptional a` | `Some x` is constructor 0 with one field; `None` is constructor 1 |
 | `List a` | list |
-| `Map k v` | map |
+| `Dict k v` | map with its keys in strictly ascending order |
+| `Map k v` | map, in the map's order |
 | imported record or sum | as declared in Java: constructor in declaration order, fields in declaration order |
 
 Functions and arrays have no encoding. You can see the encoding of any value with `Julc.Data.encode` and
@@ -577,7 +580,8 @@ The record `{ beneficiary = 1, amount = 2 }` encodes as `Constr 0 [2, 1]`, becau
 `beneficiary`.
 
 Decoding is strict: tags, field counts and nested field kinds are checked, and a mismatch fails the
-script. Each build records the encoding of its boundary types in `abi.json`; see
+script. A `Dict`, at any depth, must have strictly ascending keys: a map whose keys are out of order or
+repeated fails to decode. Each build records the encoding of its boundary types in `abi.json`; see
 [datums and redeemers](/contracts/datums-and-redeemers/).
 
 ## Compiler limits

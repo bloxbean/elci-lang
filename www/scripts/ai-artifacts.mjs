@@ -134,7 +134,7 @@ async function elciModule(file) {
       while (k >= 0 && !lines[k].trim().startsWith('{-|')) k--;
       doc = lines.slice(k, j + 1).join(' ').replace(/\{-\||-\}/g, '').replace(/\s+/g, ' ').trim();
     }
-    functions.push({ name: m[1], signature: signature.replace(/\s+/g, ' '), ...(doc ? { summary: doc } : {}) });
+    functions.push({ name: m[1], signature: signature.replace(/\s+/g, ' ').trim(), ...(doc ? { summary: doc } : {}) });
   }
   const types = [...exposed].filter((n) => /^[A-Z]/.test(n));
   return { module: name, types, functions };

@@ -1,6 +1,6 @@
 ---
 title: Costs and performance
-description: Measure execution budgets and script size, understand how strictness and top-level values affect cost, and choose between lists, arrays and maps.
+description: Measure execution budgets and script size, understand how strictness and top-level values affect cost, and choose between lists, arrays, dictionaries and maps.
 sidebar:
   order: 4
 ---
@@ -331,22 +331,43 @@ times, `Bytes` values cost about 10 million CPU more than `Int` values, and `Str
 element by element: `compare [ 1, 2, 3 ] [ 1, 2, 4 ]` cost about 6 million CPU, against 0.5 million for
 `compare 3 7`.
 
-## Maps
+## Maps and dictionaries
 
-A `Map k v` is the ledger's map representation: a list of key/value pairs compared by their Data
-encoding. There is no hashing or sorting, so the costs are those of a list:
+A `Map k v` is the ledger's map representation: a list of key/value pairs, compared by their Data
+encoding, in no particular order. A `Dict k v` is the same list of pairs with its keys kept in ascending
+order. Neither hashes its keys or balances a tree, so their costs are those of a list. The figures below use
+`Int` keys and count the operation alone: the cost of a program that runs it, minus the cost of the same
+program without it.
 
-- **Lookups scan.** `Map.get` walks from the front until it finds the key. In a 50-entry map, finding the
-  key at the front cost about 4.6 million CPU and the key at the back about 102 million: roughly 2 million
-  per entry passed.
-- **`Map.size` scans too.** It cost about 9 million CPU at 10 entries and 44 million at 50.
-- **Building is quadratic.** `Map.insert` checks for an existing key, so `Map.fromList` does an O(n)
-  insert per pair. Building a 10-entry map cost about 124 million CPU, a 50-entry map about 2.76 billion,
-  and a 100-entry map (with the list and a `Map.size`) 11.2 billion: more than a whole transaction may use.
+- **Lookups scan.** `Map.get` walks from the front until it finds the key. `Dict.get` walks from the
+  smallest key and stops at the first key that isn't smaller, so a missing key costs half a scan on
+  average. Both cost about 1.1 million CPU per entry passed: in a 50-entry map or dictionary, the first key
+  cost about 2 million CPU and the last about 55 million. `member`, `insert` and `remove` walk the same way,
+  and `insert` and `remove` also rebuild the pairs in front of the position.
+- **`size` scans too.** It cost about 9 million CPU at 10 entries and 44 million at 50.
+- **Building.** `Map.fromList` checks each key against the pairs before it, so it is O(n²). `Dict.fromList`
+  sorts in O(n log n), and takes a single pass when the keys are already in order:
+
+  | Building from a list of pairs | 10 entries | 50 entries | 100 entries |
+  | --- | ---: | ---: | ---: |
+  | `Map.fromList` | 82 million | 1.47 billion | 5.58 billion |
+  | `Dict.fromList`, keys in order | 57 million | 0.28 billion | 0.55 billion |
+  | `Dict.fromList`, keys shuffled | 111 million | 0.66 billion | 1.44 billion |
+
+  The pairs were `( i, i )` for `i` from 1 to n; the shuffled keys were `modBy 101 (i * 17)` for 100
+  entries, with 53 and 11 for the smaller sizes. The 100-entry `Map.fromList` also used 21 million memory
+  units, more than a whole transaction may use.
+- **Whole-collection operations are single passes.** `map`, `filter`, the folds and `toList`, and a
+  dictionary's `union`, `intersect`, `diff` and `merge`, are O(n). Their cost per entry depends on the
+  function you pass.
+- **Decoding a `Dict` checks its keys.** When a datum, redeemer, parameter or `Julc.Data.decode` result
+  contains a `Dict`, the script checks that its keys ascend, at about 1.1 million CPU per entry. A `Map` is
+  decoded without this check.
 
 Read maps that arrive in data, such as datum fields or the transaction's withdrawals and redeemers,
-rather than building large maps on-chain. Keep keys you look up often near the front: `insert` places
-the newest binding first.
+rather than building large ones on-chain. Build keyed data of your own with `Dict.fromList`, with its keys
+in order when you can. Keys you look up often are cheapest near the front: the newest binding in a `Map`,
+the smallest keys in a `Dict`.
 
 ## Traces
 
@@ -363,7 +384,8 @@ failure paths.
   one `List.foldl` with an `if` inside cost about 96 million.
 - Convert to an `Array` once when you read many positions; never rebuild an array to change it.
 - Avoid sorting on-chain. When the transaction can provide sorted data, check the order in one pass.
-- Treat `Map` as a small association list. Avoid `Map.fromList` and repeated `Map.insert` on large inputs.
+- Build keyed data with `Dict.fromList` rather than `Map.fromList`, which is quadratic. Keep maps and
+  dictionaries small: every lookup scans.
 - Use each generic helper at as few types as you can, and drop `Debug.trace` from deployed scripts.
 - Library functions are compiled Java code, not builtins: `Julc.ByteString.toHex` over 32 bytes cost
   about 73 million CPU. Check the cost of a library call before using it in a loop.

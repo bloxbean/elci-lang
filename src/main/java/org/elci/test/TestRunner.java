@@ -180,7 +180,8 @@ public final class TestRunner {
         var generators = new ArrayList<DataGenerator>();
         try {
             for (int i = 0; i < test.parameters().size(); i++)
-                generators.add(generator(test.parameters().get(i), test.arguments().get(i), compiled.namedTypes()));
+                generators.add(canonical(generator(test.parameters().get(i), test.arguments().get(i), compiled.namedTypes()),
+                        test.canonical().get(i)));
         } catch (IllegalArgumentException e) {
             return new Outcome(name, kind, false, "cannot generate arguments: " + e.getMessage(), null, List.of(), 0);
         }
@@ -197,7 +198,8 @@ public final class TestRunner {
         var failing = evaluate(name, kind, apply(compiled.program(), result.counterexample()), compiled.pirType());
         var call = new StringBuilder(test.name());
         for (int i = 0; i < result.counterexample().size(); i++)
-            call.append(' ').append(Data.show(result.counterexample().get(i), test.arguments().get(i), compiled.namedTypes(), true));
+            call.append(' ').append(Data.show(result.counterexample().get(i), test.arguments().get(i), compiled.namedTypes(), true,
+                    test.parameters().get(i)));
         String detail = "counterexample after " + result.tries() + (result.tries() == 1 ? " run" : " runs")
                 + (result.shrinks() == 0 ? "" : ", shrunk " + result.shrinks() + (result.shrinks() == 1 ? " time" : " times"))
                 + ":\n    " + call + "\n" + (failing.passed() ? result.message() : failing.detail());
@@ -206,6 +208,21 @@ public final class TestRunner {
 
     private static Program apply(Program program, List<PlutusData> arguments) {
         return program.applyParams(arguments.toArray(PlutusData[]::new));
+    }
+
+    /** Generated values and their shrinks, rewritten into values the program decodes (sorted Dict keys). */
+    private static DataGenerator canonical(DataGenerator generator, java.util.function.UnaryOperator<PlutusData> rewrite) {
+        return new DataGenerator() {
+            @Override
+            public PlutusData generate(java.util.SplittableRandom random, int size) {
+                return rewrite.apply(generator.generate(random, size));
+            }
+
+            @Override
+            public java.util.stream.Stream<PlutusData> shrink(PlutusData value) {
+                return generator.shrink(value).map(rewrite).filter(candidate -> !candidate.equals(value));
+            }
+        };
     }
 
     /** Ledger hashes have fixed lengths; everything else follows its Data representation. */

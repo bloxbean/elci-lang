@@ -56,9 +56,11 @@ public final class ElciCompiler {
     public record ParameterInfo(String name, Ty source, PirType type) {}
 
     /** A compiled named validator: the backend result plus the source-level view of its boundary. */
+    /** @param canonical per parameter, the rewrite that sorts its Dicts' keys: a value it changes is rejected (ADR-009) */
     public record ValidatorBuild(String name, ValidatorResult result, CompilerTarget target, List<ParameterInfo> parameters,
-                                 List<HandlerInfo> handlers, Map<String,PirType> namedTypes) {
-        public ValidatorBuild {parameters=List.copyOf(parameters);handlers=List.copyOf(handlers);namedTypes=Map.copyOf(namedTypes);}
+                                 List<HandlerInfo> handlers, Map<String,PirType> namedTypes,
+                                 List<java.util.function.UnaryOperator<org.julclang.core.PlutusData>> canonical) {
+        public ValidatorBuild {parameters=List.copyOf(parameters);handlers=List.copyOf(handlers);namedTypes=Map.copyOf(namedTypes);canonical=List.copyOf(canonical);}
         public Program program() {return result.program();}
     }
 
@@ -114,9 +116,14 @@ public final class ElciCompiler {
      * An exposed test declaration and its inferred type: a value, or a property over
      * {@code parameters} whose generated arguments have the Data representations {@code arguments}.
      */
-    public record Value(String name,Ty type,Token token,List<Ty> parameters,List<PirType> arguments) {
-        public Value {parameters=List.copyOf(parameters);arguments=List.copyOf(arguments);}
-        public Value(String name,Ty type,Token token) {this(name,type,token,List.of(),List.of());}
+    /**
+     * @param canonical per parameter, a rewrite of generated Data into a value the program decodes:
+     *                  every Dict with strictly ascending keys (ADR-009)
+     */
+    public record Value(String name,Ty type,Token token,List<Ty> parameters,List<PirType> arguments,
+                        List<java.util.function.UnaryOperator<org.julclang.core.PlutusData>> canonical) {
+        public Value {parameters=List.copyOf(parameters);arguments=List.copyOf(arguments);canonical=List.copyOf(canonical);}
+        public Value(String name,Ty type,Token token) {this(name,type,token,List.of(),List.of(),List.of());}
         public boolean property() {return !parameters.isEmpty();}
     }
 
@@ -174,7 +181,8 @@ public final class ElciCompiler {
             PirBackend.Result backend;
             try {backend=new CompilerBackend().compile(program,options);}
             catch(BackendException e){var byName=new HashMap<String,Ast.Decl>();resolved.declarations().forEach(d->byName.put(d.name(),d));throw located(e,byName,declaration.token());}
-            results.put(new Value(declaration.name(),type,declaration.token(),parameters,arguments),new Result(backend.program(),module,declaration.name(),result,options.getTarget(),lowering.pir(result),program.namedTypes()));
+            var canonical=new DictCanonical(inference);
+            results.put(new Value(declaration.name(),type,declaration.token(),parameters,arguments,parameters.stream().map(canonical::of).toList()),new Result(backend.program(),module,declaration.name(),result,options.getTarget(),lowering.pir(result),program.namedTypes()));
         }
         return results;
     }
@@ -250,7 +258,7 @@ public final class ElciCompiler {
         for(var shape:shapes) {
             var purpose=shape.spec().purpose();
             required.add(BackendContract.purposeCapability(purpose));
-            PirTerm term=lowering.entry(shape.spec().symbol(),shape.type());
+            PirTerm term=lowering.guardDicts(lowering.entry(shape.spec().symbol(),shape.type()),shape.type(),shape.declaration().token());
             PirType type=lowering.pir(shape.type());
             DatumProfile profile=purpose==ContractSchema.Purpose.SPEND?spec.spendDatum():DatumProfile.ABSENT;
             PirType datumType=null;Ty datumSource=shape.datum();
@@ -286,7 +294,9 @@ public final class ElciCompiler {
         try {result=backend.compile(program,options);}
         catch(BackendException e){throw located(e,declarations,shapes.getFirst().declaration().token());}
         var allTypes=new LinkedHashMap<>(lowering.namedTypes());for(var group:imports)group.namedTypes().forEach(allTypes::putIfAbsent);
-        return new ValidatorBuild(spec.name(),result,options.getTarget(),parameterInfos,infos,allTypes);
+        var canonical=new DictCanonical(inference);
+        return new ValidatorBuild(spec.name(),result,options.getTarget(),parameterInfos,infos,allTypes,
+                parameterTypes.stream().map(canonical::of).toList());
     }
 
     /**
@@ -503,6 +513,7 @@ public final class ElciCompiler {
         var c=new Var();importedTypes.put(prefix+"fromOptional",fn(con("JulcOptional",c),con("Elci.Maybe",c)));
         var d=new Var();importedTypes.put(prefix+"toOptional",fn(con("Elci.Maybe",d),con("JulcOptional",d)));
         var e=new Var();importedTypes.put(org.elci.modules.Modules.DEBUG_PREFIX+"trace",fn(con("String"),fn(e,e)));
+        assocIntrinsics(importedTypes);
         String bytes=org.elci.modules.Modules.BYTES_PREFIX;
         importedTypes.put(bytes+"empty",con("Bytes"));
         importedTypes.put(bytes+"fromString",fn(con("String"),con("Bytes")));
@@ -523,6 +534,30 @@ public final class ElciCompiler {
         for(String count:List.of("countSetBits","findFirstSetBit"))importedTypes.put(bytes+count,fn(con("Bytes"),con("Int")));
         importedTypes.put(bytes+"complement",fn(con("Bytes"),con("Bytes")));
         for(String hash:List.of("blake2b224","blake2b256","sha256","sha3_256","keccak256","ripemd160"))importedTypes.put(bytes+hash,fn(con("Bytes"),con("Bytes")));
+    }
+
+    /** {@code Elci.Assoc}, the core library's association-list operations (ADR-009). */
+    private static void assocIntrinsics(Map<String,Ty> importedTypes) {
+        String assoc=org.elci.modules.Modules.ASSOC_PREFIX;
+        record Pair(Ty k,Ty v,Ty map){}
+        java.util.function.Supplier<Pair> fresh=()->{var k=new Var();var v=new Var();return new Pair(k,v,con("Map",k,v));};
+        var p=fresh.get();importedTypes.put(assoc+"toList",fn(p.map(),con("List",con("Tuple",p.k(),p.v()))));
+        p=fresh.get();importedTypes.put(assoc+"fromDistinct",fn(con("List",con("Tuple",p.k(),p.v())),p.map()));
+        p=fresh.get();importedTypes.put(assoc+"cons",fn(p.k(),fn(p.v(),fn(p.map(),p.map()))));
+        p=fresh.get();importedTypes.put(assoc+"reverse",fn(p.map(),p.map()));
+        p=fresh.get();importedTypes.put(assoc+"find",fn(p.k(),fn(p.map(),con("Elci.Maybe",p.v()))));
+        p=fresh.get();importedTypes.put(assoc+"has",fn(p.k(),fn(p.map(),con("Bool"))));
+        p=fresh.get();importedTypes.put(assoc+"delete",fn(p.k(),fn(p.map(),p.map())));
+        p=fresh.get();importedTypes.put(assoc+"runs",fn(p.map(),con("List",p.map())));
+        p=fresh.get();importedTypes.put(assoc+"merge",fn(p.map(),fn(p.map(),p.map())));
+        p=fresh.get();importedTypes.put(assoc+"dedupe",fn(p.map(),p.map()));
+        p=fresh.get();importedTypes.put(assoc+"get",fn(p.k(),fn(p.map(),con("Elci.Maybe",p.v()))));
+        p=fresh.get();importedTypes.put(assoc+"member",fn(p.k(),fn(p.map(),con("Bool"))));
+        p=fresh.get();importedTypes.put(assoc+"insert",fn(p.k(),fn(p.v(),fn(p.map(),p.map()))));
+        p=fresh.get();importedTypes.put(assoc+"remove",fn(p.k(),fn(p.map(),p.map())));
+        p=fresh.get();importedTypes.put(assoc+"ascending",fn(p.map(),con("Bool")));
+        p=fresh.get();importedTypes.put(assoc+"toMap",fn(con("Dict",p.k(),p.v()),p.map()));
+        p=fresh.get();importedTypes.put(assoc+"fromMap",fn(p.map(),con("Dict",p.k(),p.v())));
     }
 
     /**

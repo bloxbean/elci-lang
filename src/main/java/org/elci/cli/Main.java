@@ -171,7 +171,7 @@ public final class Main {
      */
     private static int evaluate(ElciCompiler.Result result,boolean builtins) {
         var evaluation=JulcVm.create().evaluate(result.program(),result.target().ledgerTarget());
-        if(evaluation instanceof EvalResult.Success success)System.out.println(org.elci.driver.ElciValues.show(success.resultTerm(),result.pirType(),result.namedTypes()));
+        if(evaluation instanceof EvalResult.Success success)System.out.println(org.elci.driver.ElciValues.show(success.resultTerm(),result.pirType(),result.namedTypes(),result.type()));
         else System.out.println("evaluation failed: "+(evaluation instanceof EvalResult.Failure failure?failure.error():"budget exhausted"));
         var budget=evaluation.budgetConsumed();
         System.out.println("cpu "+budget.cpuSteps()+", mem "+budget.memoryUnits());

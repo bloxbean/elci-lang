@@ -138,7 +138,8 @@ The others you import yourself:
 
 | Module | Import | Contents |
 | --- | --- | --- |
-| `Map` | `import Map` | Key/value maps, like Elm's `Dict` |
+| `Dict` | `import Dict exposing (Dict)` | Elm's dictionaries, with comparable keys kept in order |
+| `Map` | `import Map` | The ledger's key/value maps, for ledger data and keys that aren't comparable |
 | `Array` | `import Array` | Constant-time indexed arrays |
 | `Bytes` | `import Bytes` | Byte-string builtins: building, slicing, integers, bits and hashes |
 | `Julc.Data` | `import Julc.Data as Data` | `encode` and `decode` to and from Plutus Data, and `Maybe` adapters |
@@ -247,8 +248,9 @@ cpu 7570256, mem 30966
 ```
 
 The library is compiled together with each project that uses it. A module name may appear in only one source
-directory. The core module names (`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Array`)
-are taken, and `Dict`, `Set`, `Value` and `Elci` are reserved for the core library. The
+directory. The core module names (`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`,
+`Array`) are taken, and `Set`, `Value`, `Elci` and names starting with `Elci.` are reserved for the core
+library. The
 [elci-library example](https://github.com/bloxbean/elci-lang/tree/main/examples/elci-library) is a complete
 project.
 

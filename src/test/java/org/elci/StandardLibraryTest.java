@@ -15,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -26,7 +27,7 @@ class StandardLibraryTest {
     @TempDir Path project;
 
     private static final String HEADER =
-            "module Main exposing (main)\n\nimport Bytes\nimport Julc.Data as Data\nimport Julc.Ledger exposing (PubKeyHash)\n\n\n";
+            "module Main exposing (main)\n\nimport Bytes\nimport Dict exposing (Dict)\nimport Julc.Data as Data\nimport Julc.Ledger exposing (PubKeyHash)\nimport Map exposing (Map)\n\n\n";
 
     /** The value of {@code main : type}, in Elci syntax, or {@code failed} when evaluation fails. */
     private static String eval(String type, String body) {
@@ -310,9 +311,9 @@ class StandardLibraryTest {
         assertTrue(diagnostic(Map.of("String", "module String exposing (x)\n\n\nx : Int\nx =\n    1\n",
                         "Main", "module Main exposing (main)\n\n\nmain : Int\nmain =\n    1\n"))
                 .contains("ELCI2104: The module name String is taken by Elci's core library; rename this module"));
-        assertTrue(diagnostic(Map.of("Dict", "module Dict exposing (x)\n\n\nx : Int\nx =\n    1\n",
+        assertTrue(diagnostic(Map.of("Set", "module Set exposing (x)\n\n\nx : Int\nx =\n    1\n",
                         "Main", "module Main exposing (main)\n\n\nmain : Int\nmain =\n    1\n"))
-                .contains("ELCI2104: The module name Dict is reserved for Elci's core library; rename this module"));
+                .contains("ELCI2104: The module name Set is reserved for Elci's core library; rename this module"));
         var mapped = assertThrows(IllegalArgumentException.class, () -> compile(
                 Map.of("Main", "module Main exposing (main)\n\n\nmain : Int\nmain =\n    1\n"),
                 Map.of("Value", "org.julclang.stdlib.lib.ValuesLib")));
@@ -635,6 +636,359 @@ class StandardLibraryTest {
     }
 
     @Test
+    void dictFollowsElm() {
+        assertEquals("( [( 1, \"a\" ), ( 2, \"b\" ), ( 3, \"c\" )], [Just \"b\", Nothing], [True, False] )",
+                eval("( List ( Int, String ), List (Maybe String), List Bool )",
+                        "( Dict.toList (Dict.fromList [ ( 3, \"c\" ), ( 1, \"x\" ), ( 2, \"b\" ), ( 1, \"a\" ) ])"
+                                + ", [ Dict.get 2 (Dict.fromList [ ( 2, \"b\" ) ]), Dict.get 9 (Dict.fromList [ ( 2, \"b\" ) ]) ]"
+                                + ", [ Dict.member 2 (Dict.singleton 2 \"b\"), Dict.isEmpty (Dict.singleton 2 \"b\") ] )"));
+        assertEquals("[[( 1, 10 ), ( 2, 20 ), ( 3, 30 )], [( 1, 10 ), ( 3, 30 )], [( 1, 11 ), ( 2, 20 )], [( 2, 20 ), ( 3, 30 )]]",
+                eval("List (List ( Int, Int ))",
+                        "[ Dict.toList (Dict.insert 2 20 (Dict.fromList [ ( 3, 30 ), ( 1, 10 ) ]))"
+                                + ", Dict.toList (Dict.remove 2 (Dict.fromList [ ( 1, 10 ), ( 2, 20 ), ( 3, 30 ) ]))"
+                                + ", Dict.toList (Dict.update 1 (Maybe.map (\\v -> v + 1)) (Dict.fromList [ ( 1, 10 ), ( 2, 20 ) ]))"
+                                + ", Dict.toList (Dict.update 1 (\\_ -> Nothing) (Dict.fromList [ ( 1, 10 ), ( 2, 20 ), ( 3, 30 ) ])) ]"));
+        // union prefers the left; intersect keeps the left's values; diff keeps the left's other keys.
+        assertEquals("[[( 1, \"L\" ), ( 2, \"L\" ), ( 3, \"R\" )], [( 2, \"L\" )], [( 1, \"L\" )]]", eval("""
+                        left : Dict Int String
+                        left =
+                            Dict.fromList [ ( 1, "L" ), ( 2, "L" ) ]
+
+
+                        right : Dict Int String
+                        right =
+                            Dict.fromList [ ( 2, "R" ), ( 3, "R" ) ]
+
+
+                        """, "List (List ( Int, String ))",
+                "[ Dict.toList (Dict.union left right), Dict.toList (Dict.intersect left right), Dict.toList (Dict.diff left right) ]"));
+        // Strings order by their UTF-8 bytes: "Z" before "a", "é" after "z".
+        assertEquals("[\"Z\", \"a\", \"z\", \"é\"]", eval("List String",
+                "Dict.keys (Dict.fromList [ ( \"é\", 1 ), ( \"z\", 2 ), ( \"a\", 3 ), ( \"Z\", 4 ) ])"));
+        assertEquals("( [\"apple\", \"fig\"], 3, [True, False] )", eval("( List String, Int, List Bool )",
+                "( Dict.keys (Dict.fromList [ ( \"fig\", 1 ), ( \"apple\", 2 ) ])"
+                        + ", Dict.foldl (\\_ v acc -> v + acc) 0 (Dict.fromList [ ( \"fig\", 1 ), ( \"apple\", 2 ) ])"
+                        + ", [ Dict.fromList [ ( 2, 0 ), ( 1, 0 ) ] == Dict.fromList [ ( 1, 0 ), ( 2, 0 ) ]"
+                        + ", Dict.fromList [ ( 1, 0 ) ] == Dict.empty ] )"));
+    }
+
+    @Test
+    void mapKeepsItsOrderAndSemantics() {
+        // Newest first: fromList inserts in list order, so a repeated key takes its last value.
+        assertEquals("( [( 3, 40 ), ( 1, 30 ), ( 2, 20 )], [( 5, 50 ), ( 2, 20 ), ( 1, 10 )], [( 3, 33 ), ( 2, 22 ), ( 1, 11 )] )",
+                eval("( List ( Int, Int ), List ( Int, Int ), List ( Int, Int ) )",
+                        "( Map.toList (Map.fromList [ ( 1, 10 ), ( 2, 20 ), ( 1, 30 ), ( 3, 40 ) ])"
+                                + ", Map.toList (Map.insert 5 50 (Map.fromList [ ( 1, 10 ), ( 2, 20 ) ]))"
+                                + ", Map.toList (Map.map (\\k v -> v + k) (Map.fromList [ ( 1, 10 ), ( 2, 20 ), ( 3, 30 ) ])) )"));
+        assertEquals("( [Just \"b\", Nothing], [2, 1] )", eval("( List (Maybe String), List Int )",
+                "( [ Map.get \"k2\" (Map.fromList [ ( \"k1\", \"a\" ), ( \"k2\", \"b\" ) ]), Map.get \"k3\" (Map.fromList [ ( \"k1\", \"a\" ) ]) ]"
+                        + ", Map.foldr (\\k _ acc -> k :: acc) [] (Map.fromList [ ( 1, 0 ), ( 2, 0 ) ]) )"));
+    }
+
+    @Test
+    void dictsDecodeOnlyWithAscendingKeys() {
+        // Map.insert puts the new key first, so these build maps in a chosen order.
+        assertEquals("[( 1, 10 ), ( 2, 20 )]", eval("List ( Int, Int )",
+                "Dict.toList (Data.decode (Data.encode (Map.insert 1 10 (Map.insert 2 20 Map.empty))))"));
+        assertEquals("failed", eval("List ( Int, Int )",
+                "Dict.toList (Data.decode (Data.encode (Map.insert 2 20 (Map.insert 1 10 Map.empty))))"));
+        // Repeated keys can only come from outside: apply raw Data.
+        var compiled = compile(Map.of("Main", HEADER + "main : Data -> Int\nmain raw =\n    let\n        dict : Dict Int Int\n"
+                + "        dict =\n            Data.decode raw\n    in\n    Dict.size dict\n"));
+        var program = compiled.program();
+        java.util.function.Function<List<Integer>, EvalResult> apply = keys -> JulcVm.create().evaluate(
+                program.applyParams(new org.julclang.core.PlutusData.MapData(keys.stream().map(k -> new org.julclang.core.PlutusData.Pair(
+                        new org.julclang.core.PlutusData.IntData(java.math.BigInteger.valueOf(k)),
+                        new org.julclang.core.PlutusData.IntData(java.math.BigInteger.ONE))).toList())),
+                compiled.target().ledgerTarget());
+        assertInstanceOf(EvalResult.Success.class, apply.apply(List.of(1, 2, 3)));
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(List.of(1, 1)));
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(List.of(2, 1)));
+        String book = "type alias Book =\n    { name : String, votes : Dict String Int }\n\n\n";
+        assertEquals("1", eval(book, "Int", """
+                let
+                        raw : List { name : String, votes : Map String Int }
+                        raw =
+                            [ { name = "x", votes = Map.insert "a" 1 (Map.insert "b" 2 Map.empty) } ]
+
+                        books : List Book
+                        books =
+                            Data.decode (Data.encode raw)
+                    in
+                    List.length books"""));
+        assertEquals("failed", eval(book, "Int", """
+                let
+                        raw : List { name : String, votes : Map String Int }
+                        raw =
+                            [ { name = "x", votes = Map.insert "b" 2 (Map.insert "a" 1 Map.empty) } ]
+
+                        books : List Book
+                        books =
+                            Data.decode (Data.encode raw)
+                    in
+                    List.length books"""));
+    }
+
+    @Test
+    void validatorsRejectUnsortedDictDatums() throws Exception {
+        Files.writeString(project.resolve("elci.toml"), """
+                [project]
+                source-directories = ["src"]
+                target = "plutus-v3-pv11-uplc-1.1.0"
+                julc-version = "0.1.0-gb-5a3378b"
+
+                [validators.ballot]
+                boundary = "julc-strict-v1"
+                spend = "Ballot.spend"
+                """);
+        Files.createDirectories(project.resolve("src"));
+        Files.createDirectories(project.resolve("tests"));
+        Files.writeString(project.resolve("src/Ballot.elm"), """
+                module Ballot exposing (spend)
+
+                import Dict exposing (Dict)
+                import Julc.Ledger exposing (ScriptContext)
+
+
+                {-| Accept a voter who has not voted. -}
+                spend : Dict String Int -> String -> ScriptContext -> Bool
+                spend votes voter _ =
+                    not (Dict.member voter votes)
+                """);
+        Files.writeString(project.resolve("tests/BallotTest.elm"), """
+                module BallotTest exposing (newVoterAccepted, repeatVoterRejected, unsortedDatumRejected)
+
+                import Julc.Data as Data
+                import Map
+                import Scenario exposing (Scenario)
+
+
+                vote : Data.Data -> String -> Scenario
+                vote datum voter =
+                    Scenario.spend "ballot" (Scenario.outRef "ballot" 0) datum
+                        |> Scenario.redeemer (Data.encode voter)
+
+
+                sorted : Data.Data
+                sorted =
+                    Data.encode (Map.insert "alice" 1 (Map.insert "carol" 1 Map.empty))
+
+
+                newVoterAccepted : Scenario
+                newVoterAccepted =
+                    vote sorted "bob"
+
+
+                repeatVoterRejected : Scenario
+                repeatVoterRejected =
+                    vote sorted "carol" |> Scenario.expectFailure
+
+
+                {-| Out of order, carol hides behind dave from a scan that stops at the first larger key: without
+                the check at decoding, carol would vote twice.
+                -}
+                unsortedDatumRejected : Scenario
+                unsortedDatumRejected =
+                    vote (Data.encode (Map.insert "dave" 1 (Map.insert "carol" 1 Map.empty))) "carol" |> Scenario.expectFailure
+                """);
+        var result = NamedValidatorCliTest.run("test", project.toString());
+        assertEquals(0, result.status(), result.out() + result.err());
+        assertTrue(result.out().contains("3 passed, 0 failed"), result.out());
+    }
+
+    @Test
+    void mapsAndDictsNest() {
+        assertEquals("( [2, 1], Just 20, True )", eval("( List Int, Maybe Int, Bool )", """
+                let
+                        nested : Map Int (Map String Int)
+                        nested =
+                            Map.fromList [ ( 1, Map.fromList [ ( "x", 10 ) ] ), ( 2, Map.fromList [ ( "y", 20 ) ] ) ]
+                    in
+                    ( Map.keys nested, Map.get 2 nested |> Maybe.andThen (Map.get "y"), Map.member 1 nested )"""));
+        assertEquals("( Just \"b\", False, 1 )", eval("( Maybe String, Bool, Int )", """
+                let
+                        byMap : Map (Map Int Int) String
+                        byMap =
+                            Map.fromList [ ( Map.singleton 1 1, "a" ), ( Map.singleton 2 2, "b" ) ]
+                    in
+                    ( Map.get (Map.singleton 2 2) byMap, Map.member (Map.singleton 3 3) byMap, Map.size (Map.remove (Map.singleton 1 1) byMap) )"""));
+        assertEquals("( 2, [1, 2], 5 )", eval("( Int, List Int, Int )", """
+                let
+                        nested : Dict Int (Dict String Int)
+                        nested =
+                            Dict.insert 2 (Dict.singleton "b" 2) (Dict.singleton 1 (Dict.singleton "a" 5))
+                    in
+                    ( Dict.size nested, Dict.keys nested, Maybe.withDefault 0 (Dict.get 1 nested |> Maybe.andThen (Dict.get "a")) )"""));
+    }
+
+    @Test
+    void dictsInsideJulcOptionalsAreChecked() {
+        var compiled = compile(Map.of("Main", HEADER + "main : Data -> Int\nmain raw =\n    let\n        dict : Maybe (Dict Int Int)\n"
+                + "        dict =\n            Data.fromOptional (Data.decode raw)\n    in\n"
+                + "    Maybe.withDefault 0 (Maybe.map Dict.size dict)\n"));
+        java.util.function.Function<List<Integer>, EvalResult> apply = keys -> JulcVm.create().evaluate(
+                compiled.program().applyParams(new org.julclang.core.PlutusData.ConstrData(0, List.of(
+                        new org.julclang.core.PlutusData.MapData(keys.stream().map(k -> new org.julclang.core.PlutusData.Pair(
+                                new org.julclang.core.PlutusData.IntData(java.math.BigInteger.valueOf(k)),
+                                new org.julclang.core.PlutusData.IntData(java.math.BigInteger.ONE))).toList())))),
+                compiled.target().ledgerTarget());
+        assertInstanceOf(EvalResult.Success.class, apply.apply(List.of(1, 2)));
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(List.of(2, 1)));
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(List.of(1, 1)));
+    }
+
+    @Test
+    void decodedMapsWithRepeatedKeysLoseEveryBindingOnRemove() {
+        var compiled = compile(Map.of("Main", HEADER + "main : Data -> ( List ( Int, Int ), Bool, List ( Int, Int ) )\nmain raw =\n"
+                + "    let\n        m : Map Int Int\n        m =\n            Data.decode raw\n    in\n"
+                + "    ( Map.toList (Map.remove 1 m), Map.member 1 (Map.remove 1 m), Map.toList (Map.insert 1 99 m) )\n"));
+        var raw = new org.julclang.core.PlutusData.MapData(List.of(
+                new org.julclang.core.PlutusData.Pair(new org.julclang.core.PlutusData.IntData(java.math.BigInteger.ONE),
+                        new org.julclang.core.PlutusData.IntData(java.math.BigInteger.TEN)),
+                new org.julclang.core.PlutusData.Pair(new org.julclang.core.PlutusData.IntData(java.math.BigInteger.TWO),
+                        new org.julclang.core.PlutusData.IntData(java.math.BigInteger.valueOf(20))),
+                new org.julclang.core.PlutusData.Pair(new org.julclang.core.PlutusData.IntData(java.math.BigInteger.ONE),
+                        new org.julclang.core.PlutusData.IntData(java.math.BigInteger.valueOf(30)))));
+        var result = assertInstanceOf(EvalResult.Success.class,
+                JulcVm.create().evaluate(compiled.program().applyParams(raw), compiled.target().ledgerTarget()));
+        // ( [( 2, 20 )], False, [( 1, 99 ), ( 2, 20 )] ), shown as Data.
+        assertEquals("Constr 0 [[Constr 0 [2, 20]], Constr 0, [Constr 0 [1, 99], Constr 0 [2, 20]]]",
+                ElciValues.show(result.resultTerm(), compiled.pirType(), compiled.namedTypes()));
+    }
+
+    @Test
+    void javaLibrariesCannotCarryDicts() {
+        String library = """
+                package example;
+                import org.julclang.core.PlutusData;
+                import org.julclang.stdlib.annotation.OnchainLibrary;
+                @OnchainLibrary
+                public class Cast {
+                    @SuppressWarnings("unchecked")
+                    public static <T> T cast(PlutusData data) { return (T) data; }
+                }
+                """;
+        var d = assertThrows(Diagnostic.class, () -> new ElciCompiler().compileProject(Map.of("Main", HEADER.replace(
+                        "import Map exposing (Map)\n", "import Map exposing (Map)\nimport Custom.Cast as Cast\n")
+                        + "main : Int\nmain =\n    let\n        dict : Dict Int Int\n        dict =\n"
+                        + "            Cast.cast (Data.encode (Map.insert 2 1 (Map.insert 1 2 Map.empty)))\n    in\n"
+                        + "    Dict.size dict\n"), "Main", "main", FrontendProgram.Purpose.FUNCTION,
+                Map.of("Custom.Cast", "example.Cast"), new CompilerOptions(), Map.of("example.Cast", library)));
+        assertEquals("ELCI3003", d.code());
+        assertTrue(d.getMessage().contains("contains a Dict, which a Java library cannot keep sorted"), d.getMessage());
+    }
+
+    @Test
+    void dictBoundariesEverywhere() throws Exception {
+        Files.writeString(project.resolve("elci.toml"), """
+                [project]
+                source-directories = ["src"]
+                target = "plutus-v3-pv11-uplc-1.1.0"
+                julc-version = "0.1.0-gb-5a3378b"
+
+                [validators.caps]
+                boundary = "julc-strict-v1"
+                parameters = ["limits"]
+                spend = "Caps.spend"
+                spend-datum = "optional"
+                mint = "Caps.mint"
+                """);
+        Files.createDirectories(project.resolve("src"));
+        Files.createDirectories(project.resolve("tests"));
+        Files.writeString(project.resolve("src/Caps.elm"), """
+                module Caps exposing (mint, spend)
+
+                import Dict exposing (Dict)
+                import Julc.Ledger exposing (ScriptContext)
+
+
+                spend : Dict Int Int -> Maybe (Dict Int Int) -> Int -> ScriptContext -> Bool
+                spend limits held key _ =
+                    Dict.member key limits && Maybe.withDefault True (Maybe.map (Dict.member key) held)
+
+
+                mint : Dict Int Int -> Dict String Int -> ScriptContext -> Bool
+                mint limits request _ =
+                    Dict.size request <= Dict.size limits
+                """);
+        Files.writeString(project.resolve("tests/CapsTest.elm"), """
+                module CapsTest exposing (mintAccepted, mintUnsortedRedeemerRejected, spendAccepted, spendUnsortedDatumRejected, unsortedParameterRejected)
+
+                import Julc.Data as Data
+                import Map
+                import Scenario exposing (Scenario)
+
+
+                sorted : Data.Data
+                sorted =
+                    Data.encode (Map.insert 1 1 (Map.insert 2 2 Map.empty))
+
+
+                unsorted : Data.Data
+                unsorted =
+                    Data.encode (Map.insert 2 2 (Map.insert 1 1 Map.empty))
+
+
+                spendWith : Data.Data -> Data.Data -> Scenario
+                spendWith limits datum =
+                    Scenario.spend "caps" (Scenario.outRef "caps" 0) datum
+                        |> Scenario.parameters [ limits ]
+                        |> Scenario.redeemer (Data.encode 2)
+
+
+                spendAccepted : Scenario
+                spendAccepted =
+                    spendWith sorted sorted
+
+
+                spendUnsortedDatumRejected : Scenario
+                spendUnsortedDatumRejected =
+                    spendWith sorted unsorted |> Scenario.expectFailure
+
+
+                unsortedParameterRejected : Scenario
+                unsortedParameterRejected =
+                    spendWith unsorted sorted |> Scenario.expectFailure
+
+
+                mintWith : Data.Data -> Scenario
+                mintWith request =
+                    Scenario.mint "caps"
+                        |> Scenario.parameters [ sorted ]
+                        |> Scenario.redeemer request
+
+
+                mintAccepted : Scenario
+                mintAccepted =
+                    mintWith (Data.encode (Map.insert "a" 1 (Map.insert "b" 2 Map.empty)))
+
+
+                mintUnsortedRedeemerRejected : Scenario
+                mintUnsortedRedeemerRejected =
+                    mintWith (Data.encode (Map.insert "b" 2 (Map.insert "a" 1 Map.empty))) |> Scenario.expectFailure
+                """);
+        var result = NamedValidatorCliTest.run("test", project.toString());
+        assertEquals(0, result.status(), result.out() + result.err());
+        assertTrue(result.out().contains("5 passed, 0 failed"), result.out());
+        assertEquals(0, NamedValidatorCliTest.run("build", project.toString()).status());
+        var sortedParam = "limits={\"map\":[{\"k\":{\"int\":1},\"v\":{\"int\":1}},{\"k\":{\"int\":2},\"v\":{\"int\":2}}]}";
+        assertEquals(0, NamedValidatorCliTest.run("apply", project.toString(), "--validator", "caps", "--param", sortedParam).status());
+        var unsortedApply = NamedValidatorCliTest.run("apply", project.toString(), "--validator", "caps", "--param",
+                "limits={\"map\":[{\"k\":{\"int\":2},\"v\":{\"int\":2}},{\"k\":{\"int\":1},\"v\":{\"int\":1}}]}");
+        assertEquals(1, unsortedApply.status());
+        assertTrue(unsortedApply.err().contains("ELCI4001: parameter limits has a Dict whose keys are not strictly ascending"),
+                unsortedApply.err());
+    }
+
+    @Test
+    void dictsFromDataNeedComparableKeys() {
+        assertTrue(diagnostic(Map.of("Main", HEADER + "main : Data -> Int\nmain raw =\n    let\n        dict : Dict Bool Int\n"
+                        + "        dict =\n            Data.decode raw\n    in\n    Dict.size dict\n"))
+                .contains("ELCI2003: A Dict decoded from Data needs comparable keys, to check that they are in order; Bool is not"
+                        + " comparable. Use a Map instead"));
+    }
+
+    @Test
     void lawsHoldForGeneratedValues() throws Exception {
         var fixture = Path.of("src/test/resources/stdlib-laws");
         try (var files = Files.walk(fixture)) {
@@ -646,7 +1000,7 @@ class StandardLibraryTest {
         }
         var result = NamedValidatorCliTest.run("test", project.toString(), "--seed", "2026");
         assertEquals(0, result.status(), result.out() + result.err());
-        assertTrue(result.out().contains("28 passed, 0 failed (seed 2026)"), result.out());
+        assertTrue(result.out().contains("40 passed, 0 failed (seed 2026)"), result.out());
     }
 
     /** Budget snapshots: cost changes to the standard library must be deliberate. */
@@ -669,6 +1023,12 @@ class StandardLibraryTest {
         programs.put("take-drop", new String[] {"Int", "List.length (List.take 50 (List.range 1 100)) + List.length (List.drop 50 (List.range 1 100))"});
         programs.put("maybe-map2", new String[] {"Maybe Int", "Maybe.map2 (+) (Just 1) (Just 2)"});
         programs.put("result-andThen", new String[] {"Result String Int", "Result.andThen (\\x -> Ok (x + 1)) (Ok 1)"});
+        programs.put("dict-fromList-20", new String[] {"Int", "Dict.size (Dict.fromList (List.map (\\k -> ( modBy 23 (k * 7), k )) (List.range 1 20)))"});
+        programs.put("dict-get", new String[] {"Maybe Int", "Dict.get 15 (Dict.fromList (List.map (\\k -> ( k, k )) (List.range 1 20)))"});
+        programs.put("dict-insert", new String[] {"Int", "Dict.size (Dict.insert 10 0 (Dict.fromList (List.map (\\k -> ( k, k )) (List.range 1 20))))"});
+        programs.put("dict-union", new String[] {"Int", "Dict.size (Dict.union (Dict.fromList [ ( 1, 1 ), ( 3, 3 ) ]) (Dict.fromList [ ( 2, 2 ), ( 3, 0 ) ]))"});
+        programs.put("map-fromList-20", new String[] {"Int", "Map.size (Map.fromList (List.map (\\k -> ( modBy 23 (k * 7), k )) (List.range 1 20)))"});
+        programs.put("map-get", new String[] {"Maybe Int", "Map.get 15 (Map.fromList (List.map (\\k -> ( k, k )) (List.range 1 20)))"});
         var csv = new StringBuilder("program,flat_bytes,cpu,memory\n");
         for (var entry : programs.entrySet()) {
             var result = compile(Map.of("Main", HEADER + "main : " + entry.getValue()[0] + "\nmain =\n    " + entry.getValue()[1] + "\n"));
