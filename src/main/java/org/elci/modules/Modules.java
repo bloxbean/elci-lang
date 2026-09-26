@@ -188,11 +188,19 @@ public final class Modules {
                             throw new Diagnostic("ELCI2104", imp.token(), imp.module()
                                     + " is internal to Elci's core library; use " + (imp.module().equals(VALUE_MODULE)
                                             ? "Value" : "Map or Dict"));
+                    // A module's names are qualified by its alias, and a Java library's exports are named
+                    // by it; an alias that names another module would merge the two.
                     for (var imp : module.imports())
-                        if (DEFAULT_IMPORTS.containsKey(imp.alias()) && !imp.alias().equals(imp.module()))
-                            throw new Diagnostic("ELCI2104", imp.token(), "The alias " + imp.alias()
-                                    + " names a core module that every module imports; choose another alias for "
-                                    + imp.module());
+                        if (!imp.alias().equals(imp.module())) {
+                            if (DEFAULT_IMPORTS.containsKey(imp.alias()))
+                                throw new Diagnostic("ELCI2104", imp.token(), "The alias " + imp.alias()
+                                        + " names a core module that every module imports; choose another alias for "
+                                        + imp.module());
+                            if (CORE_MODULES.contains(imp.alias()) || sources.containsKey(imp.alias()))
+                                throw new Diagnostic("ELCI2104", imp.token(), "The alias " + imp.alias() + " names "
+                                        + (CORE_MODULES.contains(imp.alias()) ? "Elci's core module " : "this project's module ")
+                                        + imp.alias() + "; choose another alias for " + imp.module());
+                        }
                     if (!CORE_MODULES.contains(name)) {
                         var imports = new ArrayList<>(module.imports());
                         DEFAULT_IMPORTS.forEach((core, exposing) -> {

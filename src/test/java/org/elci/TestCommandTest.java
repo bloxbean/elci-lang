@@ -107,7 +107,7 @@ class TestCommandTest {
         copy("vesting");
         var result = run("test", project.toString());
         assertEquals(0, result.status(), result.out() + result.err());
-        assertTrue(result.out().contains("5 passed, 0 failed"), result.out());
+        assertTrue(result.out().contains("6 passed, 0 failed"), result.out());
     }
 
     @Test

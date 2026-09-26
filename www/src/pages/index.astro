@@ -71,8 +71,9 @@ const showcase = [
       'A typed datum and redeemer, the validity range and the signatories. The datum and redeemer are strictly decoded from their types before validate runs.',
     code: `module Vesting exposing (VestingAction(..), VestingDatum, validate)
 
-import Julc.Interval as Interval
+import Interval
 import Julc.Ledger exposing (PubKeyHash, ScriptContext)
+import Tx
 
 
 type alias VestingDatum =
@@ -89,11 +90,8 @@ validate : VestingDatum -> VestingAction -> ScriptContext -> Bool
 validate datum action ctx =
     case action of
         Claim ->
-            Interval.finiteLowerBound ctx.txInfo.validRange
-                >= datum.deadline
-                && List.any
-                    (\\signer -> signer == datum.beneficiary)
-                    ctx.txInfo.signatories`,
+            Interval.isEntirelyAfter datum.deadline ctx.txInfo.validRange
+                && Tx.signedBy datum.beneficiary ctx`,
   },
   {
     id: 'scenarios',
@@ -109,15 +107,15 @@ claimFrom time =
         |> Scenario.validFrom time
 
 
-claimsAtTheDeadline : Scenario
-claimsAtTheDeadline =
-    claimFrom 1000
+claimsAfterTheDeadline : Scenario
+claimsAfterTheDeadline =
+    claimFrom 1001
         |> Scenario.signedBy beneficiary
 
 
-earlyClaimsFail : Scenario
-earlyClaimsFail =
-    claimFrom 999
+claimsAtTheDeadlineFail : Scenario
+claimsAtTheDeadlineFail =
+    claimFrom 1000
         |> Scenario.signedBy beneficiary
         |> Scenario.expectFailure`,
   },
@@ -128,17 +126,17 @@ earlyClaimsFail =
     lang: 'elm',
     caption:
       'A function returning a Property runs 100 times with generated arguments. A failure is shrunk to a small counterexample and reported with a reproducible seed.',
-    code: `{-| Whenever a signed claim's validity range starts, it succeeds exactly when that is at
-or after the deadline.
+    code: `{-| Whenever a signed claim's validity range starts, it succeeds exactly when that is
+after the deadline.
 -}
-claimsSucceedExactlyFromTheDeadline : Int -> Property
-claimsSucceedExactlyFromTheDeadline time =
+claimsSucceedExactlyAfterTheDeadline : Int -> Property
+claimsSucceedExactlyAfterTheDeadline time =
     let
         signed =
             claimFrom time
                 |> Scenario.signedBy beneficiary
     in
-    if time >= datum.deadline then
+    if time > datum.deadline then
         Property.scenario signed
 
     else

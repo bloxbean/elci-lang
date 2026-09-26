@@ -7,8 +7,8 @@ A script cannot read the clock; the ledger accepts a transaction only inside its
 range. To require that something happens after a time, check that the whole range is after
 it; before a time, that the whole range is before it. A check needs a finite bound on its
 side: an unbounded side never satisfies it, and neither does an infinite bound on the wrong
-side, which only an empty range has. Such a range fails every check, as in Aiken's stdlib
-v2; Aiken v3 lets it pass both.
+side, a `PosInf` start or a `NegInf` end, which only an empty range has. The check that
+reads such a bound fails, as in Aiken's stdlib v2; Aiken v3 lets it pass.
 
 -}
 

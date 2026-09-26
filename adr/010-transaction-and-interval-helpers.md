@@ -43,10 +43,10 @@ it on every range with finite or unbounded sides. A check needs a finite bound o
 - Neither does an infinite bound on the wrong side, which only an empty range has: a
   `PosInf` start or a `NegInf` end.
 
-Aiken's stdlib v2 did the same. Its v3 treats such an empty range as satisfying both
-checks, since it contains no time at all. Elci fails closed instead, so an empty range,
-such as one decoded from a datum, never passes a time check. The ledger's validity ranges
-never have these shapes.
+Aiken's stdlib v2 did the same. Its v3 lets such an empty range pass, since it contains no
+time at all. Elci fails closed instead: the check that reads an infinite bound on the wrong
+side fails, even for a range decoded from a datum. The ledger's validity ranges never have
+these shapes.
 
 ### 2. `Tx`: questions about the transaction
 

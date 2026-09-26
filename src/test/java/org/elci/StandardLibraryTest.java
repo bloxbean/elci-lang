@@ -305,6 +305,13 @@ class StandardLibraryTest {
         assertEquals("3:1: ELCI2104: The alias String names a core module that every module imports; choose another alias for Utils",
                 diagnostic(Map.of("Utils", UTILS, "Main",
                         "module Main exposing (main)\n\nimport Utils as String\n\n\nmain : Int\nmain =\n    1\n")));
+        // Nor any other core module, or a module of the project: their names would merge.
+        assertEquals("3:1: ELCI2104: The alias Interval names Elci's core module Interval; choose another alias for Utils",
+                diagnostic(Map.of("Utils", UTILS, "Main",
+                        "module Main exposing (main)\n\nimport Utils as Interval\n\n\nmain : Int\nmain =\n    1\n")));
+        assertEquals("3:1: ELCI2104: The alias Other names this project's module Other; choose another alias for Utils",
+                diagnostic(Map.of("Utils", UTILS, "Other", "module Other exposing (x)\n\n\nx : Int\nx =\n    1\n", "Main",
+                        "module Main exposing (main)\n\nimport Utils as Other\n\n\nmain : Int\nmain =\n    1\n")));
     }
 
     @Test

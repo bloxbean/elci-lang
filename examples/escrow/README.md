@@ -1,6 +1,7 @@
 # Escrow
 
-A buyer locks a payment for a seller:
+A buyer locks a payment for a seller, who is paid when the buyer approves; after a deadline
+the buyer may take it back:
 
 - **Release**: the buyer signs, and the transaction pays the seller at least the price.
 - **Refund**: the buyer signs a transaction that runs entirely after the deadline.

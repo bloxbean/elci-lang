@@ -24,17 +24,24 @@ claimFrom time =
         |> Scenario.validFrom time
 
 
-claimsAtTheDeadline : Scenario
-claimsAtTheDeadline =
-    claimFrom 1000
+claimsAfterTheDeadline : Scenario
+claimsAfterTheDeadline =
+    claimFrom 1001
         |> Scenario.signedBy beneficiary
 
 
-claimsAfterTheDeadline : Scenario
-claimsAfterTheDeadline =
+claimsInAClosedRange : Scenario
+claimsInAClosedRange =
     claimFrom 5000
         |> Scenario.validBefore 6000
         |> Scenario.signedBy beneficiary
+
+
+claimsAtTheDeadlineFail : Scenario
+claimsAtTheDeadlineFail =
+    claimFrom 1000
+        |> Scenario.signedBy beneficiary
+        |> Scenario.expectFailure
 
 
 earlyClaimsFail : Scenario
@@ -50,17 +57,17 @@ unsignedClaimsFail =
         |> Scenario.expectFailure
 
 
-{-| Whenever a signed claim's validity range starts, it succeeds exactly when that is at
-or after the deadline.
+{-| Whenever a signed claim's validity range starts, it succeeds exactly when that is
+after the deadline.
 -}
-claimsSucceedExactlyFromTheDeadline : Int -> Property
-claimsSucceedExactlyFromTheDeadline time =
+claimsSucceedExactlyAfterTheDeadline : Int -> Property
+claimsSucceedExactlyAfterTheDeadline time =
     let
         signed =
             claimFrom time
                 |> Scenario.signedBy beneficiary
     in
-    if time >= datum.deadline then
+    if time > datum.deadline then
         Property.scenario signed
 
     else

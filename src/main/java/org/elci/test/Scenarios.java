@@ -114,8 +114,8 @@ final class Scenarios {
                 // A listed spent output must hold the datum the spend gives, as on the ledger.
                 for (var listed : inputs)
                     if (listed.outRef().equals(ref) && datum != null && !holds(listed.resolved().datum(), datum))
-                        throw new IllegalArgumentException("the spent output " + ref + " is listed with a different datum"
-                                + " from the one Scenario.spend gives");
+                        throw new IllegalArgumentException("the spent output " + HexFormat.of().formatHex(ref.txId().hash())
+                                + "#" + ref.index() + " is listed with a different datum from the one Scenario.spend gives");
                 // The spent output is an input at the script address unless the scenario lists it.
                 if (inputs.stream().noneMatch(i -> i.outRef().equals(ref)))
                     inputs.addFirst(new TxInInfo(ref, new TxOut(ownAddress, canonical(Value.lovelace(Data.integer(spec.get("ownLovelace")))),
