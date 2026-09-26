@@ -81,7 +81,7 @@ public final class Main {
             }
             System.out.println(result.module()+"."+result.function()+": checked; "+flat.length+" FLAT bytes; "+result.target().profileId());return 0;
         } catch(Diagnostic e) {System.err.println(json?e.json(files,source):e.explain(files,source));return 1;}
-        catch(ValidatorDiagnostic e) {System.err.println(json?e.diagnostic.json(e.files,e.fallback):e.where+"\n"+e.diagnostic.explain(e.files,e.fallback));return 1;}
+        catch(ValidatorDiagnostic e) {System.err.println(json?e.diagnostic.json(e.files,e.fallback,e.where):"elci: "+e.where+"\n"+e.diagnostic.explain(e.files,e.fallback));return 1;}
         catch(Exception e){System.err.println(json?failure(e.getMessage()):"elci: "+e.getMessage());return 1;}
     }
 
@@ -100,7 +100,7 @@ public final class Main {
         var coded=java.util.regex.Pattern.compile("^(ELCI\\d{4}): ").matcher(text);
         String code=coded.find()?Diagnostic.quote(coded.group(1)):"null";
         if(!code.equals("null"))text=text.substring(coded.end());
-        return "{\"code\":"+code+",\"path\":null,\"line\":null,\"column\":null,\"message\":"+Diagnostic.quote(text)+",\"hints\":[],\"excerpt\":null}";
+        return "{\"code\":"+code+",\"path\":null,\"line\":null,\"column\":null,\"message\":"+Diagnostic.quote(text)+",\"hints\":[],\"excerpt\":null,\"context\":null}";
     }
 
     /**

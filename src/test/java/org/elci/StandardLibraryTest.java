@@ -434,6 +434,20 @@ class StandardLibraryTest {
                 .startsWith("6:7: ELCI2003: The operator < needs comparable values, but Maybe"));
     }
 
+    /** Elm's accessor functions, .field, and field access on a qualified value. */
+    @Test
+    void accessorsAndQualifiedFields() {
+        assertEquals("[1, 2]", eval("List Int", "List.map .amount [ { amount = 1 }, { amount = 2 } ]"));
+        assertEquals("[\"a\"]", eval("List String", "[ { owner = \"a\" } ] |> List.map .owner"));
+        assertEquals("6", eval("Int", "let\n        r =\n            { a = { b = 3 } }\n    in\n    r.a.b + (.a >> .b) r"));
+        var result = compile(Map.of("Config", "module Config exposing (settings)\n\n\nsettings : { amount : Int }\nsettings =\n"
+                        + "    { amount = 7 }\n",
+                "Main", "module Main exposing (main)\n\nimport Config\n\n\nmain : Int\nmain =\n    Config.settings.amount + 1\n"));
+        var evaluation = JulcVm.create().evaluate(result.program(), result.target().ledgerTarget());
+        assertEquals("8", ElciValues.show(((EvalResult.Success) evaluation).resultTerm(), result.pirType(), result.namedTypes(),
+                result.type()));
+    }
+
     @Test
     void stringPatternsAreLiterals() {
         assertEquals("[1, 2, 3, 4, 5, 6, 0]", eval("""

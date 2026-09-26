@@ -390,7 +390,8 @@ public final class Modules {
 
     /** {@code d}, with a "did you mean" hint when it rejects a name this resolution left unresolved. */
     public Diagnostic withSuggestions(Diagnostic d) {
-        var hint = Set.of("ELCI2005", "ELCI2001").contains(d.code()) ? nameHints.get(d.token()) : null;
+        var hint = Set.of("ELCI2005", "ELCI2001").contains(d.code()) && d.getMessage().startsWith("Unknown")
+                ? nameHints.get(d.token()) : null;
         return hint == null ? d : d.withHints(hint.get());
     }
 
@@ -407,6 +408,11 @@ public final class Modules {
             else if (key.contains(".")) qualified.add(key);
             else plain.add(key);
         if (!name.contains(".")) {
+            if (plain.contains(name)) return List.of();
+            // The name is right but not exposed: say how to reach it.
+            for (String key : qualified)
+                if (key.substring(key.lastIndexOf('.') + 1).equals(name))
+                    return List.of("write `" + key + "`, or expose `" + name + "` in its import");
             var hint = Suggestions.hint(name, plain);
             if (!hint.isEmpty()) return hint;
         }
@@ -510,8 +516,12 @@ public final class Modules {
                         constructors(scope, imp.module(), imp.alias(), seen, local, type, exposedConstructors.remove(local),
                                 imp.token());
                     }
-                    if (!exposedConstructors.isEmpty())
-                        throw new Diagnostic("ELCI2101", imp.token(), "Unknown ledger type " + exposedConstructors.iterator().next());
+                    if (!exposedConstructors.isEmpty()) {
+                        String unknown = exposedConstructors.iterator().next();
+                        throw new Diagnostic("ELCI2101", imp.token(), "Unknown ledger type " + unknown,
+                                Suggestions.hint(unknown, catalogue.keySet().stream().filter(id -> id.startsWith("org.julclang.ledger."))
+                                        .map(id -> id.substring(20)).toList()));
+                    }
                     continue;
                 }
                 if (javaModules.containsKey(imp.module())) {
@@ -697,7 +707,11 @@ public final class Modules {
                     ? name + " is part of the test library; only test modules can import it"
                     : "Missing source module: " + name + "; add " + name.replace('.', '/')
                             + ".elm under a source directory, or map a Java library to it under [java-modules]";
-            if (via != null) throw new Diagnostic("ELCI2101", via, missing);
+            if (via != null) {
+                var known = new ArrayList<>(available.keySet());
+                known.addAll(javaModules.keySet());
+                throw new Diagnostic("ELCI2101", via, missing, Suggestions.hint(name, known));
+            }
             throw new IllegalArgumentException("ELCI2101: " + missing);
         }
         for (var imp : module.imports())
@@ -828,7 +842,9 @@ public final class Modules {
                 "ELCI2104",
                 token,
                 imported ? "Module " + module + " does not expose '" + name + "'"
-                        : "Module " + module + " is not imported; add `import " + module + "`",
+                        : available.containsKey(module) || javaModules.containsKey(module) || intrinsic(module)
+                                ? "Module " + module + " is not imported; add `import " + module + "`"
+                                : "No module " + module + " is imported, and none has that name",
                 suggest(n, names, Set.of()));
     }
 

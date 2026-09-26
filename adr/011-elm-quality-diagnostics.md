@@ -44,7 +44,9 @@ src/Main.elm:6:20: ELCI2002: The 1st argument to `String.fromInt` is `String`, b
 ### 2. Type mismatches say where and why
 
 Types are written as source, in backticks, with one naming across the two, so a type
-variable shared between them keeps its name.
+variable shared between them keeps its name. A type is named without its module
+(`Result a Int`, `Order`), unless two types of one name meet in a message; then both stay
+qualified (`Main.Value`, `Julc.Ledger.Value`).
 
 - **Application.** `The Nth argument to f is X, but f needs Y`. `f` is named as written; an
   unnamed function is "this function". A piped value is the next argument of the function
@@ -57,7 +59,9 @@ variable shared between them keeps its name.
   if have different types: the then branch is X, but the else branch is Y`.
 - **`case`.** `The Nth branch of this case is Y, but the first branch is X` (or "the
   branches before it are"). A pattern of the wrong type: `This pattern matches X, but the
-  value it is matched against is Y`.
+  value it is matched against is Y`. A constructor pattern with the wrong number of
+  arguments: `The constructor Just takes 1 argument, but this pattern gives it 2` (ELCI2001,
+  as for library constructors).
 - **Lists.** `The Nth element of this list is Y, but the first element is X` (or "the
   elements before it are").
 - **Operators.** `::` names the element and the list; `++`, `==`, `/=` and the comparisons
@@ -68,11 +72,18 @@ variable shared between them keeps its name.
     definition is Y` for a value.
   - `The annotation of f gives it N arguments, but its definition has M parameters`.
   - An annotation more general than its definition: `The annotation of f says a can be any
-    type, but its definition needs Int`, and the two-variable form, `says a and b can be
-    different types, but its definition needs them to be the same`.
+    type, but its definition needs Int` ("any comparable type" for `comparable`), and the
+    two-variable form, `says a and b can be different types, but its definition needs them
+    to be the same`.
+  - The annotations of a recursive group are all known before any body is checked, so a
+    mistake is reported in the body that makes it.
+- **Self-referential types.** `This needs a type that contains itself: a would have to be
+  List a`, wherever the occurs check fails.
 - **Fields.** `The field x is X, but it is used here as Y`.
 - **Hints for common confusions**, at the whole types and at the first pair that differs
-  inside them. At most two are shown.
+  inside them. At most two are shown, and only those that fit. `Just` and
+  `Maybe.withDefault` are suggested only when the value fits the Maybe, and comparisons
+  never suggest converting to a type that cannot be compared.
   - `Int` where a `String` is needed: `String.fromInt`.
   - `String` and `Bytes`: `Bytes.fromString`, `Bytes.toString`.
   - `Bytes` where a hash type is needed: wrap it with the constructor. A hash type where
@@ -90,11 +101,18 @@ variable shared between them keeps its name.
 A non-exhaustive `case` lists up to three patterns it does not cover, written as source:
 `Nothing`, `Just (Err _)`, `( True, False )`, `[]`, `[ _ ]`, `_ :: _ :: _`. A literal
 pattern's type is open, so what it leaves out is `_`. It adds `and N more` when there are
-more, or `and more` beyond fifty. The same usefulness algorithm that decides exhaustiveness
-produces them. It is Maranget's, as in Elm:
+more, or `and more` beyond fifty. A constructor of a project module other than the root is
+qualified by its module.
 
-- A column that names every constructor of its type is split by constructor.
-- Otherwise its default rows decide, and each constructor they leave out is missing.
+The list is complete: adding a branch for each pattern makes the case exhaustive. The same
+usefulness algorithm that decides exhaustiveness produces it. It is Maranget's, as in Elm,
+extended to find every missing vector:
+
+- When a column's default rows cover the remaining columns, the column is exhaustive.
+- Otherwise what the default rows leave uncovered is missing for every constructor the
+  column never names, or for "any other value" when the type has no fixed constructors.
+- Each constructor or literal the column names is split on as well, since a named
+  constructor can itself be partly covered.
 
 The message is `This case does not cover every possibility; it is missing …`, with the hint
 `add a branch for each missing pattern`.
@@ -111,9 +129,17 @@ and exposing lists. Suggestions are close names:
 - an edit distance of 2 for longer names, where swapping two neighbours counts as one edit;
 - nothing for names of one or two characters, except a match ignoring case.
 
-Up to three are shown: `Hint: did you mean List.length?`. A qualified name that is not
-imported says so: `Module Hepler is not imported; add import Hepler`. One that is imported
-but not exposed says `Module Helper does not expose 'doubel'`.
+Up to three are shown: `Hint: did you mean List.length?`.
+
+- A name spelt right but not exposed gets `Hint: write Helper.double, or expose double in
+  its import`.
+- A qualified name gives one of three messages:
+  - `Module Helper does not expose 'doubel'`, when the module is imported;
+  - `Module Dict is not imported; add import Dict`, when it exists but is not imported;
+  - `No module Lsit is imported, and none has that name`, with the hint `did you mean
+    List.length?`.
+- Import lines are covered too: a misspelt module or ledger type in an `import` gets a
+  suggestion.
 
 ### 5. A JSON report for tools
 
@@ -122,19 +148,34 @@ object on stderr, as Elm's `--report=json` does. The fields are:
 
 - `code`, `path`, `line`, `column` and `message`;
 - `hints`, an array;
-- `excerpt`, the text shown under the first line, or null.
+- `excerpt`, the text shown under the first line, or null;
+- `context`, where in the project the failure arose, or null.
 
 A failure without a source location keeps the shape, with null location fields, and its
-code when the message starts with one. Test results and scenarios keep their text output.
-Other commands reject the option with ELCI4001.
+code when the message starts with one. A failure in a named validator adds `context`, the
+`elci.toml` line of its `[validators.<name>]` group; elsewhere `context` is null. Test
+results and scenarios keep their text output. Other commands reject the option with
+ELCI4001.
 
-### 6. What does not change
+### 6. Found while reviewing the messages
+
+- **Elm's accessor functions and qualified field access.** `.amount` is the function
+  `\r -> r.amount`, as in Elm, and `Config.settings.amount` reads a field of a qualified
+  value. A qualified name is written without spaces and ends at its first lowercase
+  segment. Before, `List.map .amount` was read as the name `List.map.amount`.
+- **A record pattern on a library record**, such as `{ fee }` against a `TxInfo`, crashed
+  the compiler. It is now ELCI2001, which says to read the field instead.
+- **A source file that is not UTF-8** is named in an ELCI4001 message, instead of
+  `Input length = 1`.
+
+### 7. What does not change
 
 - **The codes and their meanings.**
 - **The first line's format.**
-- **The locations.** Each diagnostic stays at the token it reported before, with one
-  exception: a pattern whose type differs from the value it matches is reported at the
-  pattern, not at a sub-pattern inside it.
+- **The locations.** Each diagnostic stays at the token it reported before, with two
+  exceptions. A pattern whose type differs from the value it matches is reported at the
+  pattern, not at a sub-pattern inside it. A mistake in an annotated recursive group is
+  reported in the body that makes it.
 
 ## Invariants and evidence required
 
@@ -142,7 +183,8 @@ Other commands reject the option with ELCI4001.
   - argument position, piped arguments, too many arguments, non-functions;
   - `if`, `case` and list mismatches, operators, annotations, fields and patterns;
   - the listed missing patterns for `Maybe`, `Result`, `Bool`, lists, tuples, literals and
-    nested custom types, with `and N more`;
+    nested custom types, with `and N more`, and complete when a named constructor is only
+    partly covered;
   - suggestions for values, locals, constructors, qualified names, types, patterns, fields
     and exposing lists;
   - each hint;
@@ -150,6 +192,9 @@ Other commands reject the option with ELCI4001.
   - the JSON report.
 - **The diagnostics reference shows real CLI output.** Every example in it was produced by
   the CLI.
+- **Exhaustiveness agrees with the previous checker.** A differential run over generated
+  case matrices accepts and rejects exactly the same programs, and adding every listed
+  pattern always makes a case exhaustive.
 - **No compiled output changes.** Example scripts are byte-identical.
 
 ## Alternatives rejected

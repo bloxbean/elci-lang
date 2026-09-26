@@ -165,7 +165,7 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
             try(var files=Files.walk(base)) {
                 for(Path path:files.filter(p->p.toString().endsWith(".elm")).sorted().toList()) {
                     String module=base.relativize(path).toString().replace(java.io.File.separatorChar,'.');module=module.substring(0,module.length()-4);
-                    if(result.putIfAbsent(module,Files.readString(path))!=null)throw new IllegalArgumentException("Duplicate module ownership: "+module);
+                    if(result.putIfAbsent(module,source(path))!=null)throw new IllegalArgumentException("Duplicate module ownership: "+module);
                 }
             }
         }
@@ -182,4 +182,10 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
     private static String required(Map<String,String> values,String key,String section){String v=values.get(key);if(v==null)throw new IllegalArgumentException("Missing configuration key: ["+section+"] "+key);return v;}
     private static void keys(Map<String,String> values,Set<String> allowed,String section){for(String key:values.keySet())if(!allowed.contains(key))throw new IllegalArgumentException("Unknown configuration key: ["+section+"] "+key);}
     private static String quoted(String value){if(value.length()<2||!value.startsWith("\"")||!value.endsWith("\"")||value.substring(1,value.length()-1).contains("\"")||value.contains("\\"))throw new IllegalArgumentException("Expected a quoted string without escapes: "+value);return value.substring(1,value.length()-1);}
+
+    /** A source file's text; a file that is not UTF-8 is named rather than failing obscurely. */
+    private static String source(Path path) throws java.io.IOException {
+        try {return Files.readString(path);}
+        catch(java.nio.charset.MalformedInputException e){throw new IllegalArgumentException("ELCI4001: "+path+" is not valid UTF-8 text; save it as UTF-8");}
+    }
 }

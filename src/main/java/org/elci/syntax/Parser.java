@@ -489,9 +489,27 @@ public final class Parser {
             expect("]");
             return new Items(es, false, t);
         }
+        if (t.text().equals(".") && t.kind() == Token.Kind.SYMBOL && peek().kind() == Token.Kind.NAME
+                && Character.isLowerCase(peek().text().charAt(0)) && peek().offset() == t.offset() + 1) {
+            // An accessor function, as in Elm: .amount is \r -> r.amount.
+            Token field = next();
+            String record = "$elci$record$" + (synthetic++);
+            return new Lambda(List.of(record), new Field(new Name(record, t), field.text(), t), t);
+        }
         if (t.kind() == Token.Kind.NAME && !RESERVED.contains(t.text())) {
             String n = t.text();
-            if (Character.isUpperCase(n.charAt(0))) while (take(".")) n += "." + name().text();
+            // A qualified name is written without spaces and ends at its first lowercase segment, a
+            // value: Config.settings.amount reads the field amount of Config.settings.
+            if (Character.isUpperCase(n.charAt(0))) {
+                Token last = t;
+                while (is(".") && peek().offset() == last.offset() + last.text().length()
+                        && Character.isUpperCase(n.charAt(n.lastIndexOf('.') + 1))
+                        && tokens.get(pos + 1).kind() == Token.Kind.NAME && tokens.get(pos + 1).offset() == peek().offset() + 1) {
+                    next();
+                    last = name();
+                    n += "." + last.text();
+                }
+            }
             // The token spells the whole qualified name, as written, for diagnostics.
             return new Name(n, n.equals(t.text()) ? t
                     : new Token(n, t.kind(), t.offset(), t.line(), t.column(), t.source()));
@@ -661,7 +679,18 @@ public final class Parser {
                 || t.kind() == Token.Kind.STRING
                 || is("(")
                 || is("[")
-                || is("{");
+                || is("{")
+                || accessor();
+    }
+
+    /** {@code .field}, an accessor function: a dot not attached to what precedes it, then a field. */
+    private boolean accessor() {
+        if (!is(".") || pos + 1 >= tokens.size()) return false;
+        Token dot = peek(), field = tokens.get(pos + 1);
+        boolean attached = pos > 0 && tokens.get(pos - 1).offset() + tokens.get(pos - 1).text().length() == dot.offset()
+                && tokens.get(pos - 1).kind() != Token.Kind.STRING;
+        return !attached && field.kind() == Token.Kind.NAME && field.offset() == dot.offset() + 1
+                && Character.isLowerCase(field.text().charAt(0));
     }
 
     private String qualified(boolean capital) {

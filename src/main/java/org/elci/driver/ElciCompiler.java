@@ -411,7 +411,8 @@ public final class ElciCompiler {
                     if(exposed.equals(".."))continue;
                     String type=exposed.endsWith("(..)")?exposed.substring(0,exposed.length()-4):exposed;
                     if(!type.equals("ScriptContext")&&!ledger.types().containsKey("org.julclang.ledger."+type))
-                        throw new Diagnostic("ELCI2101",imp.token(),"Unknown ledger record type "+type);
+                        throw new Diagnostic("ELCI2101",imp.token(),"Unknown ledger record type "+type,
+                                org.elci.syntax.Suggestions.hint(type,ledger.types().keySet().stream().map(n->n.substring(n.lastIndexOf('.')+1)).toList()));
                 }
                 ledgerAliases.put("ScriptContext","ScriptContext");continue;
             }

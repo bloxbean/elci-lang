@@ -39,8 +39,8 @@ class ElmQualityDiagnosticsTest {
     void applicationsNameTheArgument() {
         assertEquals("11:20: ELCI2002: The 1st argument to `String.fromInt` is `String`, but `String.fromInt` needs `Int`",
                 main("String", "String.fromInt \"42\""));
-        assertEquals("11:29: ELCI2002: The 2nd argument to `List.map` is `Maybe Int`, but `List.map` needs `List Int`\n"
-                        + "Hint: this is a Maybe: handle `Nothing` with a case, or use `Maybe.withDefault`",
+        // No hint: Maybe.withDefault would not make a list.
+        assertEquals("11:29: ELCI2002: The 2nd argument to `List.map` is `Maybe Int`, but `List.map` needs `List Int`",
                 main("List String", "List.map String.fromInt (Just 1)"));
         assertEquals("11:19: ELCI2002: The 1st argument to this function is `String`, but it needs `Int`",
                 main("Int", "(\\x -> x + 1) \"one\""));
@@ -158,7 +158,7 @@ class ElmQualityDiagnosticsTest {
         assertEquals("11:5: ELCI2005: Unknown name 'Jsut'\nHint: did you mean `Just`?", main("Maybe Int", "Jsut 1"));
         assertEquals("11:5: ELCI2104: Module Helper does not expose 'doubel'\nHint: did you mean `Helper.double`?",
                 main("Int", "Helper.doubel 4"));
-        assertEquals("11:5: ELCI2104: Module Hepler is not imported; add `import Hepler`\nHint: did you mean `Helper.double`?",
+        assertEquals("11:5: ELCI2104: No module Hepler is imported, and none has that name\nHint: did you mean `Helper.double`?",
                 main("Int", "Hepler.double 4"));
         assertTrue(main("Int", "List.lenght [ 1 ]").endsWith("\nHint: did you mean `List.length`?"));
         assertEquals("9:1: ELCI2012: Type is not declared or imported in this module: Strin\nHint: did you mean `String`?",
@@ -217,17 +217,78 @@ class ElmQualityDiagnosticsTest {
         assertEquals(1, json.status());
         assertEquals("{\"code\":\"ELCI2005\",\"path\":" + Diagnostic.quote(main.toString()) + ",\"line\":6,\"column\":5,"
                 + "\"message\":\"Unknown name 'Jsut'\",\"hints\":[\"did you mean `Just`?\"],"
-                + "\"excerpt\":\"6|     Jsut 1\\n       ^^^^\"}\n", json.err());
+                + "\"excerpt\":\"6|     Jsut 1\\n       ^^^^\",\"context\":null}\n", json.err());
         // A string literal is underlined with its quotes; the end of the file is shown at the last line.
         Files.writeString(main, "module Main exposing (main)\n\n\nmain : Int\nmain =\n    String.fromInt \"42\"\n");
         assertTrue(NamedValidatorCliTest.run("check", project.toString()).err().contains("\n6|     String.fromInt \"42\"\n"
                 + " ".repeat(3 + 19) + "^^^^\n"));
         Files.writeString(main, "module Main exposing (main)\n\n\nmain : Int\nmain =\n    ( 1, 2\n");
         assertTrue(NamedValidatorCliTest.run("check", project.toString()).err().contains("\n6|     ( 1, 2\n" + " ".repeat(3 + 10) + "^\n"));
+        // A source that is not UTF-8 is named.
+        Files.write(main, new byte[] {'m', 'o', 'd', (byte) 0xff});
+        assertTrue(NamedValidatorCliTest.run("check", project.toString()).err()
+                .contains("ELCI4001: " + main + " is not valid UTF-8 text; save it as UTF-8"));
         // Failures without a location keep the report's shape.
         var unknown = NamedValidatorCliTest.run("init", "--report=json");
         assertEquals("{\"code\":\"ELCI4001\",\"path\":null,\"line\":null,\"column\":null,"
-                + "\"message\":\"--report=json applies to check, build, eval and test\",\"hints\":[],\"excerpt\":null}\n", unknown.err());
+                + "\"message\":\"--report=json applies to check, build, eval and test\",\"hints\":[],\"excerpt\":null,"
+                + "\"context\":null}\n", unknown.err());
+    }
+
+    @Test
+    void typesAreNamedAsWritten() {
+        assertTrue(main("Int", "Result.withDefault 0 (Ok 1) + Ok 2")
+                .startsWith("11:33: ELCI2002: The operator + works on Int values, not Result a Int"));
+        assertTrue(main("Order", "1").startsWith("9:1: ELCI2002: The annotation of `main` says it is `Order`, but"));
+        // Two types of one name stay qualified.
+        assertTrue(report("type Value\n    = Value Int\n\n\nmain : Value\nmain =\n    Value.lovelace 5\n")
+                .contains("says it is `Main.Value`, but its definition is `Julc.Ledger.Value`"));
+    }
+
+    @Test
+    void missingPatternListsAreComplete() {
+        assertTrue(main("Int", "case Just True of\n        Just True ->\n            1")
+                .contains("it is missing `Nothing` and `Just False`"));
+        assertTrue(main("Int", "case ( 1, True ) of\n        ( 1, True ) ->\n            1\n\n        ( 2, False ) ->\n            2\n\n"
+                + "        ( _, True ) ->\n            3").contains("it is missing `( _, False )` and `( 1, False )`"));
+        assertTrue(main("Int", "case [ [ 1 ] ] of\n        [] ->\n            0\n\n        [ [] ] ->\n            1")
+                .contains("it is missing `(_ :: _) :: _` and `[] :: _ :: _`"));
+        assertTrue(main("Int", "case [ [ 1 ] ] of\n        [] ->\n            0\n\n        [ [] ] ->\n            1\n\n"
+                + "        _ :: _ :: _ ->\n            2").contains("it is missing `[ _ :: _ ]`"));
+        assertTrue(main("Int", "case \"a\" of\n        \"a\\\"b\" ->\n            1").contains("it is missing `_`"));
+    }
+
+    @Test
+    void reviewedMessages() {
+        // Comparison hints never suggest a type that cannot be compared.
+        assertEquals("11:21: ELCI2002: The two sides of > have different types: the left is `Maybe Int`, but the right is `Int`",
+                main("Bool", "List.head [ 1 ] > 5"));
+        // `Just` only when the value fits inside the Maybe.
+        assertEquals("9:1: ELCI2002: The annotation of `main` says it is `Maybe Int`, but its definition is `List Int`",
+                main("Maybe Int", "[ 1 ]"));
+        // A recursive group checks every annotation first, so the mistake is found in its body.
+        assertTrue(report("a : Int -> Int\na x =\n    b x\n\n\nb : Int -> Int\nb x =\n    if x > 0 then\n        \"neg\"\n\n"
+                + "    else\n        a (x - 1)\n\n\nmain : Int\nmain =\n    a 1\n")
+                .startsWith("16:5: ELCI2002: The branches of this if have different types: the then branch is `String`"));
+        assertEquals("12:9: ELCI2001: The constructor Just takes 1 argument, but this pattern gives it 2",
+                main("Int", "case Just 1 of\n        Just x y ->\n            x\n\n        _ ->\n            0"));
+        assertTrue(report("f : a -> a\nf x =\n    [ x ]\n\n\nmain : Int\nmain =\n    1\n")
+                .startsWith("9:1: ELCI2002: This needs a type that contains itself: `a` would have to be `List a`"));
+        assertTrue(report("g : comparable -> comparable\ng x =\n    x + 1\n\n\nmain : Int\nmain =\n    1\n")
+                .startsWith("9:1: ELCI2002: The annotation of `g` says `comparable` can be any comparable type, but its definition needs `Int`"));
+        assertTrue(report("h : Int\nh x =\n    x\n\n\nmain : Int\nmain =\n    1\n")
+                .startsWith("9:1: ELCI2002: The annotation of `h` gives it 0 arguments, but its definition has 1 parameter"));
+        // A known name that is not exposed: say how to reach it.
+        assertEquals("11:5: ELCI2005: Unknown name 'double'\nHint: write `Helper.double`, or expose `double` in its import",
+                main("Int", "double 4"));
+        assertEquals("11:5: ELCI2104: No module Lsit is imported, and none has that name\nHint: did you mean `List.length`?",
+                main("Int", "Lsit.length [ 1 ]"));
+        // A record pattern cannot take apart a library record.
+        assertEquals("12:9: ELCI2001: TxOutRef is a library record, which a pattern cannot take apart; read its fields"
+                        + " instead, as in `value.index`",
+                report("index : Julc.Ledger.TxOutRef -> Int\nindex ref =\n    case ref of\n        { index } ->\n            index\n\n\n"
+                        + "main : Int\nmain =\n    index (Julc.Ledger.TxOutRef (Julc.Ledger.TxId Bytes.empty) 0)\n"));
+        assertTrue(reportWithImport("import Julc.Ledger exposing (Credentail(..))").endsWith("\nHint: did you mean `Credential`?"));
     }
 
     @Test

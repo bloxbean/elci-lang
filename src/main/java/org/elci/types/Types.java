@@ -78,7 +78,7 @@ public final class Types {
         // annotation variables in the same type.
         var taken = new HashSet<String>();
         rigidNames(type, taken);
-        return show(type, false, new IdentityHashMap<>(), taken);
+        return show(type, false, new IdentityHashMap<>(), taken, clashes(List.of(type)));
     }
 
     /** Several types shown with one naming, so a variable shared between them keeps its name. */
@@ -86,7 +86,8 @@ public final class Types {
         var taken = new HashSet<String>();
         types.forEach(t -> rigidNames(t, taken));
         var names = new IdentityHashMap<Object, String>();
-        return types.stream().map(t -> show(t, false, names, taken)).toList();
+        var keep = clashes(types);
+        return types.stream().map(t -> show(t, false, names, taken, keep)).toList();
     }
 
     /**
@@ -123,37 +124,66 @@ public final class Types {
     }
 
     /** The left side of an arrow needs parentheses only when it is itself a function. */
-    private static String showParameter(Ty type, Map<Object, String> names, Set<String> taken) {
+    private static String showParameter(Ty type, Map<Object, String> names, Set<String> taken, Set<String> keep) {
         return prune(type) instanceof Con c && c.name.equals("->")
-                ? "(" + show(type, false, names, taken) + ")" : show(type, false, names, taken);
+                ? "(" + show(type, false, names, taken, keep) + ")" : show(type, false, names, taken, keep);
     }
 
-    private static String show(Ty type, boolean argument, Map<Object, String> names, Set<String> taken) {
+    private static final String LEDGER = "org.julclang.ledger.";
+
+    /**
+     * A type's name as the reader writes it, without its module: {@code Result}, not
+     * {@code Result.Result}. When two types in one message share that name, both stay
+     * qualified, the ledger's as {@code Julc.Ledger.Value}.
+     */
+    private static String display(String name, Set<String> keep) {
+        if (name.equals("Elci.Maybe")) return "Maybe";
+        if (keep.contains(name)) return name.startsWith(LEDGER) ? "Julc.Ledger." + name.substring(LEDGER.length()) : name;
+        return name.substring(name.lastIndexOf('.') + 1);
+    }
+
+    /** The type names in {@code types} whose short names clash. */
+    private static Set<String> clashes(List<Ty> types) {
+        var byShort = new HashMap<String, Set<String>>();
+        types.forEach(t -> typeNames(t, byShort));
+        var keep = new HashSet<String>();
+        byShort.values().forEach(full -> { if (full.size() > 1) keep.addAll(full); });
+        return keep;
+    }
+
+    private static void typeNames(Ty type, Map<String, Set<String>> byShort) {
+        type = prune(type);
+        if (!(type instanceof Con c)) return;
+        if (!c.name.startsWith("$") && !c.name.startsWith("Record:") && !c.name.equals("->") && !c.name.equals("Elci.Maybe"))
+            byShort.computeIfAbsent(c.name.substring(c.name.lastIndexOf('.') + 1), k -> new HashSet<>()).add(c.name);
+        c.args.forEach(a -> typeNames(a, byShort));
+    }
+
+    private static String show(Ty type, boolean argument, Map<Object, String> names, Set<String> taken, Set<String> keep) {
         type = prune(type);
         if (type instanceof Var) return variable(type, names, taken);
         var c = (Con) type;
         // Each ambiguous type is its own unknown.
         if (c.name.equals(AMBIGUOUS)) return variable(new Object(), names, taken);
-        String name = c.name.startsWith("$") ? c.name.substring(1) : c.name;
-        if (name.startsWith("org.julclang.ledger.")) name = name.substring("org.julclang.ledger.".length());
-        if (name.equals("Elci.Maybe")) name = "Maybe";
+        String name = c.name.startsWith("$") ? c.name.substring(1)
+                : c.name.startsWith("Record:") ? c.name : display(c.name, keep);
         if (name.equals("->")) {
-            String text = showParameter(c.args.get(0), names, taken) + " -> " + show(c.args.get(1), false, names, taken);
+            String text = showParameter(c.args.get(0), names, taken, keep) + " -> " + show(c.args.get(1), false, names, taken, keep);
             return argument ? "(" + text + ")" : text;
         }
         if (name.equals("Unit")) return "()";
         if (name.equals("Tuple"))
-            return "( " + String.join(", ", c.args.stream().map(a -> show(a, false, names, taken)).toList()) + " )";
+            return "( " + String.join(", ", c.args.stream().map(a -> show(a, false, names, taken, keep)).toList()) + " )";
         if (name.startsWith("Record:")) {
             String fields = name.substring("Record:".length());
             if (fields.isEmpty()) return "{}";
             var fieldNames = fields.split(",");
             var shown = new ArrayList<String>();
-            for (int i = 0; i < fieldNames.length; i++) shown.add(fieldNames[i] + " : " + show(c.args.get(i), false, names, taken));
+            for (int i = 0; i < fieldNames.length; i++) shown.add(fieldNames[i] + " : " + show(c.args.get(i), false, names, taken, keep));
             return "{ " + String.join(", ", shown) + " }";
         }
         if (c.args.isEmpty()) return name;
-        String text = name + " " + String.join(" ", c.args.stream().map(a -> show(a, true, names, taken)).toList());
+        String text = name + " " + String.join(" ", c.args.stream().map(a -> show(a, true, names, taken, keep)).toList());
         return argument ? "(" + text + ")" : text;
     }
 

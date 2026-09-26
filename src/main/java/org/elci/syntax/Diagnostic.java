@@ -79,23 +79,50 @@ public final class Diagnostic extends RuntimeException {
         int row = token.line();
         int start = Math.max(0, token.column() - 1);
         if (token.kind() == Token.Kind.EOF) {
-            // The end of the file: point just past its last code.
-            while (row > lines.size() || row > 1 && lines.get(row - 1).isBlank()) row--;
+            // The end of the file: point just past its last code, above blank and comment lines.
+            while (row > lines.size() || row > 1 && (lines.get(row - 1).isBlank() || lines.get(row - 1).strip().startsWith("--"))) row--;
             if (row < 1 || row > lines.size()) return null;
             start = lines.get(row - 1).length();
         }
         if (row > lines.size()) return null;
         String line = lines.get(row - 1);
         if (start > line.length()) return null;
-        String number = row + "| ";
-        int width = token.kind() == Token.Kind.STRING ? token.text().length() + 2
-                : token.kind() == Token.Kind.EOF ? 1 : Math.max(1, token.text().length());
+        int width;
+        if (token.kind() == Token.Kind.STRING) {
+            width = literalWidth(line, start);
+        } else if (token.kind() == Token.Kind.EOF || token.text().isEmpty()) {
+            width = 1;
+        } else if (line.startsWith(token.text(), start)) {
+            width = token.text().length();
+        } else {
+            // A position the compiler made up (a module's first line): find the name on the line.
+            int found = line.indexOf(token.text());
+            if (found < 0) return null;
+            start = found;
+            width = token.text().length();
+        }
         width = Math.max(1, Math.min(width, line.length() - start));
+        String number = row + "| ";
         return number + line + "\n" + " ".repeat(number.length() + start) + "^".repeat(width);
     }
 
-    /** The diagnostic as a JSON object: code, path, line, column, message, hints, excerpt. */
+    /** The width of the string literal starting at {@code start}, quotes and escapes included. */
+    private static int literalWidth(String line, int start) {
+        if (start >= line.length() || line.charAt(start) != '"') return 1;
+        for (int i = start + 1; i < line.length(); i++) {
+            if (line.charAt(i) == '\\') i++;
+            else if (line.charAt(i) == '"') return i - start + 1;
+        }
+        return line.length() - start;
+    }
+
+    /** The diagnostic as a JSON object: code, path, line, column, message, hints, excerpt, context. */
     public String json(Function<String, String> files, String fallback) {
+        return json(files, fallback, null);
+    }
+
+    /** {@link #json(Function, String)}, with {@code context}: where in the project it arose, or null. */
+    public String json(Function<String, String> files, String fallback, String context) {
         String path = path(files, fallback);
         String excerpt = excerpt(path);
         var hintsJson = new ArrayList<String>();
@@ -103,7 +130,8 @@ public final class Diagnostic extends RuntimeException {
         return "{\"code\":" + quote(code) + ",\"path\":" + quote(path) + ",\"line\":" + token.line()
                 + ",\"column\":" + token.column() + ",\"message\":" + quote(getMessage())
                 + ",\"hints\":[" + String.join(",", hintsJson) + "]"
-                + ",\"excerpt\":" + (excerpt == null ? "null" : quote(excerpt)) + "}";
+                + ",\"excerpt\":" + (excerpt == null ? "null" : quote(excerpt))
+                + ",\"context\":" + (context == null ? "null" : quote(context)) + "}";
     }
 
     public static String quote(String text) {
