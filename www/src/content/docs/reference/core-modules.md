@@ -1,14 +1,14 @@
 ---
 title: Core modules
-description: Exact signatures and semantics of Elci's core library, imported by default as in Elm, and of the Dict, Map, Array, Bytes, Julc.Data and Debug modules.
+description: Exact signatures and semantics of Elci's core library, imported by default as in Elm, and of the Dict, Map, Array, Value, Bytes, Julc.Data and Debug modules.
 sidebar:
   order: 3
 ---
 
 This page lists every function the compiler provides without configuration: the `Basics` prelude, the
 `List`, `Maybe`, `Result`, `Tuple` and `String` modules that every module imports, and the `Dict`, `Map`,
-`Array`, `Bytes`, `Julc.Data` and `Debug` modules. Signatures are exact; the notes describe behavior, failure
-cases and cost. Names, argument orders and edge cases follow Elm 0.19's core library; the few differences
+`Array`, `Value`, `Bytes`, `Julc.Data` and `Debug` modules. Signatures are exact; the notes describe behavior,
+failure cases and cost. Names, argument orders and edge cases follow Elm 0.19's core library; the few differences
 are listed [at the end](#differences-from-elm).
 
 ## Default imports
@@ -29,8 +29,8 @@ So `max`, `compare`, `Just` and `Ok` work unqualified, and `List.map`, `String.f
 work qualified. Writing one of these imports yourself is allowed; an `exposing` list then adds names, as
 in `import List exposing (head)`.
 
-`Bytes`, `Dict`, `Map`, `Array` and `Julc.Data` need an explicit import, as `Dict` and `Array` do in Elm.
-Using one without it names the import to add:
+`Bytes`, `Dict`, `Map`, `Array`, `Value` and `Julc.Data` need an explicit import, as `Dict` and `Array` do
+in Elm. Using one without it names the import to add:
 
 ```text
 src/Main.elm:6:5: ELCI2104: Bytes.fromString needs the Bytes module; add `import Bytes`
@@ -74,13 +74,16 @@ script, so the default imports cost nothing.
 | `Dict k v` | dictionaries with comparable keys, kept sorted; functions in [`Dict`](#dict) |
 | `Map k v` | the ledger's association maps; functions in [`Map`](#map) |
 | `Array a` | constant-time indexed arrays; functions in [`Array`](#array) |
+| `Value` | the ledger's multi-asset values: lovelace and native tokens; functions in [`Value`](#value) |
 | `JulcOptional a` | Julc's optional, returned by some Java library functions |
 
 Tuples of two or three elements, closed records and your own custom types complete the picture; see the
 [language reference](/reference/language/). `Dict`, `Map` and `Array` are type names you can use without
 importing their modules. You may also write them as in Elm, with `import Dict exposing (Dict)` or
 qualified as `Dict.Dict`, and likewise for `Map` and `Array`. The compiler's own modules qualify their types
-the same way: `Bytes.Bytes` after `import Bytes`, and `Data.Data` after `import Julc.Data as Data`.
+the same way: `Bytes.Bytes` after `import Bytes`, and `Data.Data` after `import Julc.Data as Data`. `Value`
+is not an Elm type, so its name needs an import: `import Value exposing (Value)`, or `Value.Value` after
+`import Value`. Reading `out.value` needs no import.
 
 `Maybe`, `Just` and `Nothing` are built into the compiler. A module can't declare constructors named
 `Just`, `Nothing`, `True` or `False` (`ELCI2011: Nothing is a constructor of the built-in Maybe type;
@@ -101,8 +104,8 @@ choose another name`), or types named `Int`, `Bool`, `String`, `Bytes`, `Data`, 
 | lists of a comparable type | lexicographic; a proper prefix comes first |
 | tuples of comparable types | component by component |
 
-`Bool`, `()`, records, custom types, `Maybe`, `Result`, `Dict`, `Map`, `Array`, `Data`, functions and
-ledger records such as `TxOutRef` are not comparable. Sort them by a comparable key with `List.sortBy`, or with
+`Bool`, `()`, records, custom types, `Maybe`, `Result`, `Dict`, `Map`, `Array`, `Value`, `Data`, functions
+and ledger records such as `TxOutRef` are not comparable. Sort them by a comparable key with `List.sortBy`, or with
 your own order and `List.sortWith`. Every order is total and agrees with `==`: `compare x y == EQ` exactly
 when `x == y`. The arithmetic operators remain `Int`-only.
 
@@ -650,6 +653,191 @@ Data encoding and cannot be stored in data; keep a List and convert it with Arra
 `Array.fromList` in the handler. An `[entrypoint]` may return an array on its own; `elci eval` prints it
 as `Array.fromList [40, 50]`.
 
+## `Value`
+
+`import Value exposing (Value)`. A `Value` is the ledger's multi-asset value: an amount of lovelace and
+quantities of native tokens. `out.value` and `ctx.txInfo.mint` are `Value`s, and so is everything this
+module builds. A token is named by a policy id and a token name, the ledger types `PolicyId` and
+`TokenName`; build them from bytes with `import Julc.Ledger exposing (PolicyId(..), TokenName(..))`, as in
+`PolicyId bytes`. Ada is the empty token name under the empty policy, and `lovelace` and `lovelaceOf` cover
+it; a token with another name under the empty policy is not lovelace. Functions take the value last, as in
+Elm.
+
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `zero` | `Value` | the empty value |
+| `lovelace` | `Int -> Value` | an amount of lovelace |
+| `singleton` | `PolicyId -> TokenName -> Int -> Value` | a quantity of one token |
+| `insert` | `PolicyId -> TokenName -> Int -> Value -> Value` | sets the quantity of one token, replacing what the value held; `0` removes the token |
+| `fromList` | `List ( PolicyId, TokenName, Int ) -> Value` | the listed quantities; a repeated token adds up |
+| `lovelaceOf` | `Value -> Int` | the lovelace: the quantity of ada's token; `0` when there is none, as in a minted value |
+| `quantityOf` | `PolicyId -> TokenName -> Value -> Int` | the quantity of one token; `0` when there is none |
+| `isZero` | `Value -> Bool` | whether the value holds nothing |
+| `policies` | `Value -> List PolicyId` | in ascending order; ada's is the empty policy |
+| `tokens` | `PolicyId -> Value -> Dict TokenName Int` | the tokens of one policy and their quantities |
+| `toList` | `Value -> List ( PolicyId, TokenName, Int )` | every token, in ascending order |
+| `add` | `Value -> Value -> Value` | the sum |
+| `subtract` | `Value -> Value -> Value` | the first value minus the second |
+| `negate` | `Value -> Value` | every quantity negated |
+| `scale` | `Int -> Value -> Value` | every quantity multiplied |
+| `sum` | `List Value -> Value` | the sum of the list |
+| `geq` | `Value -> Value -> Bool` | `geq a b`: `a` holds at least as much of every token as `b` |
+| `leq` | `Value -> Value -> Bool` | `leq a b`: `a` holds at most as much of every token as `b` |
+| `withoutLovelace` | `Value -> Value` | the value without its lovelace |
+| `restrictedTo` | `List PolicyId -> Value -> Value` | only the tokens of the listed policies |
+| `positive` | `Value -> Value` | only the positive quantities: in a minted value, what is minted |
+| `negative` | `Value -> Value` | only the negative quantities, still negative: in a minted value, what is burned |
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+import Bytes
+import Julc.Ledger exposing (PolicyId(..), TokenName(..))
+import Value exposing (Value)
+
+
+gold : PolicyId
+gold =
+    PolicyId (Bytes.fromString "gold")
+
+
+coin : TokenName
+coin =
+    TokenName (Bytes.fromString "coin")
+
+
+payment : Value
+payment =
+    Value.add (Value.lovelace 2000000) (Value.fromList [ ( gold, coin, 3 ), ( gold, coin, 2 ) ])
+
+
+main : ( Value, ( Int, Int ), ( Bool, Bool ) )
+main =
+    ( payment
+    , ( Value.lovelaceOf payment, Value.quantityOf gold coin payment )
+    , ( Value.geq payment (Value.lovelace 1500000)
+      , payment == Value.insert gold coin 5 (Value.lovelace 2000000)
+      )
+    )
+```
+
+```text
+$ elci eval
+( Value.fromList [( #(empty), #(empty), 2000000 ), ( #676f6c64, #636f696e, 5 )], ( 2000000, 5 ), ( True, True ) )
+cpu 29654521, mem 85992
+```
+
+`elci eval` prints a value as the `Value.fromList` that builds it, one `( policy, token name, quantity )`
+per token; `#(empty)` is ada's policy and token name. The two `coin` entries added up to 5.
+
+**Canonical form and equality.** Every `Value` is canonical: policies ascend by their bytes, compared as
+unsigned, token names ascend within each policy, and no quantity is zero. The ledger's values are canonical,
+the functions above keep them so, and decoding a `Value` from Data rejects any other form. So two values are
+equal exactly when they hold the same quantities, whatever order the tokens were added in: `==` works on
+values, and on your records, tuples and lists that contain them. Values are not
+[comparable](#comparable-types); compare them with `geq` and `leq`.
+
+**Negative quantities.** A value may hold negative quantities. The transaction's `mint` field holds the
+tokens it burns as negative quantities. `geq` and `leq` handle them: `geq a b` subtracts `b` from `a` and
+checks that no quantity is below zero, so a burn counts as less than none. `positive` and `negative` split
+a mint into what it mints and what it burns:
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+import Bytes
+import Dict
+import Julc.Ledger exposing (PolicyId(..), TokenName(..))
+import Value exposing (Value)
+
+
+gold : PolicyId
+gold =
+    PolicyId (Bytes.fromString "gold")
+
+
+{-| A mint that creates 3 new coins and burns 2 old ones.
+-}
+minted : Value
+minted =
+    Value.fromList
+        [ ( gold, TokenName (Bytes.fromString "new"), 3 )
+        , ( gold, TokenName (Bytes.fromString "old"), -2 )
+        ]
+
+
+main : ( ( Value, Value ), ( Bool, Bool ), List ( TokenName, Int ) )
+main =
+    ( ( Value.positive minted, Value.negate (Value.negative minted) )
+    , ( Value.geq minted Value.zero, Value.geq (Value.positive minted) Value.zero )
+    , Dict.toList (Value.tokens gold minted)
+    )
+```
+
+```text
+$ elci eval
+( ( Value.fromList [( #676f6c64, #6e6577, 3 )], Value.fromList [( #676f6c64, #6f6c64, 2 )] ), ( False, True ), [( #6e6577, 3 ), ( #6f6c64, -2 )] )
+cpu 45778556, mem 170124
+```
+
+`Value.negate (Value.negative minted)` gives the burned amounts as positive quantities.
+
+**Failures.** A policy id or token name longer than 32 bytes, and a quantity outside the signed 128-bit
+range, fail the script: `evaluation failed: InsertCoin: tokenName too long: 33 bytes (max 32)`.
+
+**In Data.** A `Value` is stored as the ledger stores it, a Plutus map from policy ids to maps from token
+names to quantities, so `Julc.Data.encode` of a value costs nothing. `Julc.Data.decode` accepts only the
+canonical form. Unsorted or repeated policies or token names fail with
+`UnValueData: currencies not strictly ordered or duplicate`, a zero quantity with
+`UnValueData: zero quantity`, and a policy without tokens or an id longer than 32 bytes fail too.
+
+Both conversions work on a `Value` itself. A type that contains one can't be decoded yet, and a list or tuple
+of values can't be encoded either (`ELCI3003`). A `Value` can't be a datum, redeemer or parameter yet, nor
+part of one:
+
+```text
+src/Main.elm:7:1: ELCI2013: org.julclang.ledger.Value has no approved strict Data boundary (BOUNDARY); for example records containing the map-encoded Value cannot be checked
+```
+
+Store a `List ( PolicyId, TokenName, Int )` instead, and rebuild the value with `Value.fromList`.
+
+**Cost.** `lovelaceOf`, `isZero`, `policies`, `tokens` and `toList` read the value's Data directly, and
+`positive`, `negative`, `restrictedTo` and `withoutLovelace` filter it entry by entry, keeping it canonical.
+The other functions convert it to the protocol's native value (CIP-153 builtins) and back, which costs about a
+million CPU units for a value of a few assets; `sum` converts each value once. These small programs, which
+include building their values, cost:
+
+| Program | CPU |
+| --- | ---: |
+| `Value.add` of `Value.lovelace` and `Value.singleton` | 3.5 million |
+| `Value.lovelaceOf (Value.lovelace 5000000)` | 2.7 million |
+| `Value.quantityOf` of a `Value.singleton` | 2.5 million |
+| `Value.geq` of two `Value.lovelace` values | 6.3 million |
+| `Value.sum` of five `Value.lovelace` values | 20 million |
+
+Most functions grow with the number of assets; [costs and performance](/advanced/costs/#values) has figures
+for larger values.
+
+**Java libraries.** A Java library builds values in its own order, as Julc's `ValuesLib` does, so no Java
+library may hand Elci a `Value`. An export whose result can hold one, directly or in a field of a record or
+union, is rejected:
+
+```text
+src/Main.elm:9:5: ELCI2105: org.julclang.stdlib.lib.ValuesLib.add: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module
+```
+
+A generic Java function can't be used at a type that holds a `Value` either:
+
+```text
+src/Main.elm:9:5: ELCI3003: Type argument a = Value of filter contains a Value, which a Java library does not keep in the ledger's canonical order; build it with the Value module
+```
+
+Julc's `ContextsLib` and `OutputLib` are exempt: they only pass along the ledger's own values, as
+`ContextsLib.valuePaid` does. Exports that only read a value, such as `ValuesLib.assetOf`, still work, but
+this module covers them. A value has no constructors or patterns of its own:
+`import Julc.Ledger exposing (Value(..))` gives
+`ELCI2104: Value has no approved constructors or patterns; its values come from the Value module`.
+
 ## `Bytes`
 
 `import Bytes`. Each function is a direct Plutus builtin call, with the byte string last.
@@ -721,17 +909,17 @@ inlineAmount datum =
 ```
 
 - **Supported types.** `Int`, `Bool`, `String`, `Bytes`, `Data`, your records and custom types, tuples,
-  `Maybe`, `Result`, `Order`, lists, dictionaries, maps and optionals of these, and imported types whose
-  provider approves decoding or encoding (for example `PubKeyHash` or `TxOutRef`). The rest are rejected with
-  `ELCI3003`: `()`, functions, `Array`, and ledger types without a checkable layout such as `Value` or
-  `TxOut`.
+  `Maybe`, `Result`, `Order`, lists, dictionaries, maps and optionals of these, a [`Value`](#value), and
+  imported types whose provider approves decoding or encoding (for example `PubKeyHash` or `TxOutRef`). The
+  rest are rejected with `ELCI3003`: `()`, functions, `Array`, and ledger types without a checkable layout,
+  such as `TxOut` for `decode`. A type that contains a `Value` can't be decoded yet.
 - **Known types for decoding.** `decode` must know the type it creates where it is used. If inference
   cannot tell, annotate the binding (local definitions accept signatures). Otherwise the call fails with
   `ELCI3001: Cannot determine the type converted by Julc.Data.decode; add a type annotation`. `encode`
   and the optional adapters don't need to know it: `Data.encode Nothing` is `Constr 0`.
 - **Strict decoding.** `decode` never returns a `Maybe` for malformed input. A value of the wrong shape,
   such as an integer where a record is expected, fails with an error like `UnConstrData: not ConstrData`.
-  A `Dict` whose keys are not strictly ascending fails too.
+  A `Dict` whose keys are not strictly ascending fails too, and so does a `Value` that is not canonical.
 - **Optionals.** Julc's optional tags `Some` as 0 and `None` as 1, the reverse of `Maybe`. The adapters
   swap the tags without decoding the payload.
 - **Opaque.** `Data` has no `==` and no order; decode it first.
@@ -777,7 +965,8 @@ tests. See [debugging and budgets](/testing/debugging/).
 
 `Julc.Ledger` provides the ledger types (`ScriptContext`, `TxInfo`, `PubKeyHash`, `TxOutRef`,
 `Credential` and more) rather than functions. See
-[reading the transaction](/contracts/reading-the-transaction/).
+[reading the transaction](/contracts/reading-the-transaction/). Its `Value` is the type of the
+[`Value`](#value) module, so `import Julc.Ledger exposing (Value)` names the same type.
 
 ## Differences from Elm
 

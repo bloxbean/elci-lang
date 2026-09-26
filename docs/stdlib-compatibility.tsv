@@ -65,7 +65,7 @@ ContextsLib	ownHash	COMPILES	Ledger.ScriptContext -> Bytes
 ContextsLib	ownInputScriptHash	COMPILES	Ledger.ScriptContext -> Bytes
 ContextsLib	scriptOutputsAt	COMPILES	Ledger.TxInfo -> Bytes -> (List Ledger.TxOut)
 ContextsLib	signedBy	COMPILES	Ledger.TxInfo -> Bytes -> Bool
-ContextsLib	trace	COMPILES	String -> Unit
+ContextsLib	trace	COMPILES	String -> ()
 ContextsLib	txInfoFee	COMPILES	Ledger.TxInfo -> Int
 ContextsLib	txInfoId	COMPILES	Ledger.TxInfo -> Ledger.TxId
 ContextsLib	txInfoInputs	COMPILES	Ledger.TxInfo -> (List Ledger.TxInInfo)
@@ -170,14 +170,14 @@ TypedMapLib	values	GENERIC	<K,V>(Map['K,'V])List['V]
 ValuesLib	_containsPolicy	COMPILES	Ledger.Value -> Data -> Bool
 ValuesLib	_countTokensWithQty	COMPILES	Ledger.Value -> Data -> Int -> Int
 ValuesLib	_findTokenName	COMPILES	Ledger.Value -> Data -> Int -> Bytes
-ValuesLib	add	COMPILES	Ledger.Value -> Ledger.Value -> Ledger.Value
-ValuesLib	adjustOuterForAdd	COMPILES	Ledger.Value -> Ledger.Value -> Ledger.Value
+ValuesLib	add	BLOCKED	org.julclang.stdlib.lib.ValuesLib.add: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module
+ValuesLib	adjustOuterForAdd	BLOCKED	org.julclang.stdlib.lib.ValuesLib.adjustOuterForAdd: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module
 ValuesLib	assetOf	COMPILES	Ledger.Value -> Bytes -> Bytes -> Int
 ValuesLib	checkPolicyGeq	COMPILES	Ledger.Value -> Data -> Bool
 ValuesLib	containsPolicy	COMPILES	Ledger.Value -> Bytes -> Bool
 ValuesLib	countTokensWithQty	COMPILES	Ledger.Value -> Bytes -> Int -> Int
 ValuesLib	eq	COMPILES	Ledger.Value -> Ledger.Value -> Bool
-ValuesLib	extraOuterEntries	COMPILES	Ledger.Value -> Ledger.Value -> Ledger.Value
+ValuesLib	extraOuterEntries	BLOCKED	org.julclang.stdlib.lib.ValuesLib.extraOuterEntries: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module
 ValuesLib	findTokenName	COMPILES	Ledger.Value -> Bytes -> Int -> Bytes
 ValuesLib	flatten	COMPILES	Ledger.Value -> (List Data)
 ValuesLib	flattenStep	COMPILES	Data -> (List Data) -> (List Data)
@@ -186,10 +186,10 @@ ValuesLib	geqMultiAsset	COMPILES	Ledger.Value -> Ledger.Value -> Bool
 ValuesLib	isZero	COMPILES	Ledger.Value -> Bool
 ValuesLib	leq	COMPILES	Ledger.Value -> Ledger.Value -> Bool
 ValuesLib	lovelaceOf	COMPILES	Ledger.Value -> Int
-ValuesLib	negate	COMPILES	Ledger.Value -> Ledger.Value
+ValuesLib	negate	BLOCKED	org.julclang.stdlib.lib.ValuesLib.negate: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module
 ValuesLib	refBytes	COMPILES	Ledger.TxOutRef -> Bytes
-ValuesLib	singleton	COMPILES	Bytes -> Bytes -> Int -> Ledger.Value
-ValuesLib	subtract	COMPILES	Ledger.Value -> Ledger.Value -> Ledger.Value
+ValuesLib	singleton	BLOCKED	org.julclang.stdlib.lib.ValuesLib.singleton: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module
+ValuesLib	subtract	BLOCKED	org.julclang.stdlib.lib.ValuesLib.subtract: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module
 ValuesLib	uniqueTokenName	COMPILES	Ledger.TxOutRef -> Bytes
 ValuesLib	_assetOf	UNSUPPORTED	Unsupported on-chain source type: PlutusData.BytesData
 ValuesLib	_countInnerTokensWithQty	UNSUPPORTED	Unsupported on-chain source type: PlutusData.MapData

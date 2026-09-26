@@ -57,7 +57,7 @@ The rules:
   .../treasury/src/Treasury.elm:28:1: ELCI2014: Handler Treasury.withdraw does not have the withdraw signature admin -> redeemer -> ScriptContext -> Bool that [validators.treasury] needs (1 parameter); its type is Int -> () -> ScriptContext -> Bool (Type mismatch: expected Int, found PubKeyHash)
   ```
 
-- **Boundary types only.** Parameters follow the same rules as datums and redeemers: records, custom types, lists, dictionaries, maps and ledger types such as `PubKeyHash` or `TxOutRef` are fine; functions, arrays and `Value` are not. See [Datums and redeemers](/contracts/datums-and-redeemers/).
+- **Boundary types only.** Parameters follow the same rules as datums and redeemers: records, custom types, lists, dictionaries, maps and ledger types such as `PubKeyHash` or `TxOutRef` are fine; functions, arrays and `Value` are not. To parameterize a script by an amount of tokens, take a `List ( PolicyId, TokenName, Int )` and build the value with `Value.fromList`. See [Datums and redeemers](/contracts/datums-and-redeemers/).
 - **Names** start with a lowercase letter and use letters, digits and `_`.
 
 Parameters are decoded when the script is applied, but the script doesn't validate them on-chain. `elci apply` checks them off-chain instead, as shown below. The one exception is a `Dict`: the script checks its key order on every run, as it does in a datum.
@@ -136,7 +136,7 @@ FAIL DropTest.adminMintsWithinLimits
 ```
 
 :::note
-This example trusts the redeemer to tell the truth about the quantity, which keeps it short. A real policy should read the minted quantity from `ctx.txInfo.mint`, as the [treasury tutorial](/tutorials/treasury/) does.
+This example trusts the redeemer to tell the truth about the quantity, which keeps it short. A real policy should read the minted quantity from `ctx.txInfo.mint` with `Value.quantityOf`, as the [treasury tutorial](/tutorials/treasury/) does.
 :::
 
 ## The built script

@@ -32,6 +32,7 @@ preview: the profile below is implemented and tested, and everything outside it 
 | Patterns | Nested constructors, lists, cons, tuples, record fields, `as`, `_`, unit, and `Bool`, `Int` and `String` literals. Exhaustiveness and reachability are checked. |
 | Equality and order | Structural `==` and `/=` for equality-capable types, and `<`, `compare` and sorting for comparable types (below). |
 | Dictionaries, maps and arrays | `Dict k v` (Elm's `Dict`, stored as a sorted Plutus map), `Map k v` (the ledger's association map) and `Array a` (constant-time `get`). |
+| Values | `Value`, the ledger's multi-asset value, with the core `Value` module: arithmetic, comparison and exact `==` on the CIP-153 builtins. |
 | Bytes | The `Bytes` module: every byte-string builtin. |
 | Ledger access | Typed views of the script context, nominal hash types, approved constructors, patterns and equality. |
 | Data conversions | `Julc.Data.decode` and `encode`, optional adapters. |
@@ -187,8 +188,8 @@ import Tuple
 import Debug
 ```
 
-`Bytes`, `Dict`, `Map`, `Array`, `Julc.Data` and Java library modules are imported explicitly. Names resolve
-as in Elm, with one addition:
+`Bytes`, `Dict`, `Map`, `Array`, `Value`, `Julc.Data` and Java library modules are imported explicitly.
+Names resolve as in Elm, with one addition:
 
 - A module's own declarations shadow every import.
 - Two imports that expose different things under one name make it ambiguous where it is used
@@ -202,12 +203,13 @@ as in Elm, with one addition:
 
 ### Reserved names
 
-- **Module names.** `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict` and `Array` are
-  core modules, and `Set`, `Value` and `Elci` are reserved for the core library. Neither a project module
+- **Module names.** `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array` and
+  `Value` are core modules, and `Set` and `Elci` are reserved for the core library. Neither a project module
   nor a `[java-modules]` key can use these names, or a name that starts with `Elci.`:
 
   ```text
   src/String.elm:1:1: ELCI2104: The module name String is taken by Elci's core library; rename this module
+  src/Value.elm:1:1: ELCI2104: The module name Value is taken by Elci's core library; rename this module
   src/Set.elm:1:1: ELCI2104: The module name Set is reserved for Elci's core library; rename this module
   src/Elci/Tools.elm:1:1: ELCI2104: The module name Elci.Tools is reserved for Elci's core library; rename this module
   elci: ELCI4001: [java-modules] may not map Value, a module name of Elci's core library
@@ -326,13 +328,15 @@ This is also how elm-format writes negative arguments, so formatted code keeps i
 
 ## Equality
 
-`==` and `/=` work on `Int`, `Bool`, `String`, `()`, `Bytes`, ledger hashes of the same type, and lists,
-tuples, records, `Maybe`, `Dict` and custom types whose contents are all equality-capable. Two dictionaries
-are equal when they have the same bindings. Imported types use the equality their provider approves (Java
-`equals`). Both operands are evaluated once, left to right.
+`==` and `/=` work on `Int`, `Bool`, `String`, `()`, `Bytes`, ledger hashes of the same type, `Value`, and
+lists, tuples, records, `Maybe`, `Dict` and custom types whose contents are all equality-capable. Two
+dictionaries are equal when they have the same bindings, and two values when they hold the same quantities:
+every `Value` is kept in one canonical form, so `==` compares their encodings. Imported types use the
+equality their provider approves (Java `equals`). Both operands are evaluated once, left to right.
 
-Rejected with `ELCI2003`: functions, `Data`, `Map`, `Array`, the ledger `Value` and types that contain one,
-and imported types without approved equality. The message names the part that has no equality:
+Rejected with `ELCI2003`: functions, `Data`, `Map`, `Array`, imported types without approved equality, and
+the ledger records that contain a `Value` (`TxOut`, `TxInInfo`, `TxInfo`). The message names the part that
+has no equality:
 
 ```text
 src/Main.elm:6:21: ELCI2003: The operator == cannot compare List (Int -> Int) values: Int -> Int is part of them, and functions have no equality
@@ -349,8 +353,8 @@ src/Main.elm:6:21: ELCI2003: The operator == cannot compare List (Int -> Int) va
   `TxId` and the other hashes), ordered lexicographically by unsigned byte, a proper prefix first;
 - lists of a comparable type, lexicographically, and tuples of comparable types, component by component.
 
-`Bool`, `()`, records, custom types, `Maybe`, `Dict`, `Map`, `Array`, `Data`, functions and ledger records
-such as `TxOutRef` are not comparable (`ELCI2003`). Every order is total and agrees with `==`. Comparing `Int`
+`Bool`, `()`, records, custom types, `Maybe`, `Dict`, `Map`, `Array`, `Value`, `Data`, functions and ledger
+records such as `TxOutRef` are not comparable (`ELCI2003`). Every order is total and agrees with `==`. Comparing `Int`
 values uses the integer builtins; byte strings use `lessThanByteString` and `lessThanEqualsByteString`;
 `String` encodes both sides to UTF-8 and compares the bytes; lists and tuples use a comparison function
 generated once per type.
@@ -537,9 +541,11 @@ use a fixed encoding:
 | `List a` | list |
 | `Dict k v` | map with its keys in strictly ascending order |
 | `Map k v` | map, in the map's order |
+| `Value` | map from policy ids to maps from token names to quantities, both in ascending byte order, without zero quantities |
 | imported record or sum | as declared in Java: constructor in declaration order, fields in declaration order |
 
-Functions and arrays have no encoding. You can see the encoding of any value with `Julc.Data.encode` and
+Functions and arrays have no encoding. A `Value` can't be a datum, redeemer or parameter yet, and a type
+that contains one can't be decoded. You can see the encoding of any value with `Julc.Data.encode` and
 `elci eval`, which prints Data as `Constr tag [fields]`, lists, `{key: value}` maps, integers and `#bytes`:
 
 ```elm title="src/Main.elm"
@@ -581,7 +587,8 @@ The record `{ beneficiary = 1, amount = 2 }` encodes as `Constr 0 [2, 1]`, becau
 
 Decoding is strict: tags, field counts and nested field kinds are checked, and a mismatch fails the
 script. A `Dict`, at any depth, must have strictly ascending keys: a map whose keys are out of order or
-repeated fails to decode. Each build records the encoding of its boundary types in `abi.json`; see
+repeated fails to decode. A `Value` must be canonical: its policies and token names strictly ascending,
+and no quantity zero. Each build records the encoding of its boundary types in `abi.json`; see
 [datums and redeemers](/contracts/datums-and-redeemers/).
 
 ## Compiler limits

@@ -17,7 +17,7 @@ A minting policy's id is its script hash, and a parameter is part of the script.
 
 Now require that minting spends the seed. An output can be spent only once, so only one transaction can ever satisfy the policy. After it, no transaction can mint under this policy id again.
 
-The policy you'll build has two parameters, `seed : TxOutRef` and `tokenName : Bytes`, and these rules:
+The policy you'll build has two parameters, `seed : TxOutRef` and `tokenName : TokenName`, and these rules:
 
 1. Minting succeeds only in a transaction that spends the seed output.
 2. That transaction must mint exactly one `tokenName` token under this policy, and nothing else.
@@ -144,13 +144,13 @@ The core idea works. But the seed transaction may still mint as many tokens as i
 
 The policy must look at what the transaction mints under its own policy id, and accept exactly one token with the expected name.
 
-The mint field is a multi-asset `Value`, which Elci reads through Julc's `ValuesLib`. `Values.flatten` lists every minted asset as Data, one triple (policy id, token name, quantity) per asset. That triple has the same encoding as an Elci tuple `( Bytes, Bytes, Int )`: constructor 0 with three fields, in order. So `Data.decode` turns each one into a tuple you can filter and compare.
+The mint field is a multi-asset `Value`, which the core [`Value`](/reference/core-modules/#value) module reads. `Value.tokens policy value` gives the tokens of one policy with their quantities, as a `Dict TokenName Int`. Dictionaries have `==`, so a single comparison can check everything the policy mints.
 
 <Steps>
 
-1. **Add the token name parameter and the library.**
+1. **Add the token name parameter.**
 
-   ```toml title="elci.toml" ins={8,11-12}
+   ```toml title="elci.toml" ins={8}
    [project]
    source-directories = ["src"]
    target = "plutus-v3-pv11-uplc-1.1.0"
@@ -160,9 +160,6 @@ The mint field is a multi-asset `Value`, which Elci reads through Julc's `Values
    boundary = "julc-strict-v1"
    parameters = ["seed", "tokenName"]
    mint = "OneShot.mint"
-
-   [java-modules]
-   "Julc.Values" = "org.julclang.stdlib.lib.ValuesLib"
    ```
 
 2. **Check what is minted.** Replace `src/OneShot.elm`:
@@ -170,18 +167,18 @@ The mint field is a multi-asset `Value`, which Elci reads through Julc's `Values
    ```elm title="src/OneShot.elm"
    module OneShot exposing (mint)
 
-   import Julc.Data as Data
-   import Julc.Ledger exposing (PolicyId, ScriptContext, ScriptInfo(..), TxOutRef)
-   import Julc.Values as Values
+   import Dict exposing (Dict)
+   import Julc.Ledger exposing (PolicyId, ScriptContext, ScriptInfo(..), TokenName, TxOutRef)
+   import Value
 
 
    {-| Mint exactly one `tokenName` token, in the transaction that spends the seed output.
    -}
-   mint : TxOutRef -> Bytes -> () -> ScriptContext -> Bool
+   mint : TxOutRef -> TokenName -> () -> ScriptContext -> Bool
    mint seed tokenName _ ctx =
        case ctx.scriptInfo of
            MintingScript policy ->
-               spendsSeed seed ctx && minted policy ctx == [ ( tokenName, 1 ) ]
+               spendsSeed seed ctx && minted policy ctx == Dict.singleton tokenName 1
 
            _ ->
                False
@@ -194,27 +191,25 @@ The mint field is a multi-asset `Value`, which Elci reads through Julc's `Values
 
    {-| The token names and quantities this transaction mints under `policy`.
    -}
-   minted : PolicyId -> ScriptContext -> List ( Bytes, Int )
+   minted : PolicyId -> ScriptContext -> Dict TokenName Int
    minted policy ctx =
-       Values.flatten ctx.txInfo.mint
-           |> List.map Data.decode
-           |> List.filter (\( policyId, _, _ ) -> policyId == policy.hash)
-           |> List.map (\( _, name, quantity ) -> ( name, quantity ))
+       Value.tokens policy ctx.txInfo.mint
    ```
 
    - `ctx.scriptInfo` is `MintingScript policy` when the script runs as a minting policy, and `policy` is the script's own policy id. Other purposes can't reach this handler, but `case` must be exhaustive.
-   - `minted` keeps only this policy's assets. `Data.decode` has no annotation of its own: the tuple patterns in the next steps, and the declared result type, fix the element type to `( Bytes, Bytes, Int )`.
-   - Comparing the whole list with `[ ( tokenName, 1 ) ]` rejects a second name, a quantity other than one, and a transaction that mints nothing under this policy, all in one test.
+   - `minted` keeps only this policy's tokens. A value never holds a zero quantity, so a token the transaction doesn't mint is simply absent.
+   - Comparing the whole dictionary with `Dict.singleton tokenName 1` rejects a second name, a quantity other than one, and a transaction that mints nothing under this policy, all in one test.
+   - `TokenName` is the ledger's type for token names. Its Data is plain bytes, so the parameter is applied as bytes.
 
    ```sh
    elci check .
    ```
 
    ```text
-   validator nft (mint): checked; 1052 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+   validator nft (mint): checked; 409 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
    ```
 
-   The script grew from 208 to 1052 bytes: it now links `ValuesLib.flatten`.
+   The script grew from 208 to 409 bytes: it now reads the mint value and compares dictionaries.
 
 3. **Test every way to get it wrong.** Replace `tests/OneShotTest.elm`. `mintSpending` builds a transaction that spends a given output; each test adds what it mints:
 
@@ -329,19 +324,19 @@ The mint field is a multi-asset `Value`, which Elci reads through Julc's `Values
    ```
 
    ```text
-   PASS OneShotTest.mintingWithTheSeedSucceeds (cpu 33633001, mem 129239)
-   PASS OneShotTest.mintingWithoutTheSeedFails (cpu 9904238, mem 36825)
-   PASS OneShotTest.mintingTwoFails (cpu 33617001, mem 129139)
-   PASS OneShotTest.mintingAnotherNameFails (cpu 33617001, mem 129139)
-   PASS OneShotTest.mintingExtraTokensFails (cpu 48054711, mem 189288)
-   PASS OneShotTest.onlyTheSeedUnlocksMinting (100 runs, max cpu 9904238, mem 36825)
-   PASS OneShotTest.exactlyOneTicket (100 runs, max cpu 33633001, mem 129239)
+   PASS OneShotTest.mintingWithTheSeedSucceeds (cpu 13722157, mem 43763)
+   PASS OneShotTest.mintingWithoutTheSeedFails (cpu 9127629, mem 31957)
+   PASS OneShotTest.mintingTwoFails (cpu 13706157, mem 43663)
+   PASS OneShotTest.mintingAnotherNameFails (cpu 13706157, mem 43663)
+   PASS OneShotTest.mintingExtraTokensFails (cpu 13706157, mem 43663)
+   PASS OneShotTest.onlyTheSeedUnlocksMinting (100 runs, max cpu 9127629, mem 31957)
+   PASS OneShotTest.exactlyOneTicket (100 runs, max cpu 13722157, mem 43763)
    7 passed, 0 failed (seed 42)
    ```
 
 </Steps>
 
-The budgets tell a story. Without the seed, `&&` stops after `spendsSeed`, at about 10M CPU units. With it, walking the mint value costs about 24M more. That is well within a transaction's limits, and it only runs once.
+The budgets tell a story. Without the seed, `&&` stops after `spendsSeed`, at about 9M CPU units. With it, reading the mint value and comparing the dictionaries costs about 5M more. That is well within a transaction's limits, and it only runs once.
 
 ## Allow burning
 
@@ -354,9 +349,9 @@ As written, the token can never be burned: a burn is a negative quantity, and it
    ```elm title="src/OneShot.elm"
    module OneShot exposing (Action(..), mint)
 
-   import Julc.Data as Data
-   import Julc.Ledger exposing (PolicyId, ScriptContext, ScriptInfo(..), TxOutRef)
-   import Julc.Values as Values
+   import Dict exposing (Dict)
+   import Julc.Ledger exposing (PolicyId, ScriptContext, ScriptInfo(..), TokenName, TxOutRef)
+   import Value
 
 
    type Action
@@ -367,16 +362,16 @@ As written, the token can never be burned: a burn is a negative quantity, and it
    {-| Mint exactly one `tokenName` token, in the transaction that spends the seed output.
    Burning that token is always allowed.
    -}
-   mint : TxOutRef -> Bytes -> Action -> ScriptContext -> Bool
+   mint : TxOutRef -> TokenName -> Action -> ScriptContext -> Bool
    mint seed tokenName action ctx =
        case ctx.scriptInfo of
            MintingScript policy ->
                case action of
                    Mint ->
-                       spendsSeed seed ctx && minted policy ctx == [ ( tokenName, 1 ) ]
+                       spendsSeed seed ctx && minted policy ctx == Dict.singleton tokenName 1
 
                    Burn ->
-                       minted policy ctx == [ ( tokenName, -1 ) ]
+                       minted policy ctx == Dict.singleton tokenName -1
 
            _ ->
                False
@@ -389,12 +384,9 @@ As written, the token can never be burned: a burn is a negative quantity, and it
 
    {-| The token names and quantities this transaction mints under `policy`.
    -}
-   minted : PolicyId -> ScriptContext -> List ( Bytes, Int )
+   minted : PolicyId -> ScriptContext -> Dict TokenName Int
    minted policy ctx =
-       Values.flatten ctx.txInfo.mint
-           |> List.map Data.decode
-           |> List.filter (\( policyId, _, _ ) -> policyId == policy.hash)
-           |> List.map (\( _, name, quantity ) -> ( name, quantity ))
+       Value.tokens policy ctx.txInfo.mint
    ```
 
    `Burn` doesn't need the seed. It accepts only a burn of exactly one `tokenName`, which is all there can be.
@@ -439,14 +431,14 @@ As written, the token can never be burned: a burn is a negative quantity, and it
    ```
 
    ```text
-   PASS OneShotTest.mintingWithTheSeedSucceeds (cpu 34123817, mem 131004)
-   PASS OneShotTest.mintingWithoutTheSeedFails (cpu 10395054, mem 38590)
-   PASS OneShotTest.mintingTwoFails (cpu 34107817, mem 130904)
-   PASS OneShotTest.mintingAnotherNameFails (cpu 34107817, mem 130904)
-   PASS OneShotTest.mintingExtraTokensFails (cpu 48545527, mem 191053)
-   PASS OneShotTest.onlyTheSeedUnlocksMinting (100 runs, max cpu 10395054, mem 38590)
-   PASS OneShotTest.exactlyOneTicket (100 runs, max cpu 34123817, mem 131004)
-   PASS OneShotTest.burningIsAlwaysAllowed (cpu 31335519, mem 125417)
+   PASS OneShotTest.mintingWithTheSeedSucceeds (cpu 14212973, mem 45528)
+   PASS OneShotTest.mintingWithoutTheSeedFails (cpu 9618445, mem 33722)
+   PASS OneShotTest.mintingTwoFails (cpu 14196973, mem 45428)
+   PASS OneShotTest.mintingAnotherNameFails (cpu 14196973, mem 45428)
+   PASS OneShotTest.mintingExtraTokensFails (cpu 14196973, mem 45428)
+   PASS OneShotTest.onlyTheSeedUnlocksMinting (100 runs, max cpu 9618445, mem 33722)
+   PASS OneShotTest.exactlyOneTicket (100 runs, max cpu 14212973, mem 45528)
+   PASS OneShotTest.burningIsAlwaysAllowed (cpu 11424675, mem 39941)
    8 passed, 0 failed (seed 42)
    ```
 
@@ -461,7 +453,7 @@ elci build .
 ```
 
 ```text
-validator nft (mint): checked; 1141 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator nft (mint): checked; 477 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 ```
 
 To deploy, pick the seed: an unspent output in the minter's wallet, identified by its transaction id and output index. Apply it with the token name. A `TxOutRef` is constructor 0 with the transaction id's bytes and the index; the token name is the hex of `TICKET`:
@@ -473,7 +465,7 @@ elci apply . --validator nft \
 ```
 
 ```text
-validator nft: applied 2 parameter(s); hash 5c92d5deb5eeb73cebd6006d424541ab7d70fe3e649059308283b9d6; wrote .../one-shot/build/validators/nft/applied.plutus.json
+validator nft: applied 2 parameter(s); hash 4481b6b376b6479a565cde7c29f6ab8e12019a6091d2140afc94d5b5; wrote .../one-shot/build/validators/nft/applied.plutus.json
 ```
 
 The hash is the policy id of your NFT. The minting transaction must spend exactly the output you applied (`a8a61c...#1` here), mint one `TICKET` under this policy id with the `Mint` redeemer, and attach `applied.plutus.json`'s script. Once that output is spent, the policy can never mint again.
@@ -486,7 +478,7 @@ Apply the seed only after you've chosen an output that really exists and is unsp
 
 - A ledger type such as `TxOutRef` can be a deployment parameter, so a script can be tied to one specific output.
 - `ctx.txInfo.inputs` tells you which outputs a transaction spends; `ctx.scriptInfo` gives a minting policy its own policy id.
-- `Values.flatten` plus `Data.decode` turns the mint value into plain Elci tuples you can compare exactly.
+- `Value.tokens` gives the tokens a transaction mints under one policy as a `Dict`, which `==` compares exactly.
 - Properties over generated `TxOutRef`s and quantities check the rules far beyond the cases you write by hand.
 
 What this tutorial doesn't cover: token metadata (CIP-25 or CIP-68) is off-chain or needs more on-chain rules, and building and submitting the minting transaction happens in off-chain code, for example with Cardano Client Lib as shown in [Build and deploy](/contracts/build-and-deploy/).

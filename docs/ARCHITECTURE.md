@@ -83,6 +83,7 @@ limits, separate from Cardano's execution budget.
 
 The supported surface is recorded in the language guide. In particular, ledger
 records are context views rather than generally serializable user data, complex
-ledger sums and `Value` operations need dedicated verified adapters, and the Java
-provider currently exposes concrete signatures. These restrictions are intended
+ledger sums need dedicated verified adapters (`Value` operations are the core
+`Value` module, over the CIP-153 builtins), and the Java provider currently
+exposes concrete signatures. These restrictions are intended
 to fail closed rather than erase unsupported types to `Data`.

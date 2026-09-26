@@ -27,7 +27,8 @@ class StandardLibraryTest {
     @TempDir Path project;
 
     private static final String HEADER =
-            "module Main exposing (main)\n\nimport Bytes\nimport Dict exposing (Dict)\nimport Julc.Data as Data\nimport Julc.Ledger exposing (PubKeyHash)\nimport Map exposing (Map)\n\n\n";
+            "module Main exposing (main)\n\nimport Bytes\nimport Dict exposing (Dict)\nimport Julc.Data as Data\n"
+                    + "import Julc.Ledger exposing (PolicyId(..), PubKeyHash, TokenName(..))\nimport Map exposing (Map)\nimport Value exposing (Value)\n\n\n";
 
     /** The value of {@code main : type}, in Elci syntax, or {@code failed} when evaluation fails. */
     private static String eval(String type, String body) {
@@ -38,7 +39,7 @@ class StandardLibraryTest {
         var result = compile(Map.of("Main", HEADER + declarations + "main : " + type + "\nmain =\n    " + body + "\n"));
         var evaluation = JulcVm.create().evaluate(result.program(), result.target().ledgerTarget());
         if (!(evaluation instanceof EvalResult.Success success)) return "failed";
-        return ElciValues.show(success.resultTerm(), result.pirType(), result.namedTypes());
+        return ElciValues.show(success.resultTerm(), result.pirType(), result.namedTypes(), result.type());
     }
 
     private static ElciCompiler.Result compile(Map<String, String> sources) {
@@ -988,6 +989,267 @@ class StandardLibraryTest {
                         + " comparable. Use a Map instead"));
     }
 
+    private static final String ASSETS = """
+            gold : PolicyId
+            gold =
+                PolicyId (Bytes.fromString "gold")
+
+
+            coin : TokenName
+            coin =
+                TokenName (Bytes.fromString "coin")
+
+
+            """;
+
+    @Test
+    void valueFollowsTheLedger() {
+        assertEquals("( [5000000, 3, 0, -5000000], [True, False, True, True, False] )", eval(ASSETS, "( List Int, List Bool )", """
+                let
+                        paid =
+                            Value.add (Value.lovelace 5000000) (Value.singleton gold coin 3)
+                    in
+                    ( [ Value.lovelaceOf paid, Value.quantityOf gold coin paid, Value.lovelaceOf (Value.withoutLovelace paid), Value.lovelaceOf (Value.negate paid) ]
+                    , [ Value.geq paid (Value.lovelace 1000000), Value.geq (Value.lovelace 1) paid, paid == Value.fromList [ ( gold, coin, 3 ), ( PolicyId Bytes.empty, TokenName Bytes.empty, 5000000 ) ], Value.isZero (Value.subtract paid paid), Value.isZero paid ]
+                    )"""));
+        // A mint that burns: geq is total with negative quantities, and positive and negative split it.
+        assertEquals("( [False, True, True], [3, -2] )", eval(ASSETS, "( List Bool, List Int )", """
+                let
+                        mint =
+                            Value.add (Value.singleton gold coin 3) (Value.singleton gold (TokenName (Bytes.fromString "old")) -2)
+                    in
+                    ( [ Value.geq mint Value.zero, Value.geq (Value.positive mint) Value.zero, Value.leq (Value.negative mint) Value.zero ]
+                    , List.map (\\( _, _, q ) -> q) (Value.toList mint)
+                    )"""));
+        assertEquals("( 2, Just 3, 0 )", eval(ASSETS, "( Int, Maybe Int, Int )", """
+                let
+                        paid =
+                            Value.add (Value.lovelace 5) (Value.singleton gold coin 3)
+                    in
+                    ( List.length (Value.policies paid), Dict.get coin (Value.tokens gold paid), Value.quantityOf gold coin (Value.insert gold coin 0 paid) )"""));
+        assertEquals("Value.fromList [( #(empty), #(empty), 5 ), ( #676f6c64, #636f696e, 3 )]", eval(ASSETS, "Value",
+                "Value.add (Value.singleton gold coin 3) (Value.lovelace 5)"));
+        // Inside a constructor the Value is recognised by its representation.
+        assertEquals("( Just (Value.fromList [( #(empty), #(empty), 5 )]), Box (Value.fromList [( #676f6c64, #636f696e, 3 )]) 1 )",
+                eval(ASSETS + "\n\ntype Box\n    = Box Value Int\n\n\n", "( Maybe Value, Box )",
+                        "( Just (Value.lovelace 5), Box (Value.singleton gold coin 3) 1 )"));
+    }
+
+    @Test
+    void valuesDecodeOnlyInCanonicalForm() {
+        var compiled = compile(Map.of("Main", HEADER + "main : Data -> Int\nmain raw =\n    let\n        value : Value\n"
+                + "        value =\n            Data.decode raw\n    in\n    Value.lovelaceOf value\n"));
+        java.util.function.Function<org.julclang.core.PlutusData, EvalResult> apply = raw -> JulcVm.create().evaluate(
+                compiled.program().applyParams(raw), compiled.target().ledgerTarget());
+        java.util.function.BiFunction<String, Long, org.julclang.core.PlutusData.Pair> token = (name, quantity) ->
+                new org.julclang.core.PlutusData.Pair(new org.julclang.core.PlutusData.BytesData(name.getBytes()),
+                        new org.julclang.core.PlutusData.IntData(java.math.BigInteger.valueOf(quantity)));
+        java.util.function.BiFunction<String, List<org.julclang.core.PlutusData.Pair>, org.julclang.core.PlutusData.Pair> policy =
+                (name, tokens) -> new org.julclang.core.PlutusData.Pair(new org.julclang.core.PlutusData.BytesData(name.getBytes()),
+                        new org.julclang.core.PlutusData.MapData(tokens));
+        var canonical = new org.julclang.core.PlutusData.MapData(List.of(policy.apply("", List.of(token.apply("", 7L))),
+                policy.apply("a", List.of(token.apply("x", 1L), token.apply("y", 2L)))));
+        assertInstanceOf(EvalResult.Success.class, apply.apply(canonical));
+        // Unsorted policies, unsorted tokens, a zero quantity and an empty token map are all rejected.
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(new org.julclang.core.PlutusData.MapData(List.of(
+                policy.apply("b", List.of(token.apply("x", 1L))), policy.apply("a", List.of(token.apply("x", 1L)))))));
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(new org.julclang.core.PlutusData.MapData(List.of(
+                policy.apply("a", List.of(token.apply("y", 1L), token.apply("x", 1L)))))));
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(new org.julclang.core.PlutusData.MapData(List.of(
+                policy.apply("a", List.of(token.apply("x", 0L)))))));
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(new org.julclang.core.PlutusData.MapData(List.of(
+                policy.apply("a", List.of())))));
+    }
+
+    @Test
+    void javaLibrariesCannotReturnValues() {
+        var d = assertThrows(Diagnostic.class, () -> new ElciCompiler().compileProject(Map.of("Main", HEADER.replace(
+                        "import Map exposing (Map)\n", "import Map exposing (Map)\nimport Julc.Values as Values\n")
+                        + "main : Int\nmain =\n    Value.lovelaceOf (Values.add (Value.lovelace 1) (Value.lovelace 2))\n"),
+                "Main", "main", FrontendProgram.Purpose.FUNCTION,
+                Map.of("Julc.Values", "org.julclang.stdlib.lib.ValuesLib"), new CompilerOptions()));
+        assertEquals("ELCI2105", d.code());
+        assertTrue(d.getMessage().contains("returns a Value, which Java libraries do not keep in the ledger's canonical order;"
+                + " use the core Value module"), d.getMessage());
+    }
+
+    @Test
+    void validatorsReadOutputsAndMintsAsValues() throws Exception {
+        Files.writeString(project.resolve("elci.toml"), """
+                [project]
+                source-directories = ["src"]
+                target = "plutus-v3-pv11-uplc-1.1.0"
+                julc-version = "0.1.0-gb-5a3378b"
+
+                [validators.shop]
+                boundary = "julc-strict-v1"
+                spend = "Shop.spend"
+                mint = "Shop.mint"
+                """);
+        Files.createDirectories(project.resolve("src"));
+        Files.createDirectories(project.resolve("tests"));
+        Files.writeString(project.resolve("src/Shop.elm"), """
+                module Shop exposing (mint, spend)
+
+                import Julc.Ledger exposing (ScriptContext)
+                import Value
+
+
+                {-| The outputs together must pay at least the price. -}
+                spend : Int -> () -> ScriptContext -> Bool
+                spend price _ ctx =
+                    Value.geq (Value.sum (List.map (\\out -> out.value) ctx.txInfo.outputs)) (Value.lovelace price)
+
+
+                {-| Mint at most one token of each name, and burn nothing. -}
+                mint : () -> ScriptContext -> Bool
+                mint _ ctx =
+                    Value.isZero (Value.negative ctx.txInfo.mint)
+                        && List.all (\\( _, _, quantity ) -> quantity == 1) (Value.toList ctx.txInfo.mint)
+                """);
+        Files.writeString(project.resolve("tests/ShopTest.elm"), """
+                module ShopTest exposing (burnRejected, mintOne, mintTwoRejected, paidInFull, underpaidRejected)
+
+                import Bytes
+                import Julc.Data as Data
+                import Scenario exposing (Scenario)
+
+
+                buy : Int -> Scenario
+                buy paid =
+                    Scenario.spend "shop" (Scenario.outRef "shop" 0) (Data.encode 5000000)
+                        |> Scenario.redeemer Scenario.unit
+                        |> Scenario.output (Scenario.toScript paid)
+
+
+                paidInFull : Scenario
+                paidInFull =
+                    buy 5000000
+
+
+                underpaidRejected : Scenario
+                underpaidRejected =
+                    buy 4999999 |> Scenario.expectFailure
+
+
+                minting : Int -> Scenario
+                minting quantity =
+                    Scenario.mint "shop"
+                        |> Scenario.redeemer Scenario.unit
+                        |> Scenario.minting (Bytes.fromString "ticket") quantity
+
+
+                mintOne : Scenario
+                mintOne =
+                    minting 1
+
+
+                mintTwoRejected : Scenario
+                mintTwoRejected =
+                    minting 2 |> Scenario.expectFailure
+
+
+                burnRejected : Scenario
+                burnRejected =
+                    minting -1 |> Scenario.expectFailure
+                """);
+        var result = NamedValidatorCliTest.run("test", project.toString());
+        assertEquals(0, result.status(), result.out() + result.err());
+        assertTrue(result.out().contains("5 passed, 0 failed"), result.out());
+    }
+
+    @Test
+    void valueReviewRegressions() {
+        // The empty policy may hold a named token; lovelace is only ADA's empty name.
+        assertEquals("[0, 5, 7, 7]", eval(ASSETS, "List Int", """
+                let
+                        odd =
+                            Value.singleton (PolicyId Bytes.empty) (TokenName (Bytes.fromString "x")) 5
+
+                        mixed =
+                            Value.add odd (Value.lovelace 7)
+                    in
+                    [ Value.lovelaceOf odd, Value.quantityOf (PolicyId Bytes.empty) (TokenName (Bytes.fromString "x")) odd, Value.lovelaceOf mixed, Value.lovelaceOf (Value.withoutLovelace mixed) + 7 ]"""));
+        // The filters keep order and drop emptied policies, without converting.
+        assertEquals("[[3], [-2], [5000000], [3, -2]]", eval(ASSETS, "List (List Int)", """
+                let
+                        v =
+                            Value.add (Value.lovelace 5000000) (Value.add (Value.singleton gold coin 3) (Value.singleton gold (TokenName (Bytes.fromString "old")) -2))
+
+                        quantities x =
+                            List.map (\\( _, _, q ) -> q) (Value.toList x)
+                    in
+                    [ quantities (Value.restrictedTo [ gold ] (Value.positive v)), quantities (Value.negative v), quantities (Value.restrictedTo [ PolicyId Bytes.empty ] v), quantities (Value.withoutLovelace v) ]"""));
+    }
+
+    @Test
+    void valuesDecodeRejectsEveryNonCanonicalShape() {
+        var compiled = compile(Map.of("Main", HEADER + "main : Data -> Int\nmain raw =\n    let\n        value : Value\n"
+                + "        value =\n            Data.decode raw\n    in\n    Value.lovelaceOf value\n"));
+        java.util.function.Function<org.julclang.core.PlutusData, EvalResult> apply = raw -> JulcVm.create().evaluate(
+                compiled.program().applyParams(raw), compiled.target().ledgerTarget());
+        java.util.function.BiFunction<byte[], Long, org.julclang.core.PlutusData.Pair> token = (name, quantity) ->
+                new org.julclang.core.PlutusData.Pair(new org.julclang.core.PlutusData.BytesData(name),
+                        new org.julclang.core.PlutusData.IntData(java.math.BigInteger.valueOf(quantity)));
+        java.util.function.BiFunction<byte[], List<org.julclang.core.PlutusData.Pair>, org.julclang.core.PlutusData.Pair> policy =
+                (name, tokens) -> new org.julclang.core.PlutusData.Pair(new org.julclang.core.PlutusData.BytesData(name),
+                        new org.julclang.core.PlutusData.MapData(tokens));
+        byte[] a = {'a'}, x = {'x'};
+        // Repeated policy, repeated token, a 33-byte token name, and not a map at all.
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(new org.julclang.core.PlutusData.MapData(List.of(
+                policy.apply(a, List.of(token.apply(x, 1L))), policy.apply(a, List.of(token.apply(new byte[] {'y'}, 1L)))))));
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(new org.julclang.core.PlutusData.MapData(List.of(
+                policy.apply(a, List.of(token.apply(x, 1L), token.apply(x, 2L)))))));
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(new org.julclang.core.PlutusData.MapData(List.of(
+                policy.apply(a, List.of(token.apply(new byte[33], 1L)))))));
+        assertInstanceOf(EvalResult.Failure.class, apply.apply(new org.julclang.core.PlutusData.IntData(java.math.BigInteger.ONE)));
+        assertInstanceOf(EvalResult.Success.class, apply.apply(new org.julclang.core.PlutusData.MapData(List.of(
+                policy.apply(new byte[0], List.of(token.apply(new byte[0], 3L), token.apply(x, 1L)))))));
+    }
+
+    @Test
+    void javaLibrariesCannotSmuggleValues() {
+        String library = """
+                package example;
+                import java.math.BigInteger;
+                import org.julclang.core.PlutusData;
+                import org.julclang.ledger.ScriptContext;
+                import org.julclang.ledger.Value;
+                import org.julclang.stdlib.annotation.OnchainLibrary;
+                import org.julclang.stdlib.lib.ValuesLib;
+                import org.julclang.core.types.JulcList;
+                @OnchainLibrary
+                public class Shop {
+                    public record Listing(Value price, BigInteger count) {}
+                    public static Listing listing(Value a, Value b) { return new Listing(ValuesLib.add(a, b), BigInteger.ONE); }
+                    public static <T> Value tagged(JulcList<T> items, Value a, Value b) { return ValuesLib.add(a, b); }
+                    @SuppressWarnings("unchecked")
+                    public static <T> T coerce(PlutusData data) { return (T) data; }
+                    public static ScriptContext context(PlutusData data) { return (ScriptContext)(Object) data; }
+                    public static JulcList<ScriptContext> contexts(PlutusData data) { return (JulcList<ScriptContext>)(Object) data; }
+                }
+                """;
+        java.util.function.Function<String, Diagnostic> compileWith = body -> assertThrows(Diagnostic.class, () ->
+                new ElciCompiler().compileProject(Map.of("Main", HEADER.replace("import Map exposing (Map)\n",
+                                "import Map exposing (Map)\nimport Custom.Shop as Shop\n") + body), "Main", "main",
+                        FrontendProgram.Purpose.FUNCTION, Map.of("Custom.Shop", "example.Shop"), new CompilerOptions(),
+                        Map.of("example.Shop", library)));
+        var record = compileWith.apply("main : Int\nmain =\n    (Shop.listing (Value.lovelace 5) (Value.lovelace 1)).count\n");
+        assertEquals("ELCI2105", record.code(), record.getMessage());
+        var generic = compileWith.apply("main : Int\nmain =\n    Value.lovelaceOf (Shop.tagged [ 1 ] (Value.lovelace 5) (Value.lovelace 1))\n");
+        assertEquals("ELCI2105", generic.code(), generic.getMessage());
+        var coerced = compileWith.apply("main : Int\nmain =\n    let\n        v : Value\n        v =\n"
+                + "            Shop.coerce (Data.encode 1)\n    in\n    Value.lovelaceOf v\n");
+        assertEquals("ELCI3003", coerced.code(), coerced.getMessage());
+        assertTrue(coerced.getMessage().contains("contains a Value, which a Java library does not keep in the ledger's canonical order"),
+                coerced.getMessage());
+        // A context holds Values: only the ledger supplies one.
+        var context = compileWith.apply("main : Int\nmain =\n    Value.lovelaceOf (Shop.context (Data.encode 1)).txInfo.mint\n");
+        assertEquals("ELCI2105", context.code(), context.getMessage());
+        var contexts = compileWith.apply("main : Int\nmain =\n    List.length (Shop.contexts (Data.encode 1))\n");
+        assertEquals("ELCI2105", contexts.code(), contexts.getMessage());
+    }
+
     @Test
     void lawsHoldForGeneratedValues() throws Exception {
         var fixture = Path.of("src/test/resources/stdlib-laws");
@@ -1000,7 +1262,7 @@ class StandardLibraryTest {
         }
         var result = NamedValidatorCliTest.run("test", project.toString(), "--seed", "2026");
         assertEquals(0, result.status(), result.out() + result.err());
-        assertTrue(result.out().contains("40 passed, 0 failed (seed 2026)"), result.out());
+        assertTrue(result.out().contains("48 passed, 0 failed (seed 2026)"), result.out());
     }
 
     /** Budget snapshots: cost changes to the standard library must be deliberate. */
@@ -1029,6 +1291,13 @@ class StandardLibraryTest {
         programs.put("dict-union", new String[] {"Int", "Dict.size (Dict.union (Dict.fromList [ ( 1, 1 ), ( 3, 3 ) ]) (Dict.fromList [ ( 2, 2 ), ( 3, 0 ) ]))"});
         programs.put("map-fromList-20", new String[] {"Int", "Map.size (Map.fromList (List.map (\\k -> ( modBy 23 (k * 7), k )) (List.range 1 20)))"});
         programs.put("map-get", new String[] {"Maybe Int", "Map.get 15 (Map.fromList (List.map (\\k -> ( k, k )) (List.range 1 20)))"});
+        programs.put("value-add", new String[] {"Value", "Value.add (Value.lovelace 5000000) (Value.singleton (PolicyId (Bytes.fromString \"gold\")) (TokenName (Bytes.fromString \"coin\")) 3)"});
+        programs.put("value-lovelaceOf", new String[] {"Int", "Value.lovelaceOf (Value.lovelace 5000000)"});
+        programs.put("value-quantityOf", new String[] {"Int", "Value.quantityOf (PolicyId (Bytes.fromString \"gold\")) (TokenName (Bytes.fromString \"coin\")) (Value.singleton (PolicyId (Bytes.fromString \"gold\")) (TokenName (Bytes.fromString \"coin\")) 3)"});
+        programs.put("value-geq", new String[] {"Bool", "Value.geq (Value.lovelace 5000000) (Value.lovelace 1000000)"});
+        programs.put("value-sum-5", new String[] {"Value", "Value.sum (List.map Value.lovelace (List.range 1 5))"});
+        programs.put("value-geq-10-assets", new String[] {"Bool", "Value.geq (Value.fromList (List.map (\\i -> ( PolicyId (Bytes.fromString (String.fromInt (i // 3))), TokenName (Bytes.fromString (String.fromInt i)), i )) (List.range 1 10))) (Value.lovelace 0)"});
+        programs.put("value-positive-10-assets", new String[] {"Value", "Value.positive (Value.fromList (List.map (\\i -> ( PolicyId (Bytes.fromString (String.fromInt (i // 3))), TokenName (Bytes.fromString (String.fromInt i)), i )) (List.range 1 10)))"});
         var csv = new StringBuilder("program,flat_bytes,cpu,memory\n");
         for (var entry : programs.entrySet()) {
             var result = compile(Map.of("Main", HEADER + "main : " + entry.getValue()[0] + "\nmain =\n    " + entry.getValue()[1] + "\n"));

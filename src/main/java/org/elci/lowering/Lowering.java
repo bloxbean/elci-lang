@@ -394,6 +394,8 @@ public final class Lowering {
                             new PirTerm.Trace(new PirTerm.Var(message, new PirType.StringType()),
                                     new PirTerm.Var(value, valueType))));
                 }
+                if (n.name().startsWith(org.elci.modules.Modules.VALUE_PREFIX))
+                    yield valueIntrinsic(n.name().substring(org.elci.modules.Modules.VALUE_PREFIX.length()));
                 if (n.name().startsWith(org.elci.modules.Modules.ASSOC_PREFIX))
                     yield assocIntrinsic(n.name().substring(org.elci.modules.Modules.ASSOC_PREFIX.length()), type(n, map));
                 if (n.name().startsWith(org.elci.modules.Modules.BYTES_PREFIX))
@@ -817,6 +819,8 @@ public final class Lowering {
             else if (inference.byteEquality(t.name()))
                 comparison = call(DefaultFun.EqualsByteString, xv, yv);
             else if (t.name().equals("Int")) comparison = call(DefaultFun.EqualsInteger, xv, yv);
+            // Every Value is canonical (ADR-009), so equal values have equal encodings.
+            else if (t.name().equals(LEDGER_VALUE)) comparison = call(DefaultFun.EqualsData, xv, yv);
             else if (inference.importedRepresentations.containsKey(t.name()))
                 // The provider's approved equality: Java equals semantics for the representation.
                 comparison = new PirTerm.App(new PirTerm.App(library(new LibraryRequest.Operation(
@@ -1465,6 +1469,22 @@ public final class Lowering {
         unionFields(c).values().forEach(fields -> fields.forEach(f -> requireOrderedKeys(f, token, visiting)));
     }
 
+    /** Whether values of {@code type} can hold a ledger Value, through Elci and imported types. */
+    private boolean containsLedgerValue(Ty type, Set<String> visiting) {
+        if (!(prune(type) instanceof Con c) || !visiting.add(c.toString())) return false;
+        if (c.name().equals(LEDGER_VALUE)) return true;
+        for (Ty argument : c.args()) if (containsLedgerValue(argument, visiting)) return true;
+        for (var fields : unionFields(c).values()) for (Ty field : fields) if (containsLedgerValue(field, visiting)) return true;
+        var imported = inference.importedTypes.get(c.name());
+        if (imported != null) {
+            for (var field : imported.fields()) if (containsLedgerValue(inference.libraryType(field.type()), visiting)) return true;
+            for (var constructor : imported.constructors())
+                for (var field : constructor.fields())
+                    if (containsLedgerValue(inference.libraryType(field.type()), visiting)) return true;
+        }
+        return false;
+    }
+
     /** Whether values of {@code type} contain a Dict, through lists, tuples, records, maps and custom types. */
     public boolean containsDict(Ty type) {
         return containsDict(type, new HashSet<>());
@@ -1624,6 +1644,166 @@ public final class Lowering {
                 bool(true)), new PirTerm.Error(type), new PirTerm.Error(type));
     }
 
+    // ----- Elci.Value (ADR-009): the ledger's Value on the CIP-153 builtins. -----
+
+    private static final String LEDGER_VALUE = "org.julclang.ledger.Value";
+
+    /**
+     * An {@code Elci.Value} function. A ledger {@code Value} is its canonical Data map; the native
+     * value exists only between {@code fromLedger} and {@code toLedger}. The Data walks rely on the
+     * canonical form: ADA sorts first, and no quantity is zero.
+     */
+    private PirTerm valueIntrinsic(String function) {
+        var ledger = pir(con(LEDGER_VALUE));
+        var nativeValue = new PirType.NativeValueType();
+        var bytes = new PirType.ByteStringType();
+        var integer = new PirType.IntegerType();
+        var data = new PirType.DataType();
+        var outer = new PirType.ListType(ENTRY);
+        return switch (function) {
+            case "fromLedger" -> positional(List.of(ledger), a -> call(DefaultFun.UnValueData, a.get(0)));
+            case "toLedger" -> positional(List.of(nativeValue), a -> call(DefaultFun.ValueData, a.get(0)));
+            case "empty" -> new PirTerm.Const(new Constant.ValueConst(List.of()));
+            case "insertCoin" -> builtin(DefaultFun.InsertCoin, List.of(bytes, bytes, integer, nativeValue));
+            case "lookupCoin" -> builtin(DefaultFun.LookupCoin, List.of(bytes, bytes, nativeValue));
+            case "union" -> builtin(DefaultFun.UnionValue, List.of(nativeValue, nativeValue));
+            case "contains" -> builtin(DefaultFun.ValueContains, List.of(nativeValue, nativeValue));
+            case "scale" -> builtin(DefaultFun.ScaleValue, List.of(integer, nativeValue));
+            case "adaPolicy", "adaToken" -> new PirTerm.Const(Constant.byteString(new byte[0]));
+            case "isZero" -> positional(List.of(ledger), a -> call(DefaultFun.NullList, call(DefaultFun.UnMapData, a.get(0))));
+            // ADA sorts first; its token map has the one empty token name.
+            case "lovelaceOf" -> positional(List.of(ledger), a -> {
+                String pairs = fresh("policies"), head = fresh("policy"), token = fresh("token");
+                var pv = new PirTerm.Var(pairs, outer);
+                var hv = new PirTerm.Var(head, ENTRY);
+                var tv = new PirTerm.Var(token, ENTRY);
+                PirTerm zero = new PirTerm.Const(Constant.integer(BigInteger.ZERO));
+                return new PirTerm.Let(pairs, call(DefaultFun.UnMapData, a.get(0)),
+                        new PirTerm.IfThenElse(call(DefaultFun.NullList, pv), zero,
+                                new PirTerm.Let(head, call(DefaultFun.HeadList, pv),
+                                        new PirTerm.IfThenElse(call(DefaultFun.EqualsByteString,
+                                                        call(DefaultFun.UnBData, call(DefaultFun.FstPair, hv)),
+                                                        new PirTerm.Const(Constant.byteString(new byte[0]))),
+                                                // The empty policy may also hold named tokens; ADA's name is
+                                                // empty, and sorts first.
+                                                new PirTerm.Let(token, call(DefaultFun.HeadList,
+                                                        call(DefaultFun.UnMapData, call(DefaultFun.SndPair, hv))),
+                                                        new PirTerm.IfThenElse(call(DefaultFun.EqualsByteString,
+                                                                        call(DefaultFun.UnBData, call(DefaultFun.FstPair, tv)),
+                                                                        new PirTerm.Const(Constant.byteString(new byte[0]))),
+                                                                call(DefaultFun.UnIData, call(DefaultFun.SndPair, tv)), zero)),
+                                                zero))));
+            });
+            case "policies" -> positional(List.of(ledger), a -> {
+                String rest = fresh("rest");
+                var rv = new PirTerm.Var(rest, outer);
+                return loop("policies", List.of(rest), List.of(outer), new PirType.ListType(data), go ->
+                        new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), call(DefaultFun.MkNilData, unit()),
+                                call(DefaultFun.MkCons, call(DefaultFun.FstPair, call(DefaultFun.HeadList, rv)),
+                                        new PirTerm.App(go, call(DefaultFun.TailList, rv)))),
+                        List.of(call(DefaultFun.UnMapData, a.get(0))));
+            });
+            // A canonical token map is already a valid Dict: ascending names, distinct.
+            case "tokens" -> positional(List.of(bytes, ledger), a -> {
+                String rest = fresh("rest"), head = fresh("policy");
+                var rv = new PirTerm.Var(rest, outer);
+                var hv = new PirTerm.Var(head, ENTRY);
+                return loop("tokens", List.of(rest), List.of(outer), outer, go ->
+                        new PirTerm.IfThenElse(call(DefaultFun.NullList, rv), call(DefaultFun.MkNilPairData, unit()),
+                                new PirTerm.Let(head, call(DefaultFun.HeadList, rv),
+                                        new PirTerm.IfThenElse(call(DefaultFun.EqualsByteString,
+                                                        call(DefaultFun.UnBData, call(DefaultFun.FstPair, hv)), a.get(0)),
+                                                call(DefaultFun.UnMapData, call(DefaultFun.SndPair, hv)),
+                                                new PirTerm.App(go, call(DefaultFun.TailList, rv))))),
+                        List.of(call(DefaultFun.UnMapData, a.get(1))));
+            });
+            case "toList" -> positional(List.of(ledger), a -> valueEntries(a.get(0), true));
+            case "filter" -> valueFilter();
+            case "nonNegative" -> positional(List.of(ledger), a -> valueEntries(a.get(0), false));
+            default -> throw new IllegalArgumentException("Unknown Elci.Value function " + function);
+        };
+    }
+
+    /**
+     * {@code \\keep value -> ...}: the entries for which {@code keep policy token quantity} holds, in
+     * the same order, without the policies left empty. Order is kept and nothing is added, so the
+     * result is canonical, and nothing converts to the native form.
+     */
+    private PirTerm valueFilter() {
+        var ledger = pir(con(LEDGER_VALUE));
+        var bytes = new PirType.ByteStringType();
+        var integer = new PirType.IntegerType();
+        var outer = new PirType.ListType(ENTRY);
+        var keepType = arrow(bytes, bytes, integer, new PirType.BoolType());
+        String keep = fresh("keep"), value = fresh("value"), policies = fresh("policies"), policy = fresh("policy"),
+                tokens = fresh("tokens"), token = fresh("token"), kept = fresh("kept");
+        var keepVar = new PirTerm.Var(keep, keepType);
+        var pv = new PirTerm.Var(policies, outer);
+        var policyVar = new PirTerm.Var(policy, ENTRY);
+        var tv = new PirTerm.Var(tokens, outer);
+        var tokenVar = new PirTerm.Var(token, ENTRY);
+        var keptVar = new PirTerm.Var(kept, outer);
+        PirTerm body = loop("policies", List.of(policies), List.of(outer), outer, outerLoop ->
+                new PirTerm.IfThenElse(call(DefaultFun.NullList, pv), call(DefaultFun.MkNilPairData, unit()),
+                        new PirTerm.Let(policy, call(DefaultFun.HeadList, pv),
+                                new PirTerm.Let(kept, loop("tokens", List.of(tokens), List.of(outer), outer, innerLoop ->
+                                                new PirTerm.IfThenElse(call(DefaultFun.NullList, tv), call(DefaultFun.MkNilPairData, unit()),
+                                                        new PirTerm.Let(token, call(DefaultFun.HeadList, tv),
+                                                                new PirTerm.IfThenElse(
+                                                                        new PirTerm.App(new PirTerm.App(new PirTerm.App(keepVar,
+                                                                                call(DefaultFun.UnBData, call(DefaultFun.FstPair, policyVar))),
+                                                                                call(DefaultFun.UnBData, call(DefaultFun.FstPair, tokenVar))),
+                                                                                call(DefaultFun.UnIData, call(DefaultFun.SndPair, tokenVar))),
+                                                                        call(DefaultFun.MkCons, tokenVar,
+                                                                                new PirTerm.App(innerLoop, call(DefaultFun.TailList, tv))),
+                                                                        new PirTerm.App(innerLoop, call(DefaultFun.TailList, tv))))),
+                                                List.of(call(DefaultFun.UnMapData, call(DefaultFun.SndPair, policyVar)))),
+                                        new PirTerm.IfThenElse(call(DefaultFun.NullList, keptVar),
+                                                new PirTerm.App(outerLoop, call(DefaultFun.TailList, pv)),
+                                                call(DefaultFun.MkCons, call(DefaultFun.MkPairData, call(DefaultFun.FstPair, policyVar),
+                                                                call(DefaultFun.MapData, keptVar)),
+                                                        new PirTerm.App(outerLoop, call(DefaultFun.TailList, pv))))))),
+                List.of(call(DefaultFun.UnMapData, new PirTerm.Var(value, ledger))));
+        return new PirTerm.Lam(keep, keepType, new PirTerm.Lam(value, ledger, call(DefaultFun.MapData, body)));
+    }
+
+    /**
+     * Walk every (policy, token, quantity) of a ledger Value: as a list of triples ({@code
+     * triples}), or whether every quantity is at least zero.
+     */
+    private PirTerm valueEntries(PirTerm value, boolean triples) {
+        var data = new PirType.DataType();
+        var outer = new PirType.ListType(ENTRY);
+        PirType result = triples ? new PirType.ListType(data) : new PirType.BoolType();
+        String policies = fresh("policies"), tokens = fresh("tokens"), policy = fresh("policy"), entry = fresh("entry");
+        var pv = new PirTerm.Var(policies, outer);
+        var tv = new PirTerm.Var(tokens, outer);
+        var policyVar = new PirTerm.Var(policy, ENTRY);
+        var ev = new PirTerm.Var(entry, ENTRY);
+        PirTerm end = triples ? call(DefaultFun.MkNilData, unit()) : bool(true);
+        return loop("policies", List.of(policies), List.of(outer), result, outerLoop ->
+                new PirTerm.IfThenElse(call(DefaultFun.NullList, pv), end,
+                        new PirTerm.Let(policy, call(DefaultFun.HeadList, pv),
+                                loop("tokens", List.of(tokens), List.of(outer), result, innerLoop ->
+                                        new PirTerm.IfThenElse(call(DefaultFun.NullList, tv),
+                                                new PirTerm.App(outerLoop, call(DefaultFun.TailList, pv)),
+                                                new PirTerm.Let(entry, call(DefaultFun.HeadList, tv), triples
+                                                        ? call(DefaultFun.MkCons, call(DefaultFun.ConstrData,
+                                                                new PirTerm.Const(Constant.integer(BigInteger.ZERO)),
+                                                                call(DefaultFun.MkCons, call(DefaultFun.FstPair, policyVar),
+                                                                        call(DefaultFun.MkCons, call(DefaultFun.FstPair, ev),
+                                                                                call(DefaultFun.MkCons, call(DefaultFun.SndPair, ev),
+                                                                                        call(DefaultFun.MkNilData, unit()))))),
+                                                                new PirTerm.App(innerLoop, call(DefaultFun.TailList, tv)))
+                                                        : new PirTerm.IfThenElse(call(DefaultFun.LessThanInteger,
+                                                                        call(DefaultFun.UnIData, call(DefaultFun.SndPair, ev)),
+                                                                        new PirTerm.Const(Constant.integer(BigInteger.ZERO))),
+                                                                bool(false),
+                                                                new PirTerm.App(innerLoop, call(DefaultFun.TailList, tv))))),
+                                        List.of(call(DefaultFun.UnMapData, call(DefaultFun.SndPair, policyVar)))))),
+                List.of(call(DefaultFun.UnMapData, value)));
+    }
+
     /** Component {@code index} of a tuple value (a tag-zero constructor with positional fields). */
     private static PirTerm component(PirTerm tuple, int index, PirType type) {
         PirTerm fields = call(DefaultFun.SndPair, call(DefaultFun.UnConstrData, tuple));
@@ -1738,6 +1918,15 @@ public final class Lowering {
             throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
                     ? "encoder" : "strict decoder") + " for " + prune(type) + ": ScriptContext has no approved Data"
                     + " codec; only the ledger supplies a context");
+        if (prune(type) instanceof Con c && c.name().equals(LEDGER_VALUE)) {
+            // The Data map is the value; decoding rebuilds it through the builtins, which reject
+            // anything but the canonical form.
+            String d = fresh("value");
+            var dv = new PirTerm.Var(d, direction == LibraryRequest.Codec.Direction.ENCODE ? pir(type) : new PirType.DataType());
+            String checked = fresh("checked");
+            return new PirTerm.Lam(d, dv.type(), direction == LibraryRequest.Codec.Direction.ENCODE ? dv
+                    : new PirTerm.Let(checked, call(DefaultFun.UnValueData, dv), dv));
+        }
         var representation = pir(type);
         describeLeaves(representation);
         try {
@@ -1815,9 +2004,16 @@ public final class Lowering {
             Ty argument = variables.get(parameter.name());
             if (argument == null || !Types.concrete(argument))
                 throw new Diagnostic("ELCI3001", token, "Cannot determine type argument " + parameter.name() + " of " + export);
+            boolean core = org.elci.modules.Modules.CORE_LIBRARIES.values().stream()
+                    .anyMatch(owner -> scheme.symbol().startsWith(owner + "."));
+            // Nor its Values canonical: a generic could build one from arbitrary Data.
+            if (!core && containsLedgerValue(argument, new HashSet<>()) && org.elci.driver.ElciCompiler.CONTEXT_LIBRARIES
+                    .stream().noneMatch(owner -> scheme.symbol().startsWith(owner + ".")))
+                throw new Diagnostic("ELCI3003", token, "Type argument " + parameter.name() + " = " + Types.show(argument)
+                        + " of " + export + " contains a Value, which a Java library does not keep in the ledger's"
+                        + " canonical order; build it with the Value module");
             // A Java library cannot keep a Dict's keys in order: it could return an unchecked one.
-            if (containsDict(argument) && org.elci.modules.Modules.CORE_LIBRARIES.values().stream()
-                    .noneMatch(owner -> scheme.symbol().startsWith(owner + ".")))
+            if (containsDict(argument) && !core)
                 throw new Diagnostic("ELCI3003", token, "Type argument " + parameter.name() + " = " + Types.show(argument)
                         + " of " + export + " contains a Dict, which a Java library cannot keep sorted; pass a Map"
                         + " or a List and build the Dict with Dict.fromList");
@@ -1921,6 +2117,8 @@ public final class Lowering {
         return switch (c.name()) {
             case "Bytes" -> new PirType.ByteStringType();
             case "Data", Types.AMBIGUOUS -> new PirType.DataType();
+            // The core Value module's internal native value (ADR-009): never Data, never stored.
+            case "NativeValue" -> new PirType.NativeValueType();
             // A Dict is a Map whose keys are strictly ascending (ADR-009).
             case "Map", "Dict" -> {
                 var key = pir(c.args().get(0));

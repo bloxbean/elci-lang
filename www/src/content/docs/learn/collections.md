@@ -316,7 +316,8 @@ cpu 30055770, mem 101862
 ```
 
 `Asset` is a custom type, so it can't be a `Dict` key, but it can be a `Map` key. The new key
-`Token "SILVER"` comes first.
+`Token "SILVER"` comes first. `Asset` only illustrates a key: the ledger's own amounts of ada and tokens,
+such as an output's value, are `Value`s, with their own [`Value`](/reference/core-modules/#value) module.
 
 | Function | Type |
 | --- | --- |

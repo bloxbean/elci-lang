@@ -52,7 +52,14 @@ final class Scenarios {
                     + validator + "': " + e.getMessage(), null, List.of());
         }
         var hash = new ScriptHash(HexFormat.of().parseHex(JulcScriptAdapter.scriptHash(applied)));
-        var context = context(spec, specType, hash);
+        PlutusData context;
+        try {
+            context = context(spec, specType, hash);
+        } catch (IllegalArgumentException e) {
+            // A transaction the ledger could not produce fails this scenario, not the whole run.
+            return new TestRunner.Outcome(name, TestRunner.Kind.SCENARIO, false, "cannot build the transaction: "
+                    + e.getMessage(), null, List.of());
+        }
         var result = ValidatorTest.evaluate(applied, context);
         boolean expectSuccess = Data.bool(spec.get("expectSuccess"));
         boolean succeeded = result instanceof EvalResult.Success;
@@ -104,7 +111,7 @@ final class Scenarios {
                 var datum = Data.maybe(purpose.fields().get(1));
                 // The spent output is an input at the script address unless the scenario lists it.
                 if (inputs.stream().noneMatch(i -> i.outRef().equals(ref)))
-                    inputs.addFirst(new TxInInfo(ref, new TxOut(ownAddress, Value.lovelace(Data.integer(spec.get("ownLovelace"))),
+                    inputs.addFirst(new TxInInfo(ref, new TxOut(ownAddress, canonical(Value.lovelace(Data.integer(spec.get("ownLovelace")))),
                             datum == null ? new OutputDatum.NoOutputDatum() : new OutputDatum.OutputDatumInline(datum),
                             Optional.empty())));
                 yield datum == null ? ScriptContextTestBuilder.spending(ref) : ScriptContextTestBuilder.spending(ref, datum);
@@ -129,7 +136,7 @@ final class Scenarios {
         for (var output : Data.list(spec.get("outputs"))) builder.output(output(output, outputType, ownAddress, policy));
         var minted = Value.zero();
         for (var token : Data.list(spec.get("minted"))) minted = minted.merge(token(token, tokenType, policy));
-        if (!Data.list(spec.get("minted")).isEmpty()) builder.mint(minted);
+        if (!Data.list(spec.get("minted")).isEmpty()) builder.mint(canonical(minted));
         var from = Data.maybe(spec.get("validFrom"));
         var before = Data.maybe(spec.get("validBefore"));
         if (from != null || before != null)
@@ -154,7 +161,43 @@ final class Scenarios {
         var value = Value.lovelace(Data.integer(fields.get("lovelace")));
         var tokenType = Data.element(Data.field(type, "tokens"));
         for (var token : Data.list(fields.get("tokens"))) value = value.merge(token(token, tokenType, policy));
-        return new TxOut(address, value, OutputDatum.fromPlutusData(fields.get("datum")), Optional.empty());
+        return new TxOut(address, canonical(value), OutputDatum.fromPlutusData(fields.get("datum")), Optional.empty());
+    }
+
+    /**
+     * The ledger's canonical form of a value (ADR-009): policies and token names ascending by their
+     * unsigned bytes, quantities of a repeated token added, no zero quantity and no empty policy.
+     * Elci's Value relies on it, as the ledger guarantees it.
+     */
+    static Value canonical(Value value) {
+        return Value.fromPlutusData(canonical(((PlutusData.MapData) value.toPlutusData()).entries()));
+    }
+
+    /** {@link #canonical(Value)} over raw policy entries, which may repeat a policy or a token. */
+    static PlutusData.MapData canonical(List<PlutusData.Pair> entries) {
+        var sorted = new java.util.TreeMap<byte[], java.util.TreeMap<byte[], BigInteger>>(java.util.Arrays::compareUnsigned);
+        for (var policy : entries)
+            for (var token : ((PlutusData.MapData) policy.value()).entries()) {
+                // The ledger never holds these; a script would fail on them for the wrong reason.
+                if (((PlutusData.BytesData) policy.key()).value().length > 32 || ((PlutusData.BytesData) token.key()).value().length > 32)
+                    throw new IllegalArgumentException("A scenario value has a policy id or token name longer than 32 bytes,"
+                            + " which the ledger does not allow");
+                sorted.computeIfAbsent(((PlutusData.BytesData) policy.key()).value(),
+                                k -> new java.util.TreeMap<>(java.util.Arrays::compareUnsigned))
+                        .merge(((PlutusData.BytesData) token.key()).value(), ((PlutusData.IntData) token.value()).value(),
+                                BigInteger::add);
+            }
+        var policies = new ArrayList<PlutusData.Pair>();
+        sorted.forEach((policy, tokens) -> {
+            var kept = new ArrayList<PlutusData.Pair>();
+            tokens.forEach((token, quantity) -> {
+                if (quantity.signum() != 0)
+                    kept.add(new PlutusData.Pair(new PlutusData.BytesData(token), new PlutusData.IntData(quantity)));
+            });
+            if (!kept.isEmpty())
+                policies.add(new PlutusData.Pair(new PlutusData.BytesData(policy), new PlutusData.MapData(kept)));
+        });
+        return new PlutusData.MapData(policies);
     }
 
     /** {@code Own} is the script's policy; {@code Policy bytes} a given one. */

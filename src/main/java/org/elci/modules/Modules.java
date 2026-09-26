@@ -10,10 +10,14 @@ import java.util.*;
 public final class Modules {
     /** Core modules written in Elci and bundled with the compiler. */
     public static final List<String> CORE_MODULES =
-            List.of("Basics", "List", "Maybe", "Result", "String", "Tuple", "Map", "Dict", "Array");
+            List.of("Basics", "List", "Maybe", "Result", "String", "Tuple", "Map", "Dict", "Array", "Value");
     /** Core modules whose type is built in, and may still be named as in Elm: {@code Map.Map}, {@code exposing (Map)}. */
     private static final Map<String, String> BUILTIN_TYPES = Map.of("Map", "Map", "Dict", "Dict", "Array", "Array",
-            "List", "List", "Maybe", "Maybe", "String", "String");
+            "List", "List", "Maybe", "Maybe", "String", "String", "Value", "Value");
+    /** The identity a built-in type name resolves to: the core `Value` is the ledger's (ADR-009). */
+    private static String builtinTarget(String type) {
+        return type.equals("Value") ? "org.julclang.ledger.Value" : type;
+    }
     /**
      * Elm's default imports (ADR-008), added to every project and test module. Their names have
      * the lowest priority: a module's own declarations and its explicit imports take precedence,
@@ -37,7 +41,7 @@ public final class Modules {
     public static final String BASICS_PREFIX = "$basics.";
     public static final List<String> BASICS_FUNCTIONS = List.of("not", "modBy", "remainderBy");
     /** Module names reserved for later phases of the core library (ADR-008): {@code Dict}, {@code Set}, {@code Value}. */
-    private static final List<String> RESERVED_MODULES = List.of("Set", "Value", "Elci");
+    private static final List<String> RESERVED_MODULES = List.of("Set", "Elci");
     /** Built-in type names, which no module may declare again: core modules refer to them. */
     private static final Set<String> BUILT_IN_TYPES =
             Set.of("Int", "Bool", "String", "Bytes", "Data", "List", "Maybe", "Map", "Dict", "Array", "Unit", "Tuple", "Float");
@@ -99,12 +103,19 @@ public final class Modules {
     public static final String ASSOC_PREFIX = "$assoc.";
     public static final List<String> ASSOC_FUNCTIONS = List.of("toList", "fromDistinct", "cons", "reverse", "find",
             "has", "delete", "get", "member", "insert", "remove", "ascending", "runs", "merge", "dedupe", "toMap", "fromMap");
+    /** The core `Value` module's internal CIP-153 operations (ADR-009); core modules only. */
+    public static final String VALUE_MODULE = "Elci.Value";
+    public static final String VALUE_PREFIX = "$value.";
+    public static final List<String> VALUE_FUNCTIONS = List.of("fromLedger", "toLedger", "empty", "insertCoin",
+            "lookupCoin", "union", "contains", "scale", "lovelaceOf", "isZero", "policies", "tokens", "toList",
+            "nonNegative", "filter", "adaPolicy", "adaToken");
     /** Intrinsic modules without source: their functions and resolved-name prefixes. */
     private static final Map<String, Map.Entry<String, List<String>>> INTRINSICS = Map.of(
             DATA_MODULE, Map.entry(DATA_PREFIX, DATA_FUNCTIONS),
             DEBUG_MODULE, Map.entry(DEBUG_PREFIX, DEBUG_FUNCTIONS),
             BYTES_MODULE, Map.entry(BYTES_PREFIX, BYTES_FUNCTIONS),
-            ASSOC_MODULE, Map.entry(ASSOC_PREFIX, ASSOC_FUNCTIONS));
+            ASSOC_MODULE, Map.entry(ASSOC_PREFIX, ASSOC_FUNCTIONS),
+            VALUE_MODULE, Map.entry(VALUE_PREFIX, VALUE_FUNCTIONS));
 
     private final Map<String, Ast.Module> available = new LinkedHashMap<>();
     /** The default imports added to modules, by identity: they bind names only where nothing else does. */
@@ -173,9 +184,10 @@ public final class Modules {
                                 throw new Diagnostic("ELCI2011", union.token(), variant.name() + " is a constructor of the"
                                         + " built-in " + BUILT_IN_CONSTRUCTORS.get(variant.name()) + " type; choose another name");
                     for (var imp : module.imports())
-                        if (imp.module().equals(ASSOC_MODULE) && !CORE_MODULES.contains(name))
-                            throw new Diagnostic("ELCI2104", imp.token(), ASSOC_MODULE
-                                    + " is internal to Elci's core library; use Map or Dict");
+                        if (imp.module().startsWith("Elci.") && !CORE_MODULES.contains(name))
+                            throw new Diagnostic("ELCI2104", imp.token(), imp.module()
+                                    + " is internal to Elci's core library; use " + (imp.module().equals(VALUE_MODULE)
+                                            ? "Value" : "Map or Dict"));
                     for (var imp : module.imports())
                         if (DEFAULT_IMPORTS.containsKey(imp.alias()) && !imp.alias().equals(imp.module()))
                             throw new Diagnostic("ELCI2104", imp.token(), "The alias " + imp.alias()
@@ -253,7 +265,8 @@ public final class Modules {
                 && !type.supports(org.julclang.compiler.backend.LibraryType.Operation.MATCH)) {
             if (exposed)
                 throw new Diagnostic("ELCI2104", token, local + " has no approved constructors or patterns; its"
-                        + " values come from library functions");
+                        + (type.identity().equals("org.julclang.ledger.Value") ? " values come from the Value module"
+                                : " values come from library functions"));
             return;
         }
         var entries = new LinkedHashMap<String, String>();
@@ -543,6 +556,7 @@ public final class Modules {
                     } else if (exported.containsKey(n)) scope.name(n, exported.get(n), named, imp.alias() + "." + n);
                     else if (BUILTIN_TYPES.getOrDefault(dependency.name(), "").equals(n)) {
                         // `import Map exposing (Map)`, as with Elm's Dict: the type is always in scope.
+                        if (!builtinTarget(n).equals(n)) scope.type(n, builtinTarget(n), named, imp.alias() + "." + n);
                     } else if (!dependency.aliases().containsKey(n)
                             && dependency.unions().stream().noneMatch(u -> u.name().equals(n)))
                         throw new Diagnostic(
@@ -552,7 +566,7 @@ public final class Modules {
                 }
                 if (BUILTIN_TYPES.containsKey(dependency.name()))
                     scope.type(imp.alias() + "." + BUILTIN_TYPES.get(dependency.name()),
-                            BUILTIN_TYPES.get(dependency.name()), named, null);
+                            builtinTarget(BUILTIN_TYPES.get(dependency.name())), named, null);
                 for (String n : dependency.aliases().keySet())
                     if (exposes(dependency, n)) {
                         scope.type(imp.alias() + "." + n, dp + n, named, dependency.name() + "." + n);
@@ -674,9 +688,13 @@ public final class Modules {
                     || !t.name().contains(".") && Character.isLowerCase(t.name().charAt(0)))
                 name = t.name();
             else if (names.containsKey("$ledgerAll")) name = "org.julclang.ledger." + t.name();
-            else
-                throw new IllegalArgumentException(
-                        "ELCI2012: Type is not declared or imported in this module: " + t.name());
+            else {
+                // A core module's type: say which import brings it in.
+                String module = BUILTIN_TYPES.entrySet().stream().filter(e -> e.getValue().equals(t.name())
+                        && !builtinTarget(t.name()).equals(t.name())).map(Map.Entry::getKey).findFirst().orElse(null);
+                throw new IllegalArgumentException("ELCI2012: Type is not declared or imported in this module: " + t.name()
+                        + (module == null ? "" : "; add `import " + module + " exposing (" + t.name() + ")`"));
+            }
         }
         if (name.equals("org.julclang.ledger.ScriptContext")) name = "ScriptContext";
         return new Type(name, t.arguments().stream().map(a -> type(a, names)).toList());

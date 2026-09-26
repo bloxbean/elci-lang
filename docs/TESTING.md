@@ -186,6 +186,13 @@ Outputs are built with `toScript lovelace` (the validator's own address) or
 `toAddress address lovelace`, and extended with `withDatum data` and
 `withToken policy name quantity`. A policy is `Own` or `Policy bytes`.
 
+Every value the runner builds (outputs, inputs and the minted value) is canonical,
+as the core `Value` module requires ([ADR-009](../adr/009-dict-native-value-and-map.md)):
+policies and token names ascend by unsigned bytes, quantities of a repeated token
+are added, and zero quantities are dropped. A policy id or token name longer than
+32 bytes stops the run with `A scenario value has a policy id or token name longer
+than 32 bytes, which the ledger does not allow`.
+
 `Scenario.key name` and `Scenario.outRef name index` derive deterministic test key
 hashes and output references from a name. `Bytes.fromString` makes token names.
 `Scenario.unit` is the Data of `()`.
@@ -278,6 +285,8 @@ exactly what the ledger could send.
   `ValidatorHash` or `PolicyId` is exactly 28 bytes; `TxId` and `DatumHash` are 32.
 - **Lists, `Map`s and `Dict`s:** grow with the run. Map keys are distinct; a `Dict`'s keys
   are also sorted, as decoding requires.
+- **`Value`:** canonical values, often with lovelace, and a few tokens under 28-byte
+  policies. Quantities may be negative, never zero. Shrinking drops policies.
 - **Records, unions, `Maybe` and tuples:** built from their fields, with every
   constructor used.
 - **Recursive unions:** stay finite, and their first runs use the shallowest

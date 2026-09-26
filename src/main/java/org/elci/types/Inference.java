@@ -409,6 +409,8 @@ public final class Inference {
             }
             return null;
         }
+        // Every Value is canonical (ADR-009): equality is exact on its encoding.
+        if (c.name().equals("org.julclang.ledger.Value")) return null;
         if (importedRepresentations.containsKey(c.name()))
             return approves(c.name(), org.julclang.compiler.backend.LibraryType.Operation.EQUALS) ? null : type;
         // A polymorphically recursive type never repeats; lowering reports it if it is used.

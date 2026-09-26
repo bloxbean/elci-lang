@@ -100,10 +100,9 @@ How instantiation works:
   argument is evaluated once, even under partial application.
 - **Equality inside templates:** a scheme's only constraint is `DATA_ENCODABLE`. A
   template that compares values of its type parameter (such as `contains`) uses
-  Data equality even at a type whose provider withholds EQUALS. Examples are the
-  map-encoded `Value` and types containing it, for which that comparison is
-  order-sensitive. Avoid such instantiations until Julc schemes carry an equality
-  constraint.
+  Data equality even at a type whose provider withholds EQUALS. Examples are
+  `Map` and types containing it, for which that comparison is order-sensitive.
+  Avoid such instantiations until Julc schemes carry an equality constraint.
 - **Elci types:** Elci's own records, tuples and unions are valid type arguments
   for both Java-source templates and programmatic exports. Elci sends their
   representations with each request as producer-owned types (Julc PR #195), and
@@ -187,10 +186,21 @@ amount action =
 
 Record constructors take fields in the Java record's declaration order, which is
 also its encoding order. Julc approves operations only for representations it
-has verified. Special layouts, such as records with custom codecs or the ledger
-`Value`, stay opaque. Types that contain them keep field access and matching,
-but have no equality, strict decoding or boundary use. Java factory functions
-remain available for such types.
+has verified. Special layouts, such as records with custom codecs, stay opaque.
+Types that contain them, and ledger records that contain a `Value` such as
+`TxOut`, keep field access and matching, but have no equality, strict decoding or
+boundary use. Java factory functions remain available for such types, except
+those that return a `Value`.
+
+The ledger `Value` is Elci's core `Value` type, and every `Value` must stay
+canonical ([ADR-009](../adr/009-dict-native-value-and-map.md)). Java libraries
+such as `ValuesLib` do not keep values in that order, so no Java library may hand
+Elci a `Value`: an export whose result can hold one, directly or in a record or
+union field, is `ELCI2105` (`returns a Value, which Java libraries do not keep in
+the ledger's canonical order; use the core Value module`), and a generic
+instantiated at a type that holds one is `ELCI3003`. Julc's `ContextsLib` and
+`OutputLib` are exempt: they only pass along the ledger's own values. Exports
+that only read a `Value` remain usable.
 
 Concrete lists, maps and Java Optional retain their own representations. Java
 Optional is not implicitly interchangeable with Elci Maybe; convert it with

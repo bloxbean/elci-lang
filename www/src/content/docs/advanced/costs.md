@@ -1,6 +1,6 @@
 ---
 title: Costs and performance
-description: Measure execution budgets and script size, understand how strictness and top-level values affect cost, and choose between lists, arrays, dictionaries and maps.
+description: Measure execution budgets and script size, understand how strictness and top-level values affect cost, choose between lists, arrays, dictionaries and maps, and know what values cost.
 sidebar:
   order: 4
 ---
@@ -369,6 +369,30 @@ rather than building large ones on-chain. Build keyed data of your own with `Dic
 in order when you can. Keys you look up often are cheapest near the front: the newest binding in a `Map`,
 the smallest keys in a `Dict`.
 
+## Values
+
+A [`Value`](/reference/core-modules/#value) is stored as the ledger's Data map. `lovelaceOf` and `isZero`
+read the start of that map, so their cost is fixed. `==` compares two maps directly, and `positive`,
+`negative`, `restrictedTo` and `withoutLovelace` filter one entry by entry. The other functions convert the
+whole value to the protocol's native value (the CIP-153 builtins) and back. Every cost except the fixed ones
+grows with the number of assets. The figures below count the operation alone, on values with lovelace and
+one token under each of the other policies:
+
+| Operation | 3 assets | 10 assets | 30 assets |
+| --- | ---: | ---: | ---: |
+| `Value.isZero v` | 0.3 million | 0.3 million | 0.3 million |
+| `Value.lovelaceOf v` | 2.0 million | 2.0 million | 2.0 million |
+| `Value.quantityOf policy name v` | 3.5 million | 6.2 million | 13.9 million |
+| `v == w` | 2.8 million | 7.0 million | 19.0 million |
+| `Value.add v w` | 3.9 million | 12.1 million | 35.3 million |
+| `Value.geq v w` | 5.4 million | 15.2 million | 43.3 million |
+| `Value.positive v` | 12.7 million | 40.6 million | 120.4 million |
+
+`geq` subtracts, then checks every quantity of the difference, so it costs more again when the difference
+holds many tokens. `Value.sum` converts each value once: summing five small values cost about 20 million
+CPU, against 22 million for folding them with `Value.add`. Read ada with `lovelaceOf`, and prefer
+`quantityOf` or `==` to building a filtered value.
+
 ## Traces
 
 `Debug.trace` costs budget and bytes even when the script succeeds. One trace of a 19-character message
@@ -386,6 +410,8 @@ failure paths.
 - Avoid sorting on-chain. When the transaction can provide sorted data, check the order in one pass.
 - Build keyed data with `Dict.fromList` rather than `Map.fromList`, which is quadratic. Keep maps and
   dictionaries small: every lookup scans.
+- Read ada with `Value.lovelaceOf`, whose cost is fixed. Other `Value` operations grow with the number of
+  assets in the value.
 - Use each generic helper at as few types as you can, and drop `Debug.trace` from deployed scripts.
 - Library functions are compiled Java code, not builtins: `Julc.ByteString.toHex` over 32 bytes cost
   about 73 million CPU. Check the cost of a library call before using it in a loop.

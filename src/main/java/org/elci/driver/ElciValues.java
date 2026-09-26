@@ -117,6 +117,18 @@ public final class ElciValues {
 
     private static String render(PlutusData data, PirType type, Map<String, PirType> named, boolean nested,
                                  org.elci.types.Types.Ty source) {
+        // A ledger Value is a map of maps; show it as the Value module builds it. Its Julc type is
+        // a record whose Data is the map itself, which identifies it without a source type.
+        boolean ledgerValue = source != null && org.elci.types.Types.prune(source) instanceof org.elci.types.Types.Con c
+                && c.name().equals("org.julclang.ledger.Value")
+                || resolve(type, named) instanceof PirType.RecordType r && r.name().equals("Value");
+        if (ledgerValue && data instanceof PlutusData.MapData policies) {
+            var entries = new ArrayList<String>();
+            for (var policy : policies.entries())
+                for (var token : ((PlutusData.MapData) policy.value()).entries())
+                    entries.add("( " + data(policy.key()) + ", " + data(token.key()) + ", " + data(token.value()) + " )");
+            return parenthesize(nested, "Value.fromList [" + String.join(", ", entries) + "]");
+        }
         return switch (type) {
             case PirType.IntegerType _ -> {
                 var value = ((PlutusData.IntData) data).value();

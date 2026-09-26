@@ -50,16 +50,16 @@ parser, `ELCI20` from type checking, `ELCI21` from modules and imports, `ELCI3` 
 | `ELCI2010` | Unknown or unconstrained record field |
 | `ELCI2011` | Duplicate type or constructor, or a built-in constructor or type name (`Just`, `Nothing`, `True`, `False`; `Int`, `Maybe`, `List` and the other built-in types) |
 | `ELCI2012` | Invalid type, alias, arity or alias cycle; `Tuple` or `Unit` written as a type name |
-| `ELCI2013` | Unsupported serialized boundary type, or a value without a Data encoding (a function or an `Array`) stored in data |
+| `ELCI2013` | Unsupported serialized boundary type, such as a `Value` in a datum, or a value without a Data encoding (a function or an `Array`) stored in data |
 | `ELCI2014` | Validator handler signature does not match its purpose, parameters or datum profile |
 | `ELCI2101` | Unknown or missing module or imported export; a source module importing the test library |
 | `ELCI2102` | Ambiguous name: two imports expose different things under it |
 | `ELCI2103` | Entrypoint or handler is not exposed |
 | `ELCI2104` | Module path, ownership or cycle error; a reserved module name or alias; a name a module lacks, an Elm function Elci doesn't have, or a module used without its import |
-| `ELCI2105` | Unsupported Java export signature, with the provider's reason |
+| `ELCI2105` | Unsupported Java export signature, with the provider's reason; a Java export whose result can hold a `Value` |
 | `ELCI3001` | The inferred program cannot be lowered, such as `Julc.Data.decode` or a Java library generic at a type nothing determines |
 | `ELCI3002` | Specialization limit or polymorphic recursion |
-| `ELCI3003` | A generic library type argument or a Data conversion needs a Data encoding; a Java library generic used at a type containing a `Dict` |
+| `ELCI3003` | A generic library type argument or a Data conversion needs a Data encoding; a Java library generic used at a type containing a `Dict` or a `Value` |
 | `ELCI4001` | Invalid project configuration or command-line request, including a `[java-modules]` key that names a core module and an `elci apply` parameter that doesn't fit its type |
 | `ELCI4002` | Julc's backend rejected the generated code |
 | `ELCI4003` | The Julc backend lacks a capability the program needs |
@@ -186,8 +186,8 @@ src/Main.elm:11:12: ELCI2003: The operator == cannot compare Int -> Int values: 
 ```
 
 Equality is rejected for functions, `Data`, `Map`, `Array` and imported types without approved
-equality. A `Dict` has equality when its values do. When the offending type is inside another, the message
-names it:
+equality, such as `TxOut`. A `Dict` has equality when its values do, and a `Value` always has it. When the
+offending type is inside another, the message names it:
 `The operator == cannot compare List (Int -> Int) values: Int -> Int is part of them, and functions have no
 equality`. `++` needs a `String` or a `List`: `1 ++ 2` gives
 `ELCI2003: The operator ++ appends String or List values, not Int`.
@@ -445,9 +445,16 @@ elci: my-project/elci.toml:6: [validators.main]
 my-project/src/Main.elm:6:1: ELCI2013: Functions cannot be serialized as datum or redeemer
 ```
 
-Ledger types that contain a `Value`, such as `TxOut`, are rejected the same way:
-`org.julclang.ledger.TxOut has no approved strict Data boundary (BOUNDARY); ...`. **Fix:** use your own
-record or custom type, or a ledger type with an approved boundary such as `TxOutRef` or `PubKeyHash`.
+A `Value`, and ledger types that contain one such as `TxOut`, are rejected the same way:
+
+```text
+elci: my-project/elci.toml:6: [validators.main]
+my-project/src/Main.elm:7:1: ELCI2013: org.julclang.ledger.Value has no approved strict Data boundary (BOUNDARY); for example records containing the map-encoded Value cannot be checked
+```
+
+**Fix:** use your own record or custom type, or a ledger type with an approved boundary such as `TxOutRef`
+or `PubKeyHash`. For an amount of tokens, store a `List ( PolicyId, TokenName, Int )` and rebuild the value
+with `Value.fromList`.
 
 The same code rejects an `Array` stored anywhere in data (a record, list or tuple field, or a datum,
 redeemer or parameter), in any project:
@@ -594,8 +601,11 @@ src/Set.elm:1:1: ELCI2104: The module name Set is reserved for Elci's core libra
 src/Main.elm:3:1: ELCI2104: The alias String names a core module that every module imports; choose another alias for Utils
 ```
 
-Modules whose names start with `Elci.` belong to the core library too, and the one it uses internally can't
-be imported: `ELCI2104: Elci.Assoc is internal to Elci's core library; use Map or Dict`.
+Modules whose names start with `Elci.` belong to the core library too, and the ones it uses internally
+can't be imported: `ELCI2104: Elci.Assoc is internal to Elci's core library; use Map or Dict`, and
+`ELCI2104: Elci.Value is internal to Elci's core library; use Value`. A `Value` has no constructors to
+expose: `import Julc.Ledger exposing (Value(..))` gives
+`ELCI2104: Value has no approved constructors or patterns; its values come from the Value module`.
 
 A name that two imports expose, one of them possibly a default import, is `ELCI2102` where you use it:
 
@@ -627,7 +637,18 @@ main =
 src/Main.elm:8:10: ELCI2105: org.julclang.stdlib.lib.MathLib.divMod: Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>
 ```
 
-**Fix:** use another export, such as `Math.floorDiv` and `Math.floorMod`, or Elci operators. See
+**Fix:** use another export, such as `Math.floorDiv` and `Math.floorMod`, or Elci operators.
+
+An export whose result can hold a ledger `Value`, directly or in a field of a record or union, is rejected
+too. Java libraries such as `ValuesLib` build values in their own order, and Elci relies on every value
+being canonical. Julc's `ContextsLib` and `OutputLib` are exempt, because they only pass along the ledger's
+own values:
+
+```text
+src/Main.elm:9:5: ELCI2105: org.julclang.stdlib.lib.ValuesLib.add: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module
+```
+
+**Fix:** use the core [`Value`](/reference/core-modules/#value) module, here `Value.add`. See
 [Java libraries](/advanced/java-libraries/) for every reason an export can be rejected.
 
 ## Code generation errors
@@ -686,11 +707,12 @@ Generic Java methods and `Julc.Data` conversions need a type with a Data encodin
 
 ```text
 src/Main.elm:8:5: ELCI3003: Type argument T = Unit of firstOr must have a Plutus Data encoding (DATA_ENCODABLE); functions, unit and native values do not
-src/Main.elm:9:5: ELCI3003: No strict decoder for org.julclang.ledger.Value: The library provider cannot supply decode_strict record Value: [JULC0051] Library request decode_strict record Value is not supported: org.julclang.ledger.Value does not approve DECODE_STRICT
+src/Main.elm:12:13: ELCI3003: No strict decoder for org.julclang.ledger.TxOut: The library provider cannot supply decode_strict record TxOut: [JULC0051] Library request decode_strict record TxOut is not supported: org.julclang.ledger.TxOut does not approve DECODE_STRICT
 ```
 
-**Fix:** use a Data-encodable type. Functions, `()`, `Array`, `Value` and types containing a `Value`
-have no encoding.
+**Fix:** use a Data-encodable type. Functions, `()` and `Array` have no encoding, and `TxOut` can't be
+decoded. A `Value` converts on its own, but a type that contains one can't be decoded yet, and a list or
+tuple of values can't be encoded: convert them with `Value.toList` and back with `Value.fromList`.
 
 A Java library's generic function can't be used at a type that contains a `Dict`. The library could build
 the dictionary itself and skip the check that its keys are in order:
@@ -699,7 +721,14 @@ the dictionary itself and skip the check that its keys are in order:
 src/Main.elm:14:18: ELCI3003: Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; pass a Map or a List and build the Dict with Dict.fromList
 ```
 
-**Fix:** pass the library a `Map` or a `List`, and build the `Dict` with `Dict.fromList`.
+**Fix:** pass the library a `Map` or a `List`, and build the `Dict` with `Dict.fromList`. A type that holds
+a `Value` is rejected the same way:
+
+```text
+src/Main.elm:9:5: ELCI3003: Type argument a = Value of filter contains a Value, which a Java library does not keep in the ledger's canonical order; build it with the Value module
+```
+
+Use the core `List` and [`Value`](/reference/core-modules/#value) modules instead.
 
 ## Configuration and backend errors
 

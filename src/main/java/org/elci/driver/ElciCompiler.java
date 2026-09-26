@@ -397,17 +397,16 @@ public final class ElciCompiler {
         }
         var libraries=new Libraries(java,options,capabilities.apply(options));var provider=libraries.provider();
         var unsupportedImports=new LinkedHashMap<String,String>();var schemes=new LinkedHashMap<String,LibraryScheme>();
+        var catalogue=new HashMap<String,LibraryType>(ledger.types());catalogue.putAll(java.types());
         for(var imp:module.imports()) {
             if(imp.module().equals("Julc.Ledger")) {
+                // Module resolution already names exposed ledger types by their identity, per
+                // module; a program-wide bare alias would capture a root type of the same name.
                 for(String exposed:imp.exposing()) {
-                    if(exposed.equals("..")) {
-                        ledger.types().keySet().forEach(n->ledgerAliases.put(n.substring(n.lastIndexOf('.')+1),n));
-                    } else {
-                        String type=exposed.endsWith("(..)")?exposed.substring(0,exposed.length()-4):exposed;
-                        String identity="org.julclang.ledger."+type;
-                        if(!ledger.types().containsKey(identity))throw new Diagnostic("ELCI2101",imp.token(),"Unknown ledger record type "+type);
-                        ledgerAliases.put(type,identity);
-                    }
+                    if(exposed.equals(".."))continue;
+                    String type=exposed.endsWith("(..)")?exposed.substring(0,exposed.length()-4):exposed;
+                    if(!type.equals("ScriptContext")&&!ledger.types().containsKey("org.julclang.ledger."+type))
+                        throw new Diagnostic("ELCI2101",imp.token(),"Unknown ledger record type "+type);
                 }
                 ledgerAliases.put("ScriptContext","ScriptContext");continue;
             }
@@ -432,6 +431,12 @@ public final class ElciCompiler {
             for(var scheme:generic) {
                 String n=scheme.symbol().substring(scheme.symbol().lastIndexOf('.')+1);
                 Ty type=schemeType(scheme,new HashMap<>());
+                if(!CONTEXT_LIBRARIES.contains(owner)&&mentionsValue(resultOf(type),catalogue)) {
+                    unsupportedImports.put(imp.alias()+"."+n,scheme.symbol()+": returns a Value, which Java libraries do not keep in the"
+                            +" ledger's canonical order; use the core Value module");
+                    if(imp.exposing().contains(n))unsupportedImports.put(n,unsupportedImports.get(imp.alias()+"."+n));
+                    found.add(n);continue;
+                }
                 schemes.put(scheme.symbol(),scheme);
                 found.add(n);addImport(imp.alias()+"."+n,type,scheme.symbol(),imp.token(),importedTypes,importedSymbols);
                 if(imp.exposing().contains(n)||imp.exposing().contains(".."))addImport(n,type,scheme.symbol(),imp.token(),importedTypes,importedSymbols);
@@ -439,6 +444,13 @@ public final class ElciCompiler {
             for(var export:exports) {
                 String n=export.symbol().substring(export.symbol().lastIndexOf('.')+1);Ty type;
                 type=sourceType(export);
+                // A Java library builds values in its own order; Elci's Value is always canonical (ADR-009).
+                if(!CONTEXT_LIBRARIES.contains(owner)&&mentionsValue(resultOf(type),catalogue)) {
+                    unsupportedImports.put(imp.alias()+"."+n,export.symbol()+": returns a Value, which Java libraries do not keep in the"
+                            +" ledger's canonical order; use the core Value module");
+                    if(imp.exposing().contains(n))unsupportedImports.put(n,unsupportedImports.get(imp.alias()+"."+n));
+                    found.add(n);continue;
+                }
                 found.add(n);addImport(imp.alias()+"."+n,type,export.symbol(),imp.token(),importedTypes,importedSymbols);
                 if(imp.exposing().contains(n)||imp.exposing().contains(".."))addImport(n,type,export.symbol(),imp.token(),importedTypes,importedSymbols);
             }
@@ -459,7 +471,11 @@ public final class ElciCompiler {
         if(t.name().equals("ScriptContext"))throw new Diagnostic("ELCI2013",token,"ScriptContext is only valid in the ledger context argument, not serialized user data");
         if(inference.importedRepresentations.containsKey(t.name())&&!inference.byteEquality(t.name())) {
             if(inference.approves(t.name(),LibraryType.Operation.BOUNDARY))return;
-            throw new Diagnostic("ELCI2013",token,t.name()+" has no approved strict Data boundary (BOUNDARY); for example records containing the map-encoded Value cannot be checked");
+            if(t.name().equals("org.julclang.ledger.Value"))
+                throw new Diagnostic("ELCI2013",token,"A Value cannot be part of a datum, redeemer or parameter yet: the ledger's strict"
+                        +" boundary cannot check its form. Store a List ( PolicyId, TokenName, Int ) and rebuild it with Value.fromList");
+            throw new Diagnostic("ELCI2013",token,Types.show(t)+" has no approved strict Data boundary (BOUNDARY); for example records containing"
+                    +" a ledger Value (such as TxOut) cannot be checked");
         }
         if(t.name().equals("->"))throw new Diagnostic("ELCI2013",token,"Functions cannot be serialized as datum or redeemer");
         if(t.name().equals("Array"))throw new Diagnostic("ELCI2013",token,"Arrays have no Data encoding and cannot be a datum, redeemer or parameter; take a List and convert it with Array.fromList");
@@ -514,6 +530,7 @@ public final class ElciCompiler {
         var d=new Var();importedTypes.put(prefix+"toOptional",fn(con("Elci.Maybe",d),con("JulcOptional",d)));
         var e=new Var();importedTypes.put(org.elci.modules.Modules.DEBUG_PREFIX+"trace",fn(con("String"),fn(e,e)));
         assocIntrinsics(importedTypes);
+        valueIntrinsics(importedTypes);
         String bytes=org.elci.modules.Modules.BYTES_PREFIX;
         importedTypes.put(bytes+"empty",con("Bytes"));
         importedTypes.put(bytes+"fromString",fn(con("String"),con("Bytes")));
@@ -534,6 +551,62 @@ public final class ElciCompiler {
         for(String count:List.of("countSetBits","findFirstSetBit"))importedTypes.put(bytes+count,fn(con("Bytes"),con("Int")));
         importedTypes.put(bytes+"complement",fn(con("Bytes"),con("Bytes")));
         for(String hash:List.of("blake2b224","blake2b256","sha256","sha3_256","keccak256","ripemd160"))importedTypes.put(bytes+hash,fn(con("Bytes"),con("Bytes")));
+    }
+
+    /** {@code Elci.Value}, the core Value module's CIP-153 operations (ADR-009); NativeValue is internal. */
+    private static void valueIntrinsics(Map<String,Ty> importedTypes) {
+        String value=org.elci.modules.Modules.VALUE_PREFIX;
+        Ty ledger=con("org.julclang.ledger.Value"),nativeValue=con("NativeValue"),policy=con("org.julclang.ledger.PolicyId"),
+                token=con("org.julclang.ledger.TokenName"),integer=con("Int");
+        importedTypes.put(value+"fromLedger",fn(ledger,nativeValue));
+        importedTypes.put(value+"toLedger",fn(nativeValue,ledger));
+        importedTypes.put(value+"empty",nativeValue);
+        importedTypes.put(value+"insertCoin",fn(policy,fn(token,fn(integer,fn(nativeValue,nativeValue)))));
+        importedTypes.put(value+"lookupCoin",fn(policy,fn(token,fn(nativeValue,integer))));
+        importedTypes.put(value+"union",fn(nativeValue,fn(nativeValue,nativeValue)));
+        importedTypes.put(value+"contains",fn(nativeValue,fn(nativeValue,con("Bool"))));
+        importedTypes.put(value+"scale",fn(integer,fn(nativeValue,nativeValue)));
+        importedTypes.put(value+"lovelaceOf",fn(ledger,integer));
+        importedTypes.put(value+"isZero",fn(ledger,con("Bool")));
+        importedTypes.put(value+"nonNegative",fn(ledger,con("Bool")));
+        importedTypes.put(value+"policies",fn(ledger,con("List",policy)));
+        importedTypes.put(value+"tokens",fn(policy,fn(ledger,con("Dict",token,integer))));
+        importedTypes.put(value+"toList",fn(ledger,con("List",con("Tuple",policy,token,integer))));
+        importedTypes.put(value+"filter",fn(fn(policy,fn(token,fn(integer,con("Bool")))),fn(ledger,ledger)));
+        importedTypes.put(value+"adaPolicy",policy);
+        importedTypes.put(value+"adaToken",token);
+    }
+
+    /**
+     * Java libraries whose exports only pass along ledger data from the context: their Values are
+     * the ledger's, and canonical (ADR-009).
+     */
+    public static final Set<String> CONTEXT_LIBRARIES = Set.of("org.julclang.stdlib.lib.ContextsLib",
+            "org.julclang.stdlib.lib.OutputLib");
+
+    /** Whether values of a type can hold a ledger Value, through type arguments and imported types' fields. */
+    private static boolean mentionsValue(Ty type,Map<String,LibraryType> catalogue) {
+        // Source types name the context "ScriptContext"; the catalogue knows it by its Java name.
+        return prune(type) instanceof Con c && (c.name().equals("org.julclang.ledger.Value")
+                || c.args().stream().anyMatch(a->mentionsValue(a,catalogue))
+                || referencesValue(new LibraryType.Reference(c.name().equals("ScriptContext")?"org.julclang.ledger.ScriptContext":c.name(),List.of()),catalogue,new HashSet<>()));
+    }
+
+    private static boolean referencesValue(LibraryType.Reference reference,Map<String,LibraryType> catalogue,Set<String> visiting) {
+        if(reference.name().equals("org.julclang.ledger.Value"))return true;
+        if(reference.arguments().stream().anyMatch(a->referencesValue(a,catalogue,visiting)))return true;
+        var type=catalogue.get(reference.name());
+        if(type==null||!visiting.add(reference.name()))return false;
+        for(var field:type.fields())if(referencesValue(field.type(),catalogue,visiting))return true;
+        for(var constructor:type.constructors())for(var field:constructor.fields())if(referencesValue(field.type(),catalogue,visiting))return true;
+        return false;
+    }
+
+    /** The result of a function type, after all its arguments. */
+    private static Ty resultOf(Ty type) {
+        Ty t=prune(type);
+        while(t instanceof Con c&&c.name().equals("->"))t=prune(c.args().get(1));
+        return t;
     }
 
     /** {@code Elci.Assoc}, the core library's association-list operations (ADR-009). */

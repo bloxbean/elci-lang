@@ -104,8 +104,9 @@ remain from the beta-readiness review:
   - The ledger's values are canonical: V3 builds them in ascending order and rejects
     zeros. The `Value` functions produce canonical values through the builtins
     (`ValueData` output is canonical).
-  - Decoding a `Value` from Data (datums, redeemers, parameters, `Data.decode`) checks
-    the form with `UnValueData`, which rejects non-canonical input.
+  - `Data.decode` of a `Value` checks the form with `UnValueData`, which rejects
+    non-canonical input: unsorted or repeated keys, zero quantities, empty token maps, and
+    keys longer than 32 bytes.
   - Equality is therefore exact structural equality (`EqualsData`), and `Data.encode` is
     free.
 - **Implementation.** A core-only intrinsic module, as in section 4, emits the CIP-153
@@ -118,18 +119,41 @@ remain from the beta-readiness review:
   - arithmetic: `add`, `subtract`, `negate`, `scale`, `sum`;
   - comparison: `geq` and `leq`;
   - structure: `withoutLovelace`, `restrictedTo`, `positive`, `negative`.
-- **Failure modes.** CIP-153's `valueContains` fails if either side has a negative
-  quantity. A mint that burns has negative quantities, so `geq` on a mint fails; the
-  documentation says to split it with `positive` and `negative` first. Arithmetic fails
-  only on 128-bit overflow.
+- **Total comparison.** CIP-153's `valueContains` fails if either side has a negative
+  quantity, and a mint that burns has negative quantities. So `geq a b` does not use it: it
+  subtracts and checks that no quantity is negative. That is total and correct for any
+  values, and a few million CPU units. Arithmetic fails only on 128-bit overflow.
 - **Costs** (builtin cost only). Converting a 3-asset value costs about 1.1 million CPU
   (`UnValueData`) and 0.1 million back (`ValueData`). `lovelaceOf` reads the first entry
   directly, since ADA sorts first. Functions that combine many values (`sum`) convert each
   once.
-- **Julc's `ValuesLib` results are not canonical** (reversed lists, zero entries). A
-  ledger `Value` returned by a Java library must be converted with a checked function,
-  never used as a `Value` directly. The test library's scenario builder must produce
-  canonical values.
+- **Julc's `ValuesLib` results are not canonical** (reversed lists, zero entries). So no
+  Java library may hand Elci a `Value`:
+  - an export whose result can hold one is unsupported, and using it is an error that
+    points to the `Value` module. That covers a direct `Value`, a record or union with a
+    `Value` field, and generic exports;
+  - a generic may not be instantiated at a type that holds a `Value`.
+
+  The exception is Julc's context accessors (`ContextsLib`, `OutputLib`), which only pass
+  along the ledger's own data. Exports that only read a `Value` stay usable.
+  The test library's scenario builder now produces canonical values, and property
+  arguments of type `Value` are generated in canonical form.
+- **Data boundary.**
+  - `Data.encode` of a `Value` is free, and `Data.decode` checks the canonical form.
+  - A `Value` inside a datum, redeemer or parameter type is not supported yet: the ledger's
+    strict boundary has no codec for its map layout, and neither has a record that
+    contains it. Store `List ( PolicyId, TokenName, Int )` and rebuild the value with
+    `Value.fromList`. Adding such a codec to Julc would lift this limit.
+- **The filters avoid conversions.** `positive`, `negative`, `restrictedTo` and
+  `withoutLovelace` filter the Data map directly: order is kept and emptied policies are
+  dropped, so the result stays canonical.
+- **Measured costs**, the snapshot's values. `geq` grows by about 2M CPU per asset: two
+  conversions and a walk.
+  - `add` of two small values, including building them: 3.5M CPU;
+  - `lovelaceOf`: 2.7M, reading the Data directly;
+  - `quantityOf`: 2.5M;
+  - `geq`: 6.3M;
+  - `sum` of five values: 20M.
 
 ### 3. `Map`: the ledger's association list, faster
 

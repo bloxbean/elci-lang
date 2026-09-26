@@ -167,12 +167,12 @@
         {
           "name": "decode",
           "signature": "Data -> a",
-          "summary": "Julc's strict decoder for the concrete type a: checks tags, arity and fields; malformed Data fails the script (never a Maybe), and so does a Dict whose keys are not strictly ascending. a must be known where it is used; annotate when inference cannot tell. Rejected (ELCI3003) for (), functions, Array, Value and types containing Value."
+          "summary": "Julc's strict decoder for the concrete type a: checks tags, arity and fields; malformed Data fails the script (never a Maybe), and so does a Dict whose keys are not strictly ascending or a Value that is not canonical. a must be known where it is used; annotate when inference cannot tell. Rejected (ELCI3003) for (), functions, Array, TxOut and types that contain a Value; a Value itself decodes."
         },
         {
           "name": "encode",
           "signature": "a -> Data",
-          "summary": "The Data encoding of a value: records are constructor 0 with fields sorted by name, union variants use declaration-order tags, Maybe is Nothing 0 / Just 1, tuples are constructor 0, lists are lists, maps are maps. Result is Ok 0 / Err 1. Accepts a type nothing determines, such as that of Nothing or []. Rejected for (), functions and Array."
+          "summary": "The Data encoding of a value: records are constructor 0 with fields sorted by name, union variants use declaration-order tags, Maybe is Nothing 0 / Just 1, tuples are constructor 0, lists are lists, maps are maps. Result is Ok 0 / Err 1. A Value is its own Data map, at no cost. Accepts a type nothing determines, such as that of Nothing or []. Rejected for (), functions, Array, and lists and tuples of Values."
         },
         {
           "name": "fromOptional",

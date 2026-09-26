@@ -280,6 +280,7 @@ Every generated argument is a valid value of its type. It is produced as Plutus 
 | `TokenName` parameter | 0 to 32 bytes | `#(empty)` |
 | `List a`, `Map k v` | grow with the run; map keys are distinct | shorter lists and maps |
 | `Dict k v` | grow with the run; keys are sorted and distinct, as decoding requires | smaller dictionaries, still sorted |
+| `Value` | canonical values: often some lovelace, and a few tokens under 28-byte policies; quantities may be negative, never zero | fewer policies, down to the empty value |
 | records, tuples | built from their fields | each field shrinks |
 | unions, `Maybe` | every constructor is used | earlier constructors, such as `Nothing` |
 | recursive unions | always finite; the first runs use the shallowest constructors | their own subterms |

@@ -141,6 +141,7 @@ The others you import yourself:
 | `Dict` | `import Dict exposing (Dict)` | Elm's dictionaries, with comparable keys kept in order |
 | `Map` | `import Map` | The ledger's key/value maps, for ledger data and keys that aren't comparable |
 | `Array` | `import Array` | Constant-time indexed arrays |
+| `Value` | `import Value exposing (Value)` | The ledger's multi-asset values: lovelace and native tokens |
 | `Bytes` | `import Bytes` | Byte-string builtins: building, slicing, integers, bits and hashes |
 | `Julc.Data` | `import Julc.Data as Data` | `encode` and `decode` to and from Plutus Data, and `Maybe` adapters |
 | `Julc.Ledger` | `import Julc.Ledger exposing (...)` | Ledger types: `ScriptContext`, `PubKeyHash`, `TxOutRef` and more |
@@ -156,9 +157,9 @@ transaction](/contracts/reading-the-transaction/) covers the ledger types.
 
 ## Julc's Java libraries
 
-Julc ships on-chain libraries written in Java, such as `MathLib`, `IntervalLib`, `ValuesLib` and
-`ByteStringLib`. They fill the gaps in the core modules, such as floor division and ledger `Value`s. To use
-one, give it a module name in `elci.toml`:
+Julc ships on-chain libraries written in Java, such as `MathLib`, `IntervalLib`, `OutputLib` and
+`ByteStringLib`. They fill the gaps in the core modules, such as floor division and validity intervals. To
+use one, give it a module name in `elci.toml`:
 
 ```toml title="elci.toml"
 [java-modules]
@@ -249,7 +250,7 @@ cpu 7570256, mem 30966
 
 The library is compiled together with each project that uses it. A module name may appear in only one source
 directory. The core module names (`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`,
-`Array`) are taken, and `Set`, `Value`, `Elci` and names starting with `Elci.` are reserved for the core
+`Array`, `Value`) are taken, and `Set`, `Elci` and names starting with `Elci.` are reserved for the core
 library. The
 [elci-library example](https://github.com/bloxbean/elci-lang/tree/main/examples/elci-library) is a complete
 project.

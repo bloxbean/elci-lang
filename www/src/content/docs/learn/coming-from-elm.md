@@ -120,8 +120,8 @@ A name Elci lacks is an error that says what to use or lists what the module has
 
 One import rule differs from Elm: a name you list explicitly, as in `import Utils exposing (clamp)`,
 takes precedence over the default import of `Basics.clamp` instead of being ambiguous. Modules outside the
-default imports, `Bytes`, `Dict`, `Map`, `Array` and `Julc.Data`, need their own imports, as `Dict` and
-`Array` do in Elm.
+default imports, `Bytes`, `Dict`, `Map`, `Array`, `Value` and `Julc.Data`, need their own imports, as `Dict`
+and `Array` do in Elm.
 
 ## Dict, Map and Array
 
@@ -149,6 +149,10 @@ ledger or a key that isn't comparable requires it.
 `Array` resembles Elm's `Array`: `get` returns a `Maybe` and `slice` accepts negative indexes. It has no `set`,
 `push` or `append`, and an array can't be stored in data (datums, redeemers, records, lists and so on).
 Build a `List` and convert it once with `Array.fromList`.
+
+Elci also has a `Value` module, for the ledger's amounts of ada and native tokens, such as an output's
+value and the transaction's mint. It has no Elm counterpart; see
+[`Value`](/reference/core-modules/#value).
 
 ## Your data is Plutus Data
 

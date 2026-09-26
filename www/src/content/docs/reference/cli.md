@@ -210,8 +210,9 @@ builtin: Trace("pricing", <Data>) → <Data>
 ```
 
 Values print as you would write them: `True`, `"text"`, `[1, -2]`, `Just 5`, `( 1, "a" )`, records with
-their fields in name order, byte strings as `#474f4c44` (and `#(empty)`), maps as `Map.fromList [...]`
-and arrays as `Array.fromList [...]`. `eval` passes no arguments, so an entrypoint of function type
+their fields in name order, byte strings as `#474f4c44` (and `#(empty)`), maps as `Map.fromList [...]`,
+dictionaries as `Dict.fromList [...]`, arrays as `Array.fromList [...]` and values as
+`Value.fromList [( #policy, #token, quantity )]`, where ada's policy and token name are `#(empty)`. `eval` passes no arguments, so an entrypoint of function type
 prints `<function>`. If evaluation fails, it prints `evaluation failed:` with the reason, then the
 budget, and exits with status 1:
 

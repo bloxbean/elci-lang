@@ -210,6 +210,57 @@ public final class TestRunner {
         return program.applyParams(arguments.toArray(PlutusData[]::new));
     }
 
+    /**
+     * Canonical ledger values (ADR-009): a few tokens, often with lovelace, with quantities that may
+     * be negative but never zero. Shrinking drops tokens.
+     */
+    private static DataGenerator values() {
+        var policies = DataGenerators.bytes(28);
+        var names = DataGenerators.bytes(0, 32);
+        var quantities = DataGenerators.integers(-1_000_000_000L, 1_000_000_000L);
+        // Small shared pools, so that separately generated values share policies and names:
+        // sums then merge and cancel, and the empty (ADA) policy also gets named tokens.
+        byte[][] sharedPolicies = {new byte[0], filled(28, 1), filled(28, 2), filled(28, 0xfe)};
+        byte[][] sharedNames = {new byte[0], {'a'}, {'b'}, {(byte) 0x80}};
+        return new DataGenerator() {
+            @Override
+            public PlutusData generate(java.util.SplittableRandom random, int size) {
+                var tokens = new ArrayList<PlutusData.Pair>();
+                int count = random.nextInt(Math.min(size, 6) + 1);
+                if (random.nextBoolean()) tokens.add(token(new byte[0], new byte[0], quantities.generate(random, size)));
+                for (int i = 0; i < count; i++) {
+                    byte[] policy = random.nextInt(4) == 0 ? ((PlutusData.BytesData) policies.generate(random, size)).value()
+                            : sharedPolicies[random.nextInt(sharedPolicies.length)];
+                    byte[] name = random.nextInt(4) == 0 ? ((PlutusData.BytesData) names.generate(random, size)).value()
+                            : sharedNames[random.nextInt(sharedNames.length)];
+                    tokens.add(token(policy, name, quantities.generate(random, size)));
+                }
+                return Scenarios.canonical(tokens);
+            }
+
+            @Override
+            public java.util.stream.Stream<PlutusData> shrink(PlutusData value) {
+                var entries = ((PlutusData.MapData) value).entries();
+                return java.util.stream.IntStream.range(0, entries.size()).mapToObj(i -> {
+                    var rest = new ArrayList<>(entries);
+                    rest.remove(i);
+                    return (PlutusData) new PlutusData.MapData(rest);
+                });
+            }
+        };
+    }
+
+    private static byte[] filled(int length, int value) {
+        var bytes = new byte[length];
+        java.util.Arrays.fill(bytes, (byte) value);
+        return bytes;
+    }
+
+    private static PlutusData.Pair token(byte[] policy, byte[] name, PlutusData quantity) {
+        return new PlutusData.Pair(new PlutusData.BytesData(policy),
+                new PlutusData.MapData(List.of(new PlutusData.Pair(new PlutusData.BytesData(name), quantity))));
+    }
+
     /** Generated values and their shrinks, rewritten into values the program decodes (sorted Dict keys). */
     private static DataGenerator canonical(DataGenerator generator, java.util.function.UnaryOperator<PlutusData> rewrite) {
         return new DataGenerator() {
@@ -229,6 +280,7 @@ public final class TestRunner {
     private static DataGenerator generator(Types.Ty parameter, PirType representation, Map<String, PirType> namedTypes) {
         String type = ((Types.Con) Types.prune(parameter)).name();
         String simple = type.substring(type.lastIndexOf('.') + 1);
+        if (type.equals("org.julclang.ledger.Value")) return values();
         return switch (simple) {
             case "PubKeyHash", "ScriptHash", "ValidatorHash", "PolicyId" -> DataGenerators.bytes(28);
             case "TxId", "DatumHash" -> DataGenerators.bytes(32);

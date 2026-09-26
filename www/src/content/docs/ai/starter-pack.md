@@ -26,7 +26,8 @@ This page is optimized for AI ingestion, not for humans. For the tutorial, see
 - **Elm's core library, partly.** `Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String` and `Debug` are
   imported by default, as in Elm, with Elm's names and argument orders, but `String` has only five
   functions and `Debug` only `trace`. `Dict` exists with Elm's API (`import Dict exposing (Dict)`); `Set`,
-  `Char` and `Float` **do not exist** (section 3.3).
+  `Char` and `Float` **do not exist** (section 3.3). A `Value` module (`import Value exposing (Value)`)
+  handles the ledger's multi-asset values (section 7).
 - **Strict, not lazy.** Every `let` value and every function argument is evaluated (section 4).
 - **Configuration decides deployment.** Handlers are ordinary functions; `elci.toml` says which
   function serves which ledger purpose (section 2).
@@ -132,8 +133,8 @@ purpose = "function"
   except where a value is created: `Data.decode` and generic Java functions (`ELCI3001`).
 - Self-recursion and mutually recursive functions (top-level or local).
 - Types: `Int` (arbitrary precision), `Bool`, `String`, `()`, `Bytes`, `Data`, `List a`, `Maybe a`,
-  `Result error value`, `Order`, `Dict k v` (comparable keys), `Map k v`, `Array a`, tuples of 2 or 3,
-  closed records, custom types (generic, recursive).
+  `Result error value`, `Order`, `Dict k v` (comparable keys), `Map k v`, `Array a`, `Value`, tuples of 2
+  or 3, closed records, custom types (generic, recursive).
 - `type alias R = { x : Int }` (also a constructor `R 1`); `type T a = A a | B`.
 - Records: `{ x = 1 }`, `r.x`, `{ r | x = 2 }`, destructuring `{ x, y }` in parameters and `let`.
 - `case` with nested patterns: constructors, `[]`, `[ a, b ]`, `a :: rest`, tuples, record fields, `as`,
@@ -160,10 +161,13 @@ purpose = "function"
 | Char literals `'a'`, `%`, hex `0xFF`, `1_000` | `ELCI1001` |
 | `port module`, `import Html` | `ELCI1002` / `ELCI2101` |
 | Polymorphic recursion, recursive values (`a = b + 1`, `b = a + 1`) | `ELCI2002` / `ELCI2008` |
-| `==` on functions, `Data`, `Map`, `Array`, `Value` | `ELCI2003` |
-| `<`, `compare`, `List.sort` on `Bool`, records, custom types, `Maybe`, `Dict`, `Map`, `Data`, `TxOutRef` | `ELCI2003`; use `List.sortBy` with a key |
+| `==` on functions, `Data`, `Map`, `Array`, `TxOut`, `TxInInfo`, `TxInfo` | `ELCI2003` |
+| `<`, `compare`, `List.sort` on `Bool`, records, custom types, `Maybe`, `Dict`, `Map`, `Value`, `Data`, `TxOutRef` | `ELCI2003`; use `List.sortBy` with a key; compare values with `Value.geq` |
 | `Dict` keys that are not comparable (`Dict.get` on a `Dict Credential Int`; a `Dict Bool Int` in a datum or `Data.decode`) | `ELCI2003`; use a `Map` |
 | A Java library generic at a type containing a `Dict` | `ELCI3003`; pass a `Map` or `List`, then `Dict.fromList` |
+| A Java export whose result can hold a `Value` (`ValuesLib.add`, `ValuesLib.singleton`, a Java record with a `Value` field, …); `ContextsLib` and `OutputLib` are exempt | `ELCI2105`; use the core `Value` module |
+| A Java library generic at a type holding a `Value` (`Lists.filter values f`) | `ELCI3003`; use `List` and the `Value` module |
+| `Value` in a datum, redeemer or parameter type | `ELCI2013`; store `List ( PolicyId, TokenName, Int )`, rebuild with `Value.fromList` |
 | Module named `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`, `Set`, `Value`, `Elci` or `Elci.*`; alias named after a default import (`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Debug`) | `ELCI2104` |
 | Constructors named `Just`, `Nothing`, `True`, `False`; types named `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Dict`, `Map`, `Array`, `Float` | `ELCI2011` |
 | `f <\| x \|> g`, `f << g >> h` (opposite associativity mixed) | `ELCI1002`; add parentheses |
@@ -323,8 +327,9 @@ concrete types.
 
 - Datum, redeemer and parameter types need a strict Data boundary: your records and custom types, `Int`,
   `Bool`, `String`, `Bytes`, `()`, tuples, lists, `Dict`, `Map`, `Maybe`, and ledger types such as
-  `PubKeyHash`, `TxOutRef`, `Credential`. Not: functions, `Array`, `ScriptContext`, `TxOut`, `TxInfo`,
-  `Value`.
+  `PubKeyHash`, `TxOutRef`, `Credential`, `PolicyId`, `TokenName`. Not: functions, `Array`, `ScriptContext`,
+  `TxOut`, `TxInfo`, `Value` (for an amount of tokens, store `List ( PolicyId, TokenName, Int )` and call
+  `Value.fromList`).
 - Use `()` for an unused redeemer or datum. Only the selected handler's datum and redeemer are decoded.
 - A validator always checks the purpose; purposes without a handler are rejected.
 - Parameters are decoded but **not validated on-chain**; `elci apply` validates them off-chain. Exception:
@@ -400,8 +405,13 @@ Rules:
   records are not comparable.
 - Construct ledger values qualified: `import Julc.Ledger as Ledger` then `Ledger.PubKeyHash bytes`,
   `Ledger.TxOutRef (Ledger.TxId bytes) 0`.
-- `Value` (and `TxOut`, `TxInInfo`, `TxInfo`, which contain it) has no equality and cannot cross the boundary.
-  Read it with `ValuesLib` (section 9): `Values.lovelaceOf value`, `Values.assetOf value policyBytes nameBytes`.
+- `Value` (`out.value`, `tx.mint`) is the core `Value` type: read it with the `Value` module (section 8),
+  `Value.lovelaceOf value`, `Value.quantityOf policy tokenName value`. Build asset ids with
+  `import Julc.Ledger exposing (PolicyId(..), TokenName(..))`: `PolicyId bytes`, `TokenName (Bytes.fromString "BADGE")`.
+  Ada is `PolicyId Bytes.empty` with `TokenName Bytes.empty`; use `Value.lovelace` and `Value.lovelaceOf`.
+- Every `Value` is canonical (policies and token names ascending, no zero quantity), so `==` on values is
+  exact. `TxOut`, `TxInInfo` and `TxInfo`, which contain a `Value`, have no equality. A `Value` cannot
+  cross the boundary yet. In `tx.mint`, burns are negative quantities.
 - `JulcOptional` has no equality; convert with `Data.fromOptional`.
 
 ## 8. Core modules and test library (exact signatures)
@@ -418,7 +428,7 @@ import Tuple
 import Debug
 ```
 
-`Bytes`, `Dict`, `Map`, `Array` and `Julc.Data` need explicit imports. Using one without its import is
+`Bytes`, `Dict`, `Map`, `Array`, `Value` and `Julc.Data` need explicit imports. Using one without its import is
 `` ELCI2104: Bytes.fromString needs the Bytes module; add `import Bytes` ``. Machine-readable signatures of
 every module are in `/ai/catalog.json`.
 
@@ -603,6 +613,40 @@ filter : (a -> Bool) -> Array a -> Array a
 slice : Int -> Int -> Array a -> Array a
 ```
 
+**Value** (`import Value exposing (Value)`; the ledger's multi-asset value, as in `out.value` and
+`tx.mint`; `PolicyId` and `TokenName` from `Julc.Ledger`; always canonical, so `==` is exact; quantities may
+be negative, as for burns in a mint; `lovelaceOf` and `isZero` read the Data directly, the filters
+(`positive`, `negative`, `restrictedTo`, `withoutLovelace`) walk it, the rest convert through the CIP-153
+builtins, about 1M CPU for a few assets; a policy id or token name over 32 bytes, or a quantity outside
+signed 128 bits, fails the script. `Data.encode` of a `Value` is free and `Data.decode`
+accepts only canonical values, but a `Value` cannot be a datum, redeemer or parameter, and a type that
+contains one cannot be decoded):
+
+```text
+zero : Value
+lovelace : Int -> Value
+singleton : PolicyId -> TokenName -> Int -> Value
+insert : PolicyId -> TokenName -> Int -> Value -> Value      -- sets the quantity; 0 removes the token
+fromList : List ( PolicyId, TokenName, Int ) -> Value        -- repeated tokens add up
+lovelaceOf : Value -> Int                                    -- ada's token only; 0 when none, as in a mint
+quantityOf : PolicyId -> TokenName -> Value -> Int           -- 0 when none
+isZero : Value -> Bool
+policies : Value -> List PolicyId                            -- ascending; ada's is the empty policy
+tokens : PolicyId -> Value -> Dict TokenName Int
+toList : Value -> List ( PolicyId, TokenName, Int )          -- ascending
+add : Value -> Value -> Value
+subtract : Value -> Value -> Value                           -- first minus second
+negate : Value -> Value
+scale : Int -> Value -> Value
+sum : List Value -> Value
+geq : Value -> Value -> Bool          -- geq a b: a holds at least as much of every token as b; total, also with negatives
+leq : Value -> Value -> Bool
+withoutLovelace : Value -> Value
+restrictedTo : List PolicyId -> Value -> Value
+positive : Value -> Value             -- in a mint: what is minted
+negative : Value -> Value             -- in a mint: what is burned, still negative
+```
+
 **Bytes** (`import Bytes`; builtins; the byte string is the last argument; compare with `==`, `<`,
 `compare`):
 
@@ -695,7 +739,8 @@ unit : Data
 
 **Test discovery:** a test is an **exposed, zero-argument, top-level** declaration of type `Bool`,
 `Expectation`, `Scenario` or `Property`. An **exposed function returning `Property`** is a property test;
-its arguments (any Data-encodable types) are generated, run 100 times by default, and shrunk on failure.
+its arguments (any Data-encodable types, and `Value`, generated canonical) are generated, run 100 times by
+default, and shrunk on failure.
 Unexposed declarations are helpers. Test modules live in `tests/`, may import `src` modules and
 `[java-modules]`, and must not share a name with a source module. **Only test modules may import
 `Expect`, `Scenario` and `Property`.**
@@ -710,7 +755,6 @@ subject comes **first**.
 ```toml
 [java-modules]
 "Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
-"Julc.Values" = "org.julclang.stdlib.lib.ValuesLib"
 "Julc.Math" = "org.julclang.stdlib.lib.MathLib"
 ```
 
@@ -719,10 +763,6 @@ subject comes **first**.
 | `Interval.contains` | `Interval -> Int -> Bool` (inclusive bounds) |
 | `Interval.finiteLowerBound`, `finiteUpperBound` | `Interval -> Int`, **`-1` when infinite** |
 | `Interval.after`, `before` / `between` | `Int -> Interval` / `Int -> Int -> Interval` |
-| `Values.lovelaceOf` | `Value -> Int` |
-| `Values.assetOf` | `Value -> Bytes -> Bytes -> Int` (policy bytes, token name) |
-| `Values.geq`, `leq`, `eq` | `Value -> Value -> Bool` |
-| `Values.flatten` | `Value -> List Data` (each a `( Bytes, Bytes, Int )` triple; decode with `Data.decode`) |
 | `Math.floorDiv`, `floorMod` | `Int -> Int -> Int` (round towards negative infinity; `//` truncates) |
 | `Math.expMod` | `Int -> Int -> Int -> Int` |
 | `Math.sign` | `Int -> Int` |
@@ -732,9 +772,11 @@ subject comes **first**.
 | `Crypto.verifyEd25519Signature` (`CryptoLib`) | `Bytes -> Bytes -> Bytes -> Bool` (key, message, signature) |
 | `ByteString.toHex`, `intToDecimalString` (`ByteStringLib`) | `Bytes -> Bytes`, `Int -> Bytes` |
 
-Unsupported signatures (for example `MathLib.divMod`, all of `BlsLib`) are `ELCI2105`. Generic Java
-methods are specialized per use; type arguments must be Data-encodable and must not contain a `Dict`
-(`ELCI3003`).
+Unsupported signatures (for example `MathLib.divMod`, all of `BlsLib`) are `ELCI2105`, and so is every
+export whose result can hold a `Value` (`ValuesLib.add`, `ValuesLib.singleton`), except in `ContextsLib` and
+`OutputLib`, which pass along the ledger's own values: use the core `Value` module (section 8), not
+`ValuesLib`. Generic Java methods are specialized per use; type arguments must be Data-encodable and must
+not contain a `Dict` or a `Value` (`ELCI3003`).
 
 ## 10. The CLI loop
 
@@ -742,7 +784,7 @@ Run from the project directory (or pass it as the first argument). Exit status i
 `1` on any error, failing test, failed evaluation or when no tests are found.
 
 1. `elci check`: compile every validator (or the entrypoint); prints one line each:
-   `validator badge (mint): checked; 649 FLAT bytes; plutus-v3-pv11-uplc-1.1.0`. Fix every error first.
+   `validator badge (mint): checked; 299 FLAT bytes; plutus-v3-pv11-uplc-1.1.0`. Fix every error first.
 2. `elci test`: run tests; prints `PASS`/`FAIL Module.test (cpu N, mem M)` then
    `N passed, M failed (seed S)`. Options: `--match <substring>` (case-insensitive on `Module.test`),
    `--seed <n>` (reproduce), `--fuzz <runs>` (property runs, default 100).
@@ -776,16 +818,16 @@ Error format: `path:line:col: ELCIxxxx: message`; for a validator the first line
 | `ELCI2010` | `Missing field 'price'; available fields: [amount]` | correct field; annotate the record type |
 | `ELCI2011` | `Duplicate constructor Buy`, `Nothing is a constructor of the built-in Maybe type; choose another name`, `Bytes is a built-in type; choose another name` | rename |
 | `ELCI2012` | `Type List expects 1 arguments, got 2`, `Type is not declared or imported in this module: Amount`, `Write tuple types as ( a, b ) or ( a, b, c )` | declare/import the type |
-| `ELCI2013` | `Functions cannot be serialized as datum or redeemer`, `Arrays have no Data encoding ...`, `... TxOut has no approved strict Data boundary` | Data-encodable boundary types; `List` in data |
+| `ELCI2013` | `Functions cannot be serialized as datum or redeemer`, `Arrays have no Data encoding ...`, `org.julclang.ledger.Value has no approved strict Data boundary (BOUNDARY); ...` | Data-encodable boundary types; `List` in data; `List ( PolicyId, TokenName, Int )` for a value |
 | `ELCI2014` | `Handler Main.spend does not have the spend signature datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (0 parameters); its type is ...` | section 6 |
 | `ELCI2101` | `Missing source module: X; add X.elm under a source directory, or map a Java library to it under [java-modules]`, `Expect is part of the test library; only test modules can import it` | add module / mapping; move to `tests/` |
 | `ELCI2102` | `max is ambiguous: it could be Basics.max or Utils.max. Write the one you mean, like Basics.max, or stop exposing the other` | qualify, or expose the name explicitly |
 | `ELCI2103` | `Handler Main.mint must be exposed by its module` | expose it |
 | `ELCI2104` | ``Bytes.fromString needs the Bytes module; add `import Bytes` ``, `Elci's List module has no find. It has all, any, ...`, `Elci has no Debug.log; use Debug.trace message value, which returns value`, `Map is imported as M; write M.get`, `The module name String is taken by Elci's core library; rename this module`, `Import cycle: Main -> Pricing -> Main`, `Java modules cannot be imported with exposing (..); ...` | add the import; section 3.3; rename; break cycles |
-| `ELCI2105` | `...MathLib.divMod: Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>` | use another export |
+| `ELCI2105` | `...MathLib.divMod: Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>`, `...ValuesLib.add: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module` | use another export; the core `Value` module |
 | `ELCI3001` | `Cannot determine the type converted by Julc.Data.decode; add a type annotation` | annotate (`let xs : List Int`) |
 | `ELCI3002` | specialization limit (256) | remove polymorphic recursion |
-| `ELCI3003` | `Type argument T = Unit of firstOr must have a Plutus Data encoding`, `No strict decoder for ...Value`, `Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; ...` | Data-encodable type; no `Dict` through Java generics |
+| `ELCI3003` | `Type argument T = Unit of firstOr must have a Plutus Data encoding`, `No strict decoder for org.julclang.ledger.TxOut ...`, `No encoder for List [org.julclang.ledger.Value] ...`, `Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; ...`, `Type argument a = Value of filter contains a Value, which a Java library does not keep in the ledger's canonical order; ...` | Data-encodable type; convert values with `Value.toList`; no `Dict` or `Value` through Java generics |
 | `ELCI4001` | `unknown validator 'x'`, `eval runs an [entrypoint] function; test validators with elci test`, `ABI drift from ...`, `parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats` | fix config or command; sort `Dict` keys |
 | `ELCI4002`, `ELCI4003` | backend rejected or lacks a capability | compiler issue; report it |
 | (none) | `Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"`, `Unknown configuration key: [project] name` | fix `elci.toml` |
@@ -798,7 +840,7 @@ A failing scenario that was never run prints `cannot prepare validator 'badge': 
 1. **Using Elm APIs Elci lacks** (`Set`, `Debug.log`, `String.length`, `String.toInt`,
    `List.map4`, `.field`). Use section 3.3. The core functions in section 8 do exist; use them rather than
    writing your own or mapping `Julc.Math`.
-2. **Forgetting imports.** `Dict`, `Map`, `Array`, `Bytes`, `Julc.Data` must be imported; `Basics`, `List`,
+2. **Forgetting imports.** `Dict`, `Map`, `Array`, `Value`, `Bytes`, `Julc.Data` must be imported; `Basics`, `List`,
    `Maybe`, `Result`, `String`, `Tuple` and `Debug` are implicit. `Julc.*` Java modules also need a
    `[java-modules]` mapping.
 3. **Omitting type signatures** on top-level declarations (`ELCI2004`).
@@ -833,6 +875,10 @@ A failing scenario that was never run prints `cannot prepare validator 'badge': 
 25. **Unsorted `Dict` data.** A `Dict` in a datum, redeemer or parameter must have strictly ascending keys,
     or it fails to decode. Build test data with `Data.encode (Dict.fromList ...)`; off-chain, sort keys in
     Elci's order, not CBOR's canonical order (which puts shorter byte strings first).
+26. **Reading values through `ValuesLib`.** Use the core `Value` module; Java exports that return a `Value`
+    are rejected (`ELCI2105`). `==` on values is exact, so use `Value.geq` for "pays at least".
+    `Value.lovelaceOf tx.mint` is 0, and a burn is a negative quantity in `tx.mint`.
+    `import Julc.Ledger exposing (Value(..))` is `ELCI2104`: values come from the `Value` module.
 
 ## 13. Canonical examples
 
@@ -1016,17 +1062,14 @@ julc-version = "0.1.0-gb-5a3378b"
 boundary = "julc-strict-v1"
 parameters = ["admin"]
 mint = "Badge.mint"
-
-[java-modules]
-"Julc.Values" = "org.julclang.stdlib.lib.ValuesLib"
 ```
 
 ```elm title="src/Badge.elm"
 module Badge exposing (badgeName, mint)
 
 import Bytes
-import Julc.Ledger exposing (PubKeyHash, ScriptContext, ScriptInfo(..))
-import Julc.Values as Values
+import Julc.Ledger exposing (PubKeyHash, ScriptContext, ScriptInfo(..), TokenName(..))
+import Value
 
 
 badgeName : Bytes
@@ -1043,7 +1086,7 @@ mint admin quantity ctx =
         MintingScript policy ->
             (quantity /= 0)
                 && List.member admin ctx.txInfo.signatories
-                && (Values.assetOf ctx.txInfo.mint policy.hash badgeName == quantity)
+                && (Value.quantityOf policy (TokenName badgeName) ctx.txInfo.mint == quantity)
 
         _ ->
             False
@@ -1114,16 +1157,16 @@ onlyTheDeclaredQuantity declared actual =
 
 ```text
 $ elci check
-validator badge (mint): checked; 649 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator badge (mint): checked; 299 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 $ elci test --seed 42
-PASS BadgeTest.adminMints (cpu 22215329, mem 76446)
-PASS BadgeTest.adminBurns (cpu 22215329, mem 76446)
-PASS BadgeTest.strangerCannotMint (cpu 7712762, mem 29191)
-PASS BadgeTest.zeroIsRejected (cpu 4768002, mem 18814)
-PASS BadgeTest.onlyTheDeclaredQuantity (100 runs, max cpu 22215329, mem 76446)
+PASS BadgeTest.adminMints (cpu 9892303, mem 33637)
+PASS BadgeTest.adminBurns (cpu 9892303, mem 33637)
+PASS BadgeTest.strangerCannotMint (cpu 7664762, mem 28891)
+PASS BadgeTest.zeroIsRejected (cpu 4720002, mem 18514)
+PASS BadgeTest.onlyTheDeclaredQuantity (100 runs, max cpu 9892303, mem 33637)
 5 passed, 0 failed (seed 42)
 $ elci apply --validator badge --param 'admin={"bytes": "a2c20c77887ace1cd986193e4e75babd8993cfd56995cd5cfce609c2"}'
-validator badge: applied 1 parameter(s); hash d051482496116cc565cc69bfeae7b970dced562246fbc674d8d76891; wrote .../badge/build/validators/badge/applied.plutus.json
+validator badge: applied 1 parameter(s); hash a8a26fa4f5ceaebcb4ac132d94793672f4d17a0af9861a9b60dbf198; wrote .../badge/build/validators/badge/applied.plutus.json
 ```
 
 ### 13.3 Function project for `elci eval`
@@ -1184,7 +1227,7 @@ trace: no price for kiwi
 ## 14. Checklist before generating Elci code
 
 1. Is every top-level declaration annotated, and every module name equal to its file path?
-2. Did I avoid every Elm API in section 3.3 and import `Dict`/`Map`/`Array`/`Bytes`/`Julc.Data` where used?
+2. Did I avoid every Elm API in section 3.3 and import `Dict`/`Map`/`Array`/`Value`/`Bytes`/`Julc.Data` where used?
 3. Does each handler match section 6, with parameters first, and is it exposed and listed in `elci.toml`?
 4. Are datum, redeemer and parameter types Data-encodable (no functions, `Array`, `Value`, `TxOut`)?
 5. Do I compare `PubKeyHash` with `PubKeyHash` (or `.hash` with `Bytes`), never mixed?

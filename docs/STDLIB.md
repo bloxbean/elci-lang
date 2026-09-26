@@ -8,7 +8,9 @@ complete Elm core or the browser package ecosystem.
 This inventory was first checked on 20 September 2026 using Julc's
 source-description boundary at `d6e716e2` and Elci `c7552e9`, with target
 `plutus-v3-pv11-uplc-1.1.0`. It was regenerated on 25 September 2026 against Julc
-`5a3378ba`. It is a snapshot of the current implementation.
+`5a3378ba`, and updated on 26 September 2026 for the core `Value` module
+([ADR-009](../adr/009-dict-native-value-and-map.md)), which rejects Java exports
+that return a `Value`. It is a snapshot of the current implementation.
 
 ## What “available” means here
 
@@ -19,9 +21,9 @@ through Elci. Existing Elci evaluation fixtures cover Math, Interval and Context
 Julc has its own stdlib tests. Ledger decoding, imported-type capabilities and
 function preconditions still apply.
 
-The scan found **151 compile-verified exports**, **41 unsupported signatures**
-and **12 generic templates** (`TypedMapLib` and `TypedArrayLib`, instantiated at
-each use). No library is
+The scan found **145 compile-verified exports**, **41 unsupported signatures**,
+**6 exports rejected because they return a `Value`** and **12 generic templates**
+(`TypedMapLib` and `TypedArrayLib`, instantiated at each use). No library is
 blocked at import. `ByteStringLib`, previously blocked by an overload, now
 contributes 24 exports. The six programmatic `ListsLib` exports (`map`, `filter`,
 `any`, `all`, `find`, `foldl`) are generic schemes outside this Java-source catalogue.
@@ -75,6 +77,16 @@ Julc's `TypedMapLib` and `TypedArrayLib`, which need no `[java-modules]` entry, 
 over `Elci.Assoc`, compiler intrinsics for association lists that only core
 modules may import.
 
+`Value` (`import Value exposing (Value)`) is the ledger's multi-asset value, with
+`zero`, `lovelace`, `singleton`, `insert`, `fromList`, `lovelaceOf`, `quantityOf`,
+`isZero`, `policies`, `tokens`, `toList`, `add`, `subtract`, `negate`, `scale`,
+`sum`, `geq`, `leq`, `withoutLovelace`, `restrictedTo`, `positive` and `negative`.
+Every `Value` is canonical, so `==` is exact
+([ADR-009](../adr/009-dict-native-value-and-map.md); see the
+[language guide](LANGUAGE.md#compiler-provided-modules)). It is Elci source over
+`Elci.Value`, core-only intrinsics for the CIP-153 value builtins. Use it instead
+of `ValuesLib`: Java exports that return a `Value` are rejected.
+
 `Julc.Data` provides explicit `decode`, `encode`, `fromOptional` and `toOptional`
 conversions. `Bytes` wraps byte-string builtins (`fromString`, `length`, `append`,
 `slice`, hashes); `<` and `compare` order byte strings. `Debug.trace` emits traces
@@ -105,7 +117,7 @@ Each Java class below is under `org.julclang.stdlib.lib`. Module aliases such as
 | `MathLib` | 8 | `divMod`, `quotRem`: Java `Tuple2` mapping |
 | `NativeValueLib` | 0 | All 7 exports require unsupported `JulcValue` |
 | `OutputLib` | 14 | No rejected source exports in this scan |
-| `ValuesLib` | 24 | 11 exports use unmapped Data subtypes or `AssetEntry` |
+| `ValuesLib` | 18 | 11 exports use unmapped Data subtypes or `AssetEntry`; 6 return a `Value`, which Elci rejects (use the core `Value` module) |
 | `TypedMapLib` | 9 generic | Templates over typed maps; used by the core `Map` module |
 | `TypedArrayLib` | 3 generic | `fromList`, `get`, `length` over PV11 arrays; used by the core `Array` module |
 
@@ -151,7 +163,7 @@ account for that sentinel when using these methods.
 
 **OutputLib**: `countOutputsAt`, `findInputWithToken`, `findOutputWithToken`, `getInlineDatum`, `lovelacePaidTo`, `outputsAt`, `outputsWithToken`, `paidAtLeast`, `resolveDatum`, `txOutAddress`, `txOutDatum`, `txOutValue`, `uniqueOutputAt`, `valueHasToken`.
 
-**ValuesLib**: `_containsPolicy`, `_countTokensWithQty`, `_findTokenName`, `add`, `adjustOuterForAdd`, `assetOf`, `checkPolicyGeq`, `containsPolicy`, `countTokensWithQty`, `eq`, `extraOuterEntries`, `findTokenName`, `flatten`, `flattenStep`, `geq`, `geqMultiAsset`, `isZero`, `leq`, `lovelaceOf`, `negate`, `refBytes`, `singleton`, `subtract`, `uniqueTokenName`.
+**ValuesLib**: `_containsPolicy`, `_countTokensWithQty`, `_findTokenName`, `assetOf`, `checkPolicyGeq`, `containsPolicy`, `countTokensWithQty`, `eq`, `findTokenName`, `flatten`, `flattenStep`, `geq`, `geqMultiAsset`, `isZero`, `leq`, `lovelaceOf`, `refBytes`, `uniqueTokenName`.
 
 ### Unsupported source signatures
 
@@ -183,6 +195,7 @@ account for that sentinel when using these methods.
 - `_assetOf`, `_singleton`: Unsupported on-chain source type: PlutusData.BytesData.
 - `_countInnerTokensWithQty`, `_findInnerTokenName`, `adjustInnerForAdd`, `extraInnerEntries`, `findTokenAmount`, `flattenPolicy`, `isTokenMapZero`, `negateTokenMap`: Unsupported on-chain source type: PlutusData.MapData.
 - `flattenTyped`: Unsupported on-chain source type: AssetEntry.
+- `add`, `adjustOuterForAdd`, `extraOuterEntries`, `negate`, `singleton`, `subtract`: rejected by Elci (`ELCI2105`): they return a `Value`, which Java libraries do not keep in the ledger's canonical order; use the core `Value` module.
 
 
 ## Representation and usability limits
@@ -255,7 +268,7 @@ custom types and other imports within the supported Elci language profile.
 Use `exposing (TypeName(..))` to export a custom type and its constructors.
 Module paths must match names, imports must be acyclic, and duplicate module
 ownership is rejected. The core module names (`Basics`, `List`, `Maybe`, `Result`,
-`String`, `Tuple`, `Map`, `Dict`, `Array`) and `Set`, `Value`, `Elci` and names
+`String`, `Tuple`, `Map`, `Dict`, `Array`, `Value`) and `Set`, `Elci` and names
 starting with `Elci.` are reserved.
 
 Run the [complete example](../examples/elci-library/README.md):

@@ -262,7 +262,7 @@ A script's hash can also serve as a stake credential. If the treasury's address 
 
 ## Add the badge policy
 
-The badge policy is a separate script, so it gets its own table. It reads the minted quantity from the transaction's `mint` field. That field is a multi-asset `Value`, which Elci reads through Julc's `ValuesLib`.
+The badge policy is a separate script, so it gets its own table. It reads the minted quantity from the transaction's `mint` field. That field is a multi-asset `Value`, which the core [`Value`](/reference/core-modules/#value) module reads.
 
 :::caution[Don't trust the redeemer for amounts]
 The redeemer is whatever the transaction's builder puts there. A policy that only checked a quantity passed in the redeemer would approve a transaction whose redeemer says `3` while it mints a thousand tokens. Read what actually happens from `ctx.txInfo`.
@@ -270,9 +270,9 @@ The redeemer is whatever the transaction's builder puts there. A policy that onl
 
 <Steps>
 
-1. **Configure it.** Add the `badge` table and map the library:
+1. **Configure it.** Add the `badge` table:
 
-   ```toml title="elci.toml" ins={13-20}
+   ```toml title="elci.toml" ins={13-17}
    [project]
    source-directories = ["src"]
    target = "plutus-v3-pv11-uplc-1.1.0"
@@ -290,9 +290,6 @@ The redeemer is whatever the transaction's builder puts there. A policy that onl
    boundary = "julc-strict-v1"
    parameters = ["admin"]
    mint = "Badge.mint"
-
-   [java-modules]
-   "Julc.Values" = "org.julclang.stdlib.lib.ValuesLib"
    ```
 
 2. **Write the policy.** Create `src/Badge.elm`:
@@ -302,8 +299,8 @@ The redeemer is whatever the transaction's builder puts there. A policy that onl
 
    import Auth
    import Bytes
-   import Julc.Ledger exposing (PubKeyHash, ScriptContext, ScriptInfo(..))
-   import Julc.Values as Values
+   import Julc.Ledger exposing (PubKeyHash, ScriptContext, ScriptInfo(..), TokenName(..))
+   import Value
 
 
    {-| The admin may mint badges. The quantity is read from the transaction's mint field,
@@ -313,7 +310,7 @@ The redeemer is whatever the transaction's builder puts there. A policy that onl
    mint admin _ ctx =
        case ctx.scriptInfo of
            MintingScript policy ->
-               (Values.assetOf ctx.txInfo.mint policy.hash (Bytes.fromString "BADGE") > 0)
+               (Value.quantityOf policy (TokenName (Bytes.fromString "BADGE")) ctx.txInfo.mint > 0)
                    && Auth.signedBy admin ctx
 
            _ ->
@@ -321,7 +318,7 @@ The redeemer is whatever the transaction's builder puts there. A policy that onl
    ```
 
    - `ctx.scriptInfo` is `MintingScript policy` when the script runs as a minting policy. `policy` is the script's own policy id.
-   - `Values.assetOf` returns how many tokens of that policy and name the transaction mints (negative for a burn, zero if none). `policy.hash` gives the policy id's bytes, and `Bytes.fromString "BADGE"` the token name.
+   - `Value.quantityOf` returns how many tokens of that policy and name the transaction mints (negative for a burn, zero if none). `policy` is already a `PolicyId`, and `TokenName (Bytes.fromString "BADGE")` builds the token name from its bytes.
    - The `_` branch never runs for a script with only a mint handler, but `case` must cover every constructor.
 
 3. **Check both validators.**
@@ -331,7 +328,7 @@ The redeemer is whatever the transaction's builder puts there. A policy that onl
    ```
 
    ```text
-   validator badge (mint): checked; 690 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+   validator badge (mint): checked; 341 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
    validator treasury (spend, withdraw): checked; 540 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
    ```
 
@@ -437,9 +434,9 @@ elci test . --seed 42
 ```
 
 ```text
-PASS BadgeTest.adminMintsBadges (cpu 22765110, mem 79478)
-PASS BadgeTest.strangersCannotMint (cpu 23143543, mem 81410)
-PASS BadgeTest.badgesNeedAPositiveQuantity (100 runs, max cpu 22765110, mem 79478)
+PASS BadgeTest.adminMintsBadges (cpu 10442084, mem 36669)
+PASS BadgeTest.strangersCannotMint (cpu 10820517, mem 38601)
+PASS BadgeTest.badgesNeedAPositiveQuantity (100 runs, max cpu 10442084, mem 36669)
 PASS TreasuryTest.beneficiaryReleases (cpu 11746810, mem 46979)
 PASS TreasuryTest.adminCannotRelease (cpu 12125243, mem 48911)
 PASS TreasuryTest.adminCancels (cpu 11358693, mem 45820)
@@ -449,7 +446,7 @@ PASS TreasuryTest.onlyTheBeneficiaryReleases (100 runs, max cpu 12125243, mem 48
 9 passed, 0 failed (seed 42)
 ```
 
-Minting costs about four times as much as a signature check. Most of that is `Values.assetOf` walking the mint value. That's affordable, but the budget is worth watching as a policy grows.
+A mint costs about 10 million CPU units, against about 6 million for a withdrawal, which only checks a signature. Most of the difference is `Value.quantityOf` reading the mint value. That's affordable, but the budget is worth watching as a policy grows.
 
 ## Build both scripts
 
@@ -458,7 +455,7 @@ elci build .
 ```
 
 ```text
-validator badge (mint): checked; 690 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator badge (mint): checked; 341 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 validator treasury (spend, withdraw): checked; 540 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 ```
 
@@ -518,7 +515,7 @@ elci apply . --validator badge --param admin=@params/admin.json
 
 ```text
 validator treasury: applied 1 parameter(s); hash 16a075885ca1a8102d56e474815e720bf5d7c342f4bd2e225a87441e; wrote .../treasury/build/validators/treasury/applied.plutus.json
-validator badge: applied 1 parameter(s); hash 4f48ca427638e4277cab1f3b570b3f6c9d489f145067882e5b0f6938; wrote .../treasury/build/validators/badge/applied.plutus.json
+validator badge: applied 1 parameter(s); hash 94e8ac9685e836de2886ca6411c97a1328aea45ac669f3fd05ae4949; wrote .../treasury/build/validators/badge/applied.plutus.json
 ```
 
 The same admin gives two different hashes, because the scripts are different:

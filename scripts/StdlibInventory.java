@@ -46,6 +46,7 @@ class StdlibInventory {
     }
     static String type(LibraryType.Reference ref) {
         if(ref == null)return "legacy PIR signature";
+        if(ref.name().equals("Unit"))return "()";
         if(ref.arguments().isEmpty())return ref.name().replace("org.julclang.ledger.", "Ledger.");
         return "(" + ref.name() + " " + String.join(" ",ref.arguments().stream().map(StdlibInventory::type).toList()) + ")";
     }

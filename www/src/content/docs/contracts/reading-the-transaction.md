@@ -98,8 +98,9 @@ What you can do with a ledger type is decided per type:
 
 - **Fields**: read record fields with `.field`, including nested ones such as `output.address.credential`.
 - **Patterns and constructors**: match on custom types in `case`, and build values such as `Ledger.TxOutRef txId 0`.
-- **Equality**: `==` and `/=` work on hashes, `TxOutRef`, `Credential`, `Address`, `Interval`, `OutputDatum`, `ScriptInfo` and the other plain ledger types. A `JulcOptional` has no equality: convert it with `Data.fromOptional` and compare the `Maybe`.
-- **`Value` is the exception.** The multi-asset `Value` (and records that contain it: `TxOut`, `TxInInfo`, `TxInfo`) has no equality and can't be a datum or redeemer. Read it with the `ValuesLib` Java library, shown below.
+- **Equality**: `==` and `/=` work on hashes, `TxOutRef`, `Credential`, `Address`, `Interval`, `OutputDatum`, `ScriptInfo`, `Value` and the other plain ledger types. A `JulcOptional` has no equality: convert it with `Data.fromOptional` and compare the `Maybe`.
+- **Records that contain a `Value`** (`TxOut`, `TxInInfo`, `TxInfo`) have no equality: compare their fields. Neither they nor a `Value` can be a datum, redeemer or parameter.
+- **`Value` has its own module.** Read, build and compare values with the core [`Value`](/reference/core-modules/#value) module, shown below.
 
 ## Recipes
 
@@ -199,29 +200,34 @@ ownPolicy ctx =
 
 ### Amounts and tokens
 
-`Value` has no operations of its own in Elci. Map Julc's `ValuesLib` and use its functions:
-
-```toml
-[java-modules]
-"Julc.Values" = "org.julclang.stdlib.lib.ValuesLib"
-```
+An output's `value` and the transaction's `mint` are `Value`s: lovelace and quantities of native tokens.
+Read them with the core `Value` module (`import Value`). A token is named by a `PolicyId` and a `TokenName`;
+build a token name from bytes with `TokenName (Bytes.fromString "BADGE")`, after
+`import Julc.Ledger exposing (TokenName(..))`.
 
 | Function | Returns |
 | --- | --- |
-| `Values.lovelaceOf value` | the lovelace in `value` |
-| `Values.assetOf value policy name` | the quantity of one token; `policy` and `name` are `Bytes` |
-| `Values.flatten value` | every asset as `Data`, each a triple of policy, token name and quantity |
+| `Value.lovelaceOf value` | the lovelace in `value` |
+| `Value.quantityOf policy name value` | the quantity of one token; negative in a mint that burns it, `0` if absent |
+| `Value.tokens policy value` | the tokens of one policy and their quantities, as a `Dict TokenName Int` |
+| `Value.geq value required` | whether `value` holds at least as much of every token as `required` |
+| `Value.isZero value` | whether `value` holds nothing |
 
 For example, the quantity of `BADGE` tokens this policy mints:
 
 ```elm
 case ctx.scriptInfo of
     MintingScript policy ->
-        Values.assetOf ctx.txInfo.mint policy.hash (Bytes.fromString "BADGE")
+        Value.quantityOf policy (TokenName (Bytes.fromString "BADGE")) ctx.txInfo.mint
 
     _ ->
         0
 ```
+
+Values have `==`, and it is exact: two values are equal when they hold the same quantities. So
+`output.value == Value.lovelace 2000000` checks that an output holds exactly 2 ada and nothing else.
+`Value.positive` and `Value.negative` split a mint into what it mints and what it burns. The
+[core modules](/reference/core-modules/#value) reference lists every function.
 
 ### Datums on other outputs
 
@@ -275,7 +281,6 @@ spend = "Invoice.spend"
 
 [java-modules]
 "Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
-"Julc.Values" = "org.julclang.stdlib.lib.ValuesLib"
 ```
 
 ```elm title="src/Invoice.elm"
@@ -283,7 +288,7 @@ module Invoice exposing (Invoice, spend)
 
 import Julc.Interval as Interval
 import Julc.Ledger exposing (Credential(..), PubKeyHash, ScriptContext, TxOut)
-import Julc.Values as Values
+import Value
 
 
 type alias Invoice =
@@ -301,7 +306,7 @@ spend invoice _ ctx =
         paysPayee : TxOut -> Bool
         paysPayee output =
             (output.address.credential == PubKeyCredential invoice.payee)
-                && (Values.lovelaceOf output.value >= invoice.amount)
+                && (Value.lovelaceOf output.value >= invoice.amount)
 
         validUntil : Int
         validUntil =
@@ -382,10 +387,10 @@ elci test .
 ```
 
 ```text
-PASS InvoiceTest.paymentSettles (cpu 20328461, mem 72523)
-PASS InvoiceTest.shortPaymentsFail (cpu 19849630, mem 71693)
-PASS InvoiceTest.latePaymentsFail (cpu 20312461, mem 72423)
-PASS InvoiceTest.openEndedPaymentsFail (cpu 19396593, mem 69598)
+PASS InvoiceTest.paymentSettles (cpu 21152628, mem 74985)
+PASS InvoiceTest.shortPaymentsFail (cpu 20673797, mem 74155)
+PASS InvoiceTest.latePaymentsFail (cpu 21136628, mem 74885)
+PASS InvoiceTest.openEndedPaymentsFail (cpu 20220760, mem 72060)
 4 passed, 0 failed
 ```
 
@@ -396,11 +401,10 @@ Julc's standard library has more helpers over the context. Map a class under `[j
 | Class under `org.julclang.stdlib.lib` | Examples |
 | --- | --- |
 | `IntervalLib` | `finiteLowerBound`, `finiteUpperBound`, `contains`, `between` |
-| `ValuesLib` | `lovelaceOf`, `assetOf`, `flatten`, `geq`, `containsPolicy` |
 | `OutputLib` | `paidAtLeast`, `lovelacePaidTo`, `outputsAt`, `getInlineDatum` |
 | `ContextsLib` | `findOwnInput`, `getContinuingOutputs`, `ownHash`, `valuePaid` |
 | `AddressLib` | `paymentCredential`, `isScriptAddress`, `credentialHash` |
 
-Functions that return a Java `Optional`, such as `findOwnInput`, give you a `JulcOptional`; convert it with `Julc.Data.fromOptional`. The [standard library](/advanced/standard-library/) page lists every verified export.
+Functions that return a Java `Optional`, such as `findOwnInput`, give you a `JulcOptional`; convert it with `Julc.Data.fromOptional`. `ContextsLib` and `OutputLib` may return the ledger's own values, as `valuePaid` does, but no other Java library may hand Elci a `Value`: `ValuesLib.add` and the other exports that build one are rejected (`ELCI2105`), because Java libraries don't keep values in the ledger's order. Use the `Value` module for those. The [standard library](/advanced/standard-library/) page lists every verified export.
 
 Next, see how your own datum and redeemer types cross the boundary in [Datums and redeemers](/contracts/datums-and-redeemers/).

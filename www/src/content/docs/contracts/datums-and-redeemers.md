@@ -25,7 +25,8 @@ All three use the same types and the same encoding. The difference is when they 
 | `Maybe a`, tuples, `List a`, `Dict k v`, `Map k v` | yes, when their contents are allowed types |
 | Ledger types such as `PubKeyHash`, `TxOutRef`, `Credential`, `Address` | yes |
 | `Data` | yes: any data is accepted unchecked; decode it yourself with `Julc.Data.decode` |
-| `Value`, `TxOut`, `TxInInfo`, `TxInfo` | no: the compiler can't check their layout (`ELCI2013`) |
+| `Value` | not yet (`ELCI2013`): store a `List ( PolicyId, TokenName, Int )` and rebuild the value with `Value.fromList` |
+| `TxOut`, `TxInInfo`, `TxInfo` | no: the compiler can't check their layout (`ELCI2013`) |
 | `ScriptContext`, functions | no (`ELCI2013`) |
 | `Array a` | no: arrays have no Data encoding (`ELCI2013`); keep a `List` and convert it with `Array.fromList` |
 
@@ -650,8 +651,10 @@ FAIL EncodingTest.decodingIsStrict (cpu 928281, mem 5171)
     evaluation failed: UnIData: not IntData
 ```
 
-Types without a checkable layout, such as `Value` or `TxOut`, can't be converted. `Data.encode ctx.txInfo.mint` is rejected at compile time:
+A `Value` converts on its own: `Data.encode ctx.txInfo.mint` costs nothing, and `Data.decode` accepts only a canonical value (see [`Value`](/reference/core-modules/#value)). A type that contains a `Value` can't be decoded yet, a list or tuple of values can't be encoded either, and a ledger record without a checkable layout, such as `TxOut`, can't be decoded. Each is rejected at compile time. For `Data.encode [ Value.lovelace 5 ]`:
 
 ```text
-ELCI3003: No encoder for org.julclang.ledger.Value: The library provider cannot supply encode record Value: [JULC0051] Library request encode record Value is not supported: org.julclang.ledger.Value does not approve ENCODE
+ELCI3003: No encoder for List [org.julclang.ledger.Value]: The library provider cannot supply encode List record Value: [JULC0051] Library request encode List record Value is not supported: org.julclang.ledger.Value does not approve ENCODE
 ```
+
+Convert the values with `Value.toList` first, and back with `Value.fromList`.

@@ -169,7 +169,8 @@ async function catalog() {
   const stdlib = {};
   for (const line of (await readFile(resolve(repo, 'docs/stdlib-compatibility.tsv'), 'utf8')).split('\n')) {
     const [library, method, status, signature] = line.split('\t');
-    if (!library || status === 'UNSUPPORTED') continue;
+    // Only exports an Elci program can call: not the unsupported or blocked ones.
+    if (!library || status === 'UNSUPPORTED' || status === 'BLOCKED') continue;
     (stdlib[library] ??= []).push({ name: method, signature, generic: status === 'GENERIC' });
   }
   return {

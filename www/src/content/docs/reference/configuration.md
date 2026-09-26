@@ -110,8 +110,8 @@ Maps Elm-style module names to on-chain Java library classes:
 The key is the module name you import; the value is the fully qualified class name. A mapping is only
 read when a module imports it. A module name cannot be both a source module and a Java module.
 `Julc.TypedMap` and `Julc.TypedArray` are reserved by the core `Map` and `Array` modules and cannot be
-remapped. The core module names `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict` and
-`Array`, the reserved names `Set`, `Value` and `Elci`, and names starting with `Elci.` cannot be keys. See
+remapped. The core module names `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`,
+`Array` and `Value`, the reserved names `Set` and `Elci`, and names starting with `Elci.` cannot be keys. See
 [standard library](/advanced/standard-library/) for the bundled classes.
 
 ## `[tests]`

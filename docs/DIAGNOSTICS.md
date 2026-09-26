@@ -19,16 +19,16 @@ renders them as `path:line:column: code: message`.
 | `ELCI2010` | Unknown or unconstrained record field |
 | `ELCI2011` | Duplicate type or constructor, or a built-in constructor or type name (`Just`, `Nothing`, `True`, `False`; `Int`, `Maybe`, `List` and the other built-in types) |
 | `ELCI2012` | Invalid type, alias, arity or alias cycle; `Tuple` or `Unit` written as a type name |
-| `ELCI2013` | Unsupported serialized boundary type, or a value without a Data encoding (a function or an `Array`) stored in data |
+| `ELCI2013` | Unsupported serialized boundary type (including a `Value`, which has no strict boundary codec yet), or a value without a Data encoding (a function or an `Array`) stored in data |
 | `ELCI2014` | Validator handler signature does not match its configured purpose, parameters or datum profile |
 | `ELCI2101` | Unknown or missing module or imported export; a source module importing the test library |
 | `ELCI2102` | Ambiguous name: two imports, possibly a default import, expose different things under it |
 | `ELCI2103` | Entrypoint is not exposed |
 | `ELCI2104` | Source module path, ownership or cycle error; reserved core module name or alias; qualified reference to an unexposed or unimported name, a name a core module lacks or an Elm function Elci does not provide |
-| `ELCI2105` | Unsupported Java export signature, with provider reason |
+| `ELCI2105` | Unsupported Java export signature, with provider reason; a Java export whose result can hold the ledger `Value` (except Julc's `ContextsLib` and `OutputLib`), which Java libraries do not keep canonical |
 | `ELCI3001` | PIR lowering cannot represent the inferred program, such as `Julc.Data.decode` or a generic Java export at a type nothing determines |
 | `ELCI3002` | Specialization or polymorphic-recursion limit |
-| `ELCI3003` | Generic library type argument violates the export's constraint (for example `DATA_ENCODABLE`), or contains a `Dict`, which a Java library could build without the key-order check |
+| `ELCI3003` | Generic library type argument violates the export's constraint (for example `DATA_ENCODABLE`), or contains a `Dict` or a `Value`, which a Java library could build without the key-order or canonical-form check |
 | `ELCI4001` | Invalid project configuration or CLI request, including a `[java-modules]` key that names a core module and an `elci apply` parameter that doesn't fit its type (such as a `Dict` whose keys are not strictly ascending) |
 | `ELCI4002` | Julc backend rejected generated PIR; reported at the Elci declaration it names, with the `JULC00xx` code |
 | `ELCI4003` | The Julc backend lacks a contract revision or capability the program needs |

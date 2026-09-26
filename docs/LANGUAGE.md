@@ -22,10 +22,11 @@ separate milestones.
 | Custom types | Generic and regular recursive unions; declaration-order tags |
 | Patterns | Nested constructors/lists/tuples/records, aliases, unit and Bool/Int/String literals |
 | Pattern coverage | Nested exhaustiveness and usefulness analysis; duplicate/unreachable branches rejected |
-| Equality and ordering | Structural equality for eligible primitives, lists, tuples, records, unions and `Dict`; `comparable` ordering for `Int`, `String`, bytes, ledger hashes, lists and tuples |
+| Equality and ordering | Structural equality for eligible primitives, lists, tuples, records, unions, `Dict` and `Value`; `comparable` ordering for `Int`, `String`, bytes, ledger hashes, lists and tuples |
 | Ledger access | Typed record views, transaction fields, nominal hash types, approved constructors/patterns/equality of ledger sums and records |
 | Data conversions | `Julc.Data.decode`/`encode` strict codecs and Julc optional ↔ `Maybe` adapters |
 | Dictionaries and maps | Elm's `Dict k v`, stored as a Plutus map with ascending keys ([ADR-009](../adr/009-dict-native-value-and-map.md)), and the ledger's `Map k v` |
+| Values | The ledger's multi-asset `Value` as a core type and module, always canonical, on the CIP-153 value builtins ([ADR-009](../adr/009-dict-native-value-and-map.md)) |
 | Bytes | Complete byte-string builtins in `Bytes` |
 | Arrays | `Array a` with O(1) `get` and `length` (PV11 arrays, Elm `Array`-style) |
 | Java libraries | Concrete exports, generic Java templates specialized per use, and Julc's programmatic list exports |
@@ -95,8 +96,10 @@ independent ties.
 byte-backed ledger hashes, lists, tuples, closed records and regular recursive
 unions whose reachable fields are themselves equality-capable. Both operands are
 evaluated once from left to right. Two `Dict` values are equal when they have
-the same bindings. Functions, opaque Data, `Map` and imported values
-without verified equality are rejected at compile time. `<`, `<=`, `>`, `>=` and
+the same bindings, and two `Value`s when they hold the same quantities: every
+`Value` is canonical, so `==` compares encodings with `EqualsData`. Functions,
+opaque Data, `Map` and imported values without verified equality, such as
+`TxOut`, are rejected at compile time. `<`, `<=`, `>`, `>=` and
 `compare` order comparable values: `Int` numerically, `String` by UTF-8 bytes,
 `Bytes` and byte-string ledger hashes lexicographically (`lessThanByteString`),
 lists lexicographically and tuples by component. Comparisons cannot be chained
@@ -214,10 +217,11 @@ and `Debug`. A module's own declarations shadow imports. Two imports that expose
 things under one name make it ambiguous where it is used (`ELCI2102`), except that
 a name listed explicitly in `exposing` takes precedence over a default import. An
 import cannot be aliased to a default module's name. The core module names
-(`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`) and
-the reserved names `Set`, `Value` and `Elci` cannot name a project module or a
+(`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`,
+`Value`) and the reserved names `Set` and `Elci` cannot name a project module or a
 `[java-modules]` key, and neither can a name that starts with `Elci.`. The core
-library's internal `Elci.Assoc` module cannot be imported by project modules.
+library's internal `Elci.Assoc` and `Elci.Value` modules cannot be imported by
+project modules.
 
 Configure a Java library mapping in `elci.toml`, then write normal Elm imports:
 
@@ -287,11 +291,15 @@ mint seed credential ctx =
            )
 ```
 
-Special layouts get fewer operations. The map-encoded `Value` has none. Types that
-contain it (`TxOut`, `TxInfo`, `TxInInfo`, `ScriptContext`) keep field access and
-matching, but have no equality, strict decoding or boundary use. Complex
-ledger-wide contract patterns and `Value` arithmetic are not yet a complete
-supported surface.
+The ledger's `Value` is the core `Value` type, with its own module and equality
+(below). Types that contain it (`TxOut`, `TxInfo`, `TxInInfo`, `ScriptContext`)
+keep field access and matching, but have no equality, strict decoding or boundary
+use. No Java library may hand Elci a `Value`, because Java libraries such as
+`ValuesLib` do not keep values canonical: an export whose result can hold one,
+directly or in a record or union field, is `ELCI2105`, and a generic
+instantiated at a type that holds one is `ELCI3003`. Julc's `ContextsLib` and
+`OutputLib` are exempt, since they only pass along the ledger's own values.
+Complex ledger-wide contract patterns are not yet a complete supported surface.
 
 ### Compiler-provided modules
 
@@ -304,13 +312,15 @@ These modules are imported explicitly:
 | `Dict` | `empty`, `singleton`, `insert`, `update`, `remove`, `isEmpty`, `member`, `get`, `size`, `keys`, `values`, `toList`, `fromList`, `map`, `foldl`, `foldr`, `filter`, `partition`, `union`, `intersect`, `diff`, `merge` |
 | `Map` | `empty`, `singleton`, `get`, `member`, `insert`, `remove`, `update`, `size`, `isEmpty`, `keys`, `values`, `toList`, `fromList`, `foldl`, `foldr`, `filter`, `map` |
 | `Array` | `empty`, `fromList`, `toList`, `toIndexedList`, `length`, `isEmpty`, `get`, `initialize`, `repeat`, `map`, `indexedMap`, `foldl`, `foldr`, `filter`, `slice` |
+| `Value` | `zero`, `lovelace`, `singleton`, `insert`, `fromList`, `lovelaceOf`, `quantityOf`, `isZero`, `policies`, `tokens`, `toList`, `add`, `subtract`, `negate`, `scale`, `sum`, `geq`, `leq`, `withoutLovelace`, `restrictedTo`, `positive`, `negative` |
 | `Julc.Data` | `decode`, `encode`, `fromOptional`, `toOptional` (below) |
 | `Bytes` | see the table below |
 
 The types `Dict`, `Map` and `Array` are always in scope. As in Elm, you may still
 write `import Dict exposing (Dict)` or `Dict.Dict`, and likewise for `Map` and
 `Array`. `Bytes.Bytes` and `Data.Data` (after `import Julc.Data as Data`) name the
-compiler's own types the same way.
+compiler's own types the same way. `Value` is named through its module:
+`import Value exposing (Value)`, `Value.Value`, or `Julc.Ledger exposing (Value)`.
 
 **`Dict k v`** is Elm's dictionary, with Elm's names, argument orders and
 results. It is a Plutus map whose keys are strictly ascending in the `comparable`
@@ -365,6 +375,38 @@ array is a Plutus V3 array (CIP-138). `fromList` builds it in O(n), and `get` an
 - **Implementation:** the module is Elci source over Julc's `TypedArrayLib`, so it
   shares the `JulcArray` lowering that Java validators use.
 
+**`Value`** is the ledger's multi-asset value, the type of `TxOut.value` and
+`TxInfo.mint`. It stays represented as the ledger's Data map, and every value is
+canonical: policies, then token names, ascend by unsigned bytes, and no quantity
+is zero. The ledger's values are canonical, the module's functions produce
+canonical values through the builtins, and decoding checks the form with
+`UnValueData`, so `==` is `EqualsData` and `Julc.Data.encode` is free. Token ids
+are `PolicyId` and `TokenName` from `Julc.Ledger`; ada is the empty token name
+under the empty policy, and `lovelaceOf` counts only that token.
+
+- **Operations:** `lovelaceOf` and `isZero` read the start of the map; `policies`,
+  `tokens` and `toList` walk it; `positive`, `negative`, `restrictedTo` and
+  `withoutLovelace` filter it, keeping it canonical; the others convert to the
+  native value (`UnValueData`, about 1.1M CPU for three assets) and back
+  (`ValueData`). `geq a b`
+  subtracts and checks that no quantity is negative, so it is total with the
+  negative quantities of a mint that burns; `positive` and `negative` split such a
+  mint. Arithmetic fails only on 128-bit overflow, and ids longer than 32 bytes
+  fail.
+- **Data:** a `Value` itself encodes for free and decodes only in canonical form:
+  `UnValueData` rejects unsorted or repeated keys, zero quantities, empty token
+  maps and keys longer than 32 bytes.
+  It cannot be a datum, redeemer or parameter yet: the strict boundary has no codec
+  for its layout. Store `List ( PolicyId, TokenName, Int )` and rebuild with
+  `Value.fromList`. A type that contains a `Value` cannot be decoded.
+- **Tests:** scenario outputs, inputs and mints are built canonical, and property
+  arguments of type `Value` are generated canonical.
+- **Patterns:** a `Value` has no constructors or patterns; `import Julc.Ledger
+  exposing (Value(..))` is `ELCI2104`.
+- **Implementation:** the module is Elci source over `Elci.Value`, core-only
+  intrinsics that emit the CIP-153 builtins and walk the Data map; the native
+  value type never escapes them.
+
 **`Bytes`** functions are single Plutus builtins, with the byte string last so they
 compose in pipelines:
 
@@ -413,9 +455,10 @@ inlineAmount datum =
 
 The converted type must be concrete where the conversion is used: annotate it
 when inference cannot tell. `decode` and `encode` work for primitives, Elci
-records and unions, lists, dictionaries, maps and optionals of these, and imported types
-approving DECODE_STRICT or ENCODE. Types without a checkable layout, such as
-`Value` or `TxOut`, are rejected with `ELCI3003`. Decoding never becomes a
+records and unions, lists, dictionaries, maps and optionals of these, a `Value`,
+and imported types approving DECODE_STRICT or ENCODE. Types without a checkable
+layout, such as `TxOut`, and types containing a `Value` cannot be decoded
+(`ELCI3003`). Decoding never becomes a
 `Maybe` on malformed input; a failed decode fails the transaction.
 
 Strict boundary checks validate nested datum/redeemer kinds, constructor tags,

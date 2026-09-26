@@ -65,7 +65,6 @@ mint = "Ticket.mint"
 "Julc.Contexts" = "org.julclang.stdlib.lib.ContextsLib"
 "Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
 "Julc.Output" = "org.julclang.stdlib.lib.OutputLib"
-"Julc.Values" = "org.julclang.stdlib.lib.ValuesLib"
 ```
 
 ```elm title="src/Market.elm"
@@ -151,8 +150,8 @@ signedBy key ctx =
 module Ticket exposing (mint)
 
 import Bytes
-import Julc.Ledger exposing (PubKeyHash, ScriptContext, ScriptInfo(..))
-import Julc.Values as Values
+import Julc.Ledger exposing (PubKeyHash, ScriptContext, ScriptInfo(..), TokenName(..))
+import Value
 
 
 {-| The organizer mints exactly one TICKET per transaction.
@@ -161,7 +160,7 @@ mint : PubKeyHash -> () -> ScriptContext -> Bool
 mint organizer _ ctx =
     case ctx.scriptInfo of
         MintingScript policy ->
-            Values.assetOf ctx.txInfo.mint policy.hash (Bytes.fromString "TICKET")
+            Value.quantityOf policy (TokenName (Bytes.fromString "TICKET")) ctx.txInfo.mint
                 == 1
                 && List.any (\signer -> signer == organizer) ctx.txInfo.signatories
 
@@ -300,6 +299,8 @@ An output is built with one of two functions and then extended:
 - `Scenario.withDatum data` attaches an inline datum.
 - `Scenario.withToken policy name quantity` adds tokens. The policy is `Scenario.Own`, the validator's own policy, or `Scenario.Policy bytes` for any other.
 
+The runner builds every value the ledger's way, as the script expects a [`Value`](/reference/core-modules/#value) to be: policies and token names in ascending order, quantities of a repeated token added up, and zero quantities left out. So the order of your `withToken` and `Scenario.minting` calls never matters, and `Scenario.minting name 0` mints nothing. The ledger limits policy ids and token names to 32 bytes, and so does the runner: a longer one stops `elci test` with `elci: A scenario value has a policy id or token name longer than 32 bytes, which the ledger does not allow`.
+
 Repricing requires a continuing output: an output back at the market's address that carries the updated listing:
 
 ```elm
@@ -392,10 +393,10 @@ elci test --match TicketTest
 ```
 
 ```text
-PASS TicketTest.organizerMintsOneTicket (cpu 22645606, mem 78678)
-PASS TicketTest.twoTicketsAreRejected (cpu 20063279, mem 70133)
-PASS TicketTest.burningIsRejected (cpu 20063279, mem 70133)
-PASS TicketTest.unsignedMintIsRejected (cpu 22292409, mem 76745)
+PASS TicketTest.organizerMintsOneTicket (cpu 10322580, mem 35869)
+PASS TicketTest.twoTicketsAreRejected (cpu 7740253, mem 27324)
+PASS TicketTest.burningIsRejected (cpu 7740253, mem 27324)
+PASS TicketTest.unsignedMintIsRejected (cpu 9969383, mem 33936)
 4 passed, 0 failed
 ```
 

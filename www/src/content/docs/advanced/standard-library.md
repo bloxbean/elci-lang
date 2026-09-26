@@ -6,10 +6,11 @@ sidebar:
 ---
 
 Elci's standard library has two layers. The first is Elci's core library: Elm's core modules, with Elm's
-names, argument orders and edge cases, bundled with the compiler. Reach for it first. The second is
-Julc's on-chain Java libraries, which you map in `elci.toml`. They fill the gaps, such as floor division,
-signature checks and ledger `Value`s. This page shows what each layer offers, how to import it and which
-functions you will reach for most. Elm packages cannot be installed.
+names, argument orders and edge cases, bundled with the compiler, plus a `Value` module for the ledger's
+multi-asset values. Reach for it first. The second is Julc's on-chain Java libraries, which you map in
+`elci.toml`. They fill the gaps, such as floor division, validity intervals and signature checks. This page
+shows what each layer offers, how to import it and which functions you will reach for most. Elm packages
+cannot be installed.
 
 ## The core library
 
@@ -32,6 +33,7 @@ These need an import but no configuration:
 | `Dict` | `import Dict exposing (Dict)` | Elm's dictionaries: comparable keys, kept sorted |
 | `Map` | `import Map` | the ledger's association maps, for ledger data and keys that aren't comparable |
 | `Array` | `import Array` | arrays with constant-time `get` and `length` |
+| `Value` | `import Value exposing (Value)` | the ledger's multi-asset values: `lovelaceOf`, `quantityOf`, `add`, `geq` and more |
 | `Bytes` | `import Bytes` | byte-string builtins: slicing, integers, bits, hashes |
 | `Julc.Data` | `import Julc.Data as Data` | explicit `decode`, `encode` and optional/`Maybe` adapters |
 | `Julc.Ledger` | `import Julc.Ledger exposing (...)` | ledger types such as `ScriptContext`, `PubKeyHash` and `TxOutRef` |
@@ -39,10 +41,11 @@ These need an import but no configuration:
 The types `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe` (with `Just` and `Nothing`), `Dict`,
 `Map` and `Array` are built in.
 
-`Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String`, `Dict`, `Map` and `Array` are written in Elci
-itself, and compiled with your code; a function you don't call is never compiled into your script. `Dict`,
-`Map` and `Array` sit on top of Julc's typed map and array libraries and of list operations the compiler
-specializes for their key and value types. Every signature is on the
+`Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String`, `Dict`, `Map`, `Array` and `Value` are written in
+Elci itself, and compiled with your code; a function you don't call is never compiled into your script.
+`Dict`, `Map` and `Array` sit on top of Julc's typed map and array libraries and of list operations the
+compiler specializes for their key and value types. `Value` sits on the protocol's native value builtins
+(CIP-153). Every signature is on the
 [core modules](/reference/core-modules/) reference page, and
 [lists, dictionaries, maps and arrays](/learn/collections/) teaches them. Bytes get their own page:
 [bytes, hashes and bits](/advanced/bytes-and-crypto/).
@@ -78,8 +81,8 @@ when an Elci wrapper with its concrete signature type-checks, links the real Jav
 produces UPLC. That proves the signature maps correctly; it does not prove each function was evaluated
 with representative inputs through Elci. Julc tests the libraries' behavior separately.
 
-The current scan found **151 compile-verified exports**, **41 unsupported signatures** and **12 generic
-templates**:
+The current scan found **145 compile-verified exports**, **41 unsupported signatures**, **6 exports that
+return a `Value`**, which Elci rejects, and **12 generic templates**:
 
 | Library | Verified exports | Gaps |
 | --- | ---: | --- |
@@ -95,19 +98,22 @@ templates**:
 | `MathLib` | 8 | `divMod`, `quotRem` (return a Java `Tuple2`) |
 | `NativeValueLib` | 0 | all 7 exports use `JulcValue` |
 | `OutputLib` | 14 | none |
-| `ValuesLib` | 24 | 11 exports use unmapped Data subtypes or `AssetEntry` |
+| `ValuesLib` | 18 | 11 exports use unmapped Data subtypes or `AssetEntry`; 6 return a `Value` |
 | `TypedMapLib` | 9 generic | used by the core `Map` module |
 | `TypedArrayLib` | 3 generic | used by the core `Array` module |
 
-Using an unsupported export is a compile error (`ELCI2105`) that names the Java type involved. Some
+Using an unsupported export is a compile error (`ELCI2105`) that names the Java type involved. An export
+whose result can hold a `Value` is rejected the same way, because Java libraries don't keep values in the
+ledger's order; use the core [`Value`](/reference/core-modules/#value) module instead. `ContextsLib` and
+`OutputLib` are exempt: they only pass along the ledger's own values. Some
 verified exports are public implementation helpers (their names often start with `_` or end in `Step`).
 They are listed for completeness; do not build on them.
 
 ## An example
 
-This listing validator uses five libraries. It checks that the seller has a key address and was paid,
-that the transaction's validity range includes the deadline, that nothing is minted and that the script
-is spending its own input:
+This listing validator uses four libraries and the core `Value` module. It checks that the seller has a
+key address and was paid, that the transaction's validity range includes the deadline, that nothing is
+minted and that the script is spending its own input:
 
 ```elm title="src/Market.elm"
 module Market exposing (spend)
@@ -118,7 +124,7 @@ import Julc.Data as Data
 import Julc.Interval as Interval
 import Julc.Ledger exposing (Address, ScriptContext)
 import Julc.Output as Output
-import Julc.Values as Values
+import Value
 
 
 type alias Listing =
@@ -140,7 +146,7 @@ spend listing _ ctx =
     Address.isPubKeyAddress listing.seller
         && (Output.lovelacePaidTo ctx.txInfo.outputs listing.seller >= max listing.price 0)
         && Interval.contains ctx.txInfo.validRange listing.deadline
-        && (Values.lovelaceOf ctx.txInfo.mint == 0)
+        && Value.isZero ctx.txInfo.mint
         && spendsOwnInput ctx
 ```
 
@@ -155,7 +161,8 @@ Things to notice:
   `Output.lovelacePaidTo outputs address`, `Interval.contains range time`.
 - **Optional results.** `findOwnInput` returns a Julc optional. Convert it with `Data.fromOptional`
   before you match on `Just` and `Nothing`.
-- **Core and Java together.** `max` comes from the prelude; the rest are Java library calls.
+- **Core and Java together.** `max` comes from the prelude and `Value.isZero` from the core `Value`
+  module; the rest are Java library calls.
 - **Size.** Library code is linked into your script: this validator is 1,446 bytes. Check the size
   after adding a library.
 
@@ -208,7 +215,8 @@ before comparing times.
 
 `signedBy` takes raw bytes, so pass a key hash's `.hash`: `Contexts.signedBy ctx.txInfo owner.hash`. The
 `txInfo...` accessors (`txInfoFee`, `txInfoInputs` and so on) duplicate fields you can read directly,
-such as `ctx.txInfo.fee`.
+such as `ctx.txInfo.fee`. `valuePaid` and `valueSpent` return the ledger's values, one per output or input;
+add them up with `Value.sum`.
 
 ### `OutputLib`
 
@@ -228,22 +236,19 @@ such as `ctx.txInfo.fee`.
 
 ### `ValuesLib`
 
-A ledger `Value` is opaque in Elci: you cannot build, match or compare it directly, so these functions
-are how you work with it.
+Use the core [`Value`](/reference/core-modules/#value) module for values: it reads, builds and compares
+them, and `==` works on its results. Julc's `ValuesLib` builds values in its own order, so its exports that
+return a `Value` (`add`, `subtract`, `negate`, `singleton` and two helpers) are rejected with `ELCI2105`.
+The exports that only read a value still work, and a few have no direct equivalent in the `Value` module:
 
 | Function | Type |
 | --- | --- |
-| `lovelaceOf` | `Ledger.Value -> Int` |
-| `assetOf` | `Ledger.Value -> Bytes -> Bytes -> Int` (policy, token name) |
-| `geq`, `leq`, `eq` | `Ledger.Value -> Ledger.Value -> Bool` |
-| `isZero` | `Ledger.Value -> Bool` |
-| `add`, `subtract` | `Ledger.Value -> Ledger.Value -> Ledger.Value` |
-| `negate` | `Ledger.Value -> Ledger.Value` |
-| `singleton` | `Bytes -> Bytes -> Int -> Ledger.Value` |
 | `containsPolicy` | `Ledger.Value -> Bytes -> Bool` |
 | `countTokensWithQty` | `Ledger.Value -> Bytes -> Int -> Int` |
 | `findTokenName` | `Ledger.Value -> Bytes -> Int -> Bytes` |
 | `uniqueTokenName` | `Ledger.TxOutRef -> Bytes` |
+
+`Value.policies` and `Value.tokens` answer the same questions with typed results.
 
 ### `AddressLib` and `CryptoLib`
 
@@ -284,7 +289,8 @@ Prefer the typed core `List`, `Dict` and `Map` modules. `ListsLib`'s generic `ma
 ## What is missing
 
 - **BLS12-381** (`BlsLib`) and **native values** (`NativeValueLib`) have no usable exports yet.
-- **`Value` arithmetic** is limited to what `ValuesLib` provides; you cannot inspect a `Value` directly.
+- **`Value` at the boundary.** A `Value` can't be a datum, redeemer or parameter yet. Store a
+  `List ( PolicyId, TokenName, Int )` and rebuild it with `Value.fromList`.
 - **Parts of Elm's core** are not available yet: `Set` (use a `Dict k Bool`), `Char`, most of `String`
   (`length`, `toInt`, `split` and so on), and the `Float` functions. Write small helpers yourself or use
   the Java libraries above.
