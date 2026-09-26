@@ -6,12 +6,16 @@ module SwapTest exposing
     , fillPartially
     , fillsAreChecked
     , fullFillMustPayTheDeposit
+    , fullFillMustPayTheOtherTokens
     , fullFillPaysTheDeposit
+    , junkTokensRejected
     , overfillRejected
     , partialFillMustReturnEverything
+    , partialFillMustReturnTheOtherTokens
     , partialFillMustReturnTheRest
     , partialFillReturnsEverything
     , secondOrderInTheSameTransactionRejected
+    , secondOrderUnderAnotherStakeRejected
     , underpaidRejected
     , untaggedPaymentRejected
     , wrongTagRejected
@@ -20,7 +24,7 @@ module SwapTest exposing
 
 import Bytes
 import Julc.Data as Data
-import Julc.Ledger exposing (PolicyId(..), TokenName(..))
+import Julc.Ledger exposing (Credential(..), PolicyId(..), StakingCredential(..), TokenName(..))
 import Property exposing (Property)
 import Scenario exposing (Policy(..), Scenario)
 import Swap exposing (Action(..), Order)
@@ -166,6 +170,21 @@ partialFillMustReturnEverything =
     takeRich 1 |> paid 1500000 3 0 |> returned 1500000 9 0 |> Scenario.expectFailure
 
 
+{-| Returning all the lovelace but keeping one BONUS is rejected too.
+-}
+partialFillMustReturnTheOtherTokens : Scenario
+partialFillMustReturnTheOtherTokens =
+    takeRich 1 |> paid 1500000 3 0 |> returned 100000000 9 4 |> Scenario.expectFailure
+
+
+{-| A returned order padded with other tokens is rejected, so no one can grow the order
+until its full fill no longer fits in one output.
+-}
+junkTokensRejected : Scenario
+junkTokensRejected =
+    takeRich 1 |> paid 1500000 3 0 |> returned 100000000 9 6 |> Scenario.expectFailure
+
+
 fullFillPaysTheDeposit : Scenario
 fullFillPaysTheDeposit =
     takeRich 10 |> paid 100000000 30 5
@@ -214,6 +233,27 @@ wrongTagRejected =
             (Scenario.toKey order.maker 2000000
                 |> Scenario.withToken (Policy silver) (Bytes.fromString "SILVER") 30
                 |> Scenario.withDatum (Data.encode (Scenario.outRef "order" 1))
+            )
+        |> Scenario.expectFailure
+
+
+{-| Paying the lovelace but keeping one BONUS is rejected.
+-}
+fullFillMustPayTheOtherTokens : Scenario
+fullFillMustPayTheOtherTokens =
+    takeRich 10 |> paid 100000000 30 4 |> Scenario.expectFailure
+
+
+{-| A second order of this script at another staking part cannot be filled alongside.
+-}
+secondOrderUnderAnotherStakeRejected : Scenario
+secondOrderUnderAnotherStakeRejected =
+    take 4 12
+        |> rest 6
+        |> Scenario.input (Scenario.outRef "order" 1)
+            (Scenario.toStakedScript (StakingHash (PubKeyCredential (Scenario.key "stake"))) 2000000
+                |> Scenario.withToken (Policy gold) (Bytes.fromString "GOLD") 10
+                |> Scenario.withDatum (Data.encode order)
             )
         |> Scenario.expectFailure
 

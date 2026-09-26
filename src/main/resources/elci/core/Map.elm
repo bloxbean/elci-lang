@@ -10,6 +10,10 @@ key once: `insert` replaces an existing binding. A map decoded from Data may rep
 For keys that are comparable, `Dict` keeps them sorted, looks them up faster and builds
 from a list in O(n log n).
 
+A `Map` has no `==`: two maps with the same bindings may list them in different orders. For
+the same reason, `Data.encode` of two such maps may differ, so compare their `toList`
+after sorting, or use a `Dict`.
+
 -}
 
 import Elci.Assoc as Assoc

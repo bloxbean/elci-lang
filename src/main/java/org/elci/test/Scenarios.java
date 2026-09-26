@@ -104,13 +104,18 @@ final class Scenarios {
         var outputType = Data.element(Data.field(specType, "outputs"));
         var tokenType = Data.element(Data.field(specType, "minted"));
         // Datums held by hash, keyed by their hash, for the transaction's witnesses.
-        var witnesses = new java.util.LinkedHashMap<DatumHash, PlutusData>();
+        var witnesses = new java.util.TreeMap<DatumHash, PlutusData>((x, y) -> Arrays.compareUnsigned(x.hash(), y.hash()));
         var inputs = new ArrayList<TxInInfo>();
         for (var input : Data.list(spec.get("inputs"))) inputs.add(input(input, inputType, ownAddress, policy, witnesses));
         ScriptContextTestBuilder builder = switch (purpose.tag()) {
             case 0 -> {
                 var ref = TxOutRef.fromPlutusData(purpose.fields().get(0));
                 var datum = Data.maybe(purpose.fields().get(1));
+                // A listed spent output must hold the datum the spend gives, as on the ledger.
+                for (var listed : inputs)
+                    if (listed.outRef().equals(ref) && datum != null && !holds(listed.resolved().datum(), datum))
+                        throw new IllegalArgumentException("the spent output " + ref + " is listed with a different datum"
+                                + " from the one Scenario.spend gives");
                 // The spent output is an input at the script address unless the scenario lists it.
                 if (inputs.stream().noneMatch(i -> i.outRef().equals(ref)))
                     inputs.addFirst(new TxInInfo(ref, new TxOut(ownAddress, canonical(Value.lovelace(Data.integer(spec.get("ownLovelace")))),
@@ -162,7 +167,11 @@ final class Scenarios {
                                 Map<DatumHash, PlutusData> witnesses) {
         var fields = Data.record(data, type);
         var destination = Data.constr(fields.get("destination"), -1);
-        var address = destination.tag() == 0 ? own : Address.fromPlutusData(destination.fields().getFirst());
+        var address = switch (destination.tag()) {
+            case 0 -> own;
+            case 1 -> Address.fromPlutusData(destination.fields().getFirst());
+            default -> new Address(own.credential(), Optional.of(StakingCredential.fromPlutusData(destination.fields().getFirst())));
+        };
         var value = Value.lovelace(Data.integer(fields.get("lovelace")));
         var tokenType = Data.element(Data.field(type, "tokens"));
         for (var token : Data.list(fields.get("tokens"))) value = value.merge(token(token, tokenType, policy));
@@ -172,6 +181,14 @@ final class Scenarios {
         var hash = datumHash(hashed);
         witnesses.put(hash, hashed);
         return new TxOut(address, canonical(value), new OutputDatum.OutputDatumHash(hash), Optional.empty());
+    }
+
+    /** Whether an output's datum is {@code datum}, inline or by hash. */
+    private static boolean holds(OutputDatum held, PlutusData datum) {
+        var cbor = org.julclang.core.cbor.PlutusDataCborEncoder.encode(datum);
+        return held instanceof OutputDatum.OutputDatumInline inline
+                        && Arrays.equals(org.julclang.core.cbor.PlutusDataCborEncoder.encode(inline.datum()), cbor)
+                || held instanceof OutputDatum.OutputDatumHash hash && Arrays.equals(hash.hash().hash(), datumHash(datum).hash());
     }
 
     /** The ledger's datum hash: BLAKE2b-256 of the datum's CBOR. */

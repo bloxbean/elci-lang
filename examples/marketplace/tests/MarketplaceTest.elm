@@ -6,6 +6,7 @@ module MarketplaceTest exposing
     , cancelBySeller
     , feeOutOfRangeRejected
     , feeRoundsDown
+    , negativeFeeRejected
     , onePaymentForTwoListingsRejected
     , operatorSellingIsPaidInFull
     , operatorSellingShortchangedRejected
@@ -102,15 +103,35 @@ operatorSellingShortchangedRejected =
     operatorSells 97500000 |> Scenario.expectFailure
 
 
-{-| A marketplace deployed with a fee over 100% rejects every purchase.
+{-| A purchase that pays the seller and operator what a fee of `basisPoints` would ask.
+-}
+buyAtFee : Int -> Scenario
+buyAtFee basisPoints =
+    let
+        charging =
+            { market | feeBasisPoints = basisPoints }
+
+        cut =
+            Marketplace.fee charging listing.price
+    in
+    Scenario.spend "marketplace" (Scenario.outRef "listing" 0) (Data.encode listing)
+        |> Scenario.parameters [ Data.encode charging ]
+        |> Scenario.redeemer (Data.encode Buy)
+        |> Scenario.output (Scenario.toKey listing.seller (max 1000000 (listing.price - cut)) |> Scenario.withDatum tag)
+        |> Scenario.output (Scenario.toKey market.operator (max 1000000 cut) |> Scenario.withDatum tag)
+
+
+{-| A marketplace deployed with a fee over 100% rejects every purchase, even one that pays
+what that fee asks.
 -}
 feeOutOfRangeRejected : Scenario
 feeOutOfRangeRejected =
-    Scenario.spend "marketplace" (Scenario.outRef "listing" 0) (Data.encode listing)
-        |> Scenario.parameters [ Data.encode { market | feeBasisPoints = 10001 } ]
-        |> Scenario.redeemer (Data.encode Buy)
-        |> Scenario.output (Scenario.toKey market.operator 100010000 |> Scenario.withDatum tag)
-        |> Scenario.expectFailure
+    buyAtFee 10001 |> Scenario.expectFailure
+
+
+negativeFeeRejected : Scenario
+negativeFeeRejected =
+    buyAtFee -1 |> Scenario.expectFailure
 
 
 cancel : String -> Scenario

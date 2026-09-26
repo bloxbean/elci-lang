@@ -6,11 +6,13 @@ both tagged with the listing's output reference. The seller may cancel.
 
 - The tag keeps one pair of payments from buying two listings
   (`onePaymentForTwoListingsRejected`, `untaggedPaymentRejected`).
-- An operator selling their own NFT is owed the whole price (`operatorSellingIsPaidInFull`).
-- A fee outside 0 to 10000 basis points rejects every purchase (`feeOutOfRangeRejected`).
-- The buyer keeps the lovelace locked with the NFT, as the ledger requires some in every
-  output. A marketplace that wants it returned to the seller adds it to the seller's
-  payment.
+- An operator selling their own NFT is owed the whole price, in one tagged output
+  (`operatorSellingIsPaidInFull`).
+- A fee outside 0 to 10000 basis points rejects every purchase (`feeOutOfRangeRejected`,
+  `negativeFeeRejected`).
+- The buyer takes everything in the listing's output: the NFT, the lovelace the ledger
+  requires with it, and anything else the seller locked there. A marketplace that wants the
+  lovelace returned to the seller adds it to the seller's payment.
 - Payees are identified by payment credential, so the buyer chooses the staking part of
   each payment.
 

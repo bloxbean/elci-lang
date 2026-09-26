@@ -87,8 +87,8 @@ ownPolicy ctx =
             Nothing
 
 
-{-| The outputs paid to a payment credential, in order. The payer chooses their staking
-part.
+{-| The outputs paid to a payment credential, in order. Whoever builds the transaction
+chooses the payee's staking part.
 
 When two inputs of a script can each require a payment to the same party, one output can
 satisfy both: double satisfaction. Tag each payment, for example with the spent output's

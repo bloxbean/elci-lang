@@ -5,8 +5,9 @@ the seller the price, less the marketplace's fee, and paying the operator the fe
 seller may cancel at any time.
 
 Each payment carries the listing's output reference as its inline datum, so one payment
-cannot settle two listings in the same transaction. The buyer keeps the lovelace locked
-with the NFT, as the ledger requires some in every output.
+cannot settle two listings in the same transaction. The buyer takes everything in the
+listing's output: the NFT, the lovelace the ledger requires with it, and anything else the
+seller locked there.
 
 -}
 

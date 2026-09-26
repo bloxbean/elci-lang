@@ -88,13 +88,17 @@ makerPaid order owed ref ctx =
         (Tx.outputsTo (PubKeyCredential order.maker) ctx)
 
 
-{-| Whether one output returns at least `rest` to the script under the same order.
+{-| Whether one output returns `rest` to the script under the same order: at least its
+lovelace, and exactly its tokens, so no one can fill the order with other tokens until it
+no longer fits in one output.
 -}
 restReturned : Order -> Value -> ScriptContext -> Bool
 restReturned order rest ctx =
     case Tx.continuingOutputs ctx of
         [ output ] ->
-            Value.geq output.value rest && (Tx.inlineDatum output == Just (Data.encode order))
+            (Value.lovelaceOf output.value >= Value.lovelaceOf rest)
+                && (Value.withoutLovelace output.value == Value.withoutLovelace rest)
+                && (Tx.inlineDatum output == Just (Data.encode order))
 
         _ ->
             False

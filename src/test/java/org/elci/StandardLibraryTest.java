@@ -1347,8 +1347,10 @@ class StandardLibraryTest {
                                 && (Tx.valueProduced ctx == Value.add (paid a) (paid b))
 
 
-                mint : () -> ScriptContext -> Bool
-                mint _ ctx =
+                {-| The redeemer is the quantity of B the transaction mints, 0 for none.
+                -}
+                mint : Int -> ScriptContext -> Bool
+                mint burn ctx =
                     case Tx.ownPolicy ctx of
                         Just policy ->
                             let
@@ -1359,7 +1361,14 @@ class StandardLibraryTest {
                                 && (Maybe.map (\\input -> input.outRef) (Tx.ownInput ctx) == Nothing)
                                 && List.isEmpty (Tx.continuingOutputs ctx)
                                 && (minted "T" == Just 2)
-                                && (minted "B" == Nothing || minted "B" == Just -3)
+                                && (minted "B"
+                                        == (if burn == 0 then
+                                                Nothing
+
+                                            else
+                                                Just burn
+                                           )
+                                   )
 
                         Nothing ->
                             False
@@ -1370,7 +1379,7 @@ class StandardLibraryTest {
                     (Tx.ownRef ctx == Nothing) && (Tx.ownPolicy ctx == Nothing) && List.isEmpty (Tx.continuingOutputs ctx)
                 """);
         Files.writeString(project.resolve("tests/ProbeTest.elm"), """
-                module ProbeTest exposing (balanced, burned, burnSignKept, continues, datums, hashedDatums, laws, minted, noPolicyWhenSpending, paid, paidIgnoresStakingPart, signed, spendsOwn, startsAfter, underpaid, unsigned, unwitnessedDatums, withdrawn, wrongMint)
+                module ProbeTest exposing (balanced, burned, burnNotDropped, burnSignKept, continues, datums, hashedDatums, laws, minted, noPolicyWhenSpending, paid, paidIgnoresStakingPart, signed, spendsOwn, stakedScriptOutputIsNotContinuing, startsAfter, underpaid, unsigned, unwitnessedDatums, withdrawn, wrongMint)
 
                 import Bytes
                 import Julc.Data as Data
@@ -1443,29 +1452,46 @@ class StandardLibraryTest {
                         |> Scenario.output (Scenario.toKey (Scenario.key "a") 1 |> Scenario.withDatum (Data.encode 42))
 
 
+                minting : Int -> Scenario
+                minting burn =
+                    Scenario.mint "probe"
+                        |> Scenario.redeemer (Data.encode burn)
+                        |> Scenario.minting (Bytes.fromString "T") 2
+
+
                 minted : Scenario
                 minted =
-                    Scenario.mint "probe"
-                        |> Scenario.redeemer Scenario.unit
-                        |> Scenario.minting (Bytes.fromString "T") 2
+                    minting 0
 
 
                 wrongMint : Scenario
                 wrongMint =
                     Scenario.mint "probe"
-                        |> Scenario.redeemer Scenario.unit
+                        |> Scenario.redeemer (Data.encode 0)
                         |> Scenario.minting (Bytes.fromString "T") 1
                         |> Scenario.expectFailure
 
 
                 burned : Scenario
                 burned =
-                    minted |> Scenario.minting (Bytes.fromString "B") -3
+                    minting -3 |> Scenario.minting (Bytes.fromString "B") -3
 
 
                 burnSignKept : Scenario
                 burnSignKept =
-                    minted |> Scenario.minting (Bytes.fromString "B") 3 |> Scenario.expectFailure
+                    minting -3 |> Scenario.minting (Bytes.fromString "B") 3 |> Scenario.expectFailure
+
+
+                burnNotDropped : Scenario
+                burnNotDropped =
+                    minting -3 |> Scenario.expectFailure
+
+
+                stakedScriptOutputIsNotContinuing : Scenario
+                stakedScriptOutputIsNotContinuing =
+                    check (Continues 1)
+                        |> Scenario.output (Scenario.toScript 5)
+                        |> Scenario.output (Scenario.toStakedScript (StakingHash (PubKeyCredential (Scenario.key "stake"))) 6)
 
 
                 withdrawn : Scenario
@@ -1534,7 +1560,7 @@ class StandardLibraryTest {
                 """);
         var result = NamedValidatorCliTest.run("test", project.toString());
         assertEquals(0, result.status(), result.out() + result.err());
-        assertTrue(result.out().contains("19 passed, 0 failed"), result.out());
+        assertTrue(result.out().contains("21 passed, 0 failed"), result.out());
     }
 
     @Test

@@ -26,6 +26,7 @@ module Scenario exposing
     , toAddress
     , toKey
     , toScript
+    , toStakedScript
     , unit
     , validBefore
     , validFrom
@@ -49,7 +50,7 @@ and withdrawal credential are filled in from its hash.
 
 import Bytes
 import Julc.Data as Data
-import Julc.Ledger as Ledger exposing (Address, OutputDatum(..), ProposalProcedure, PubKeyHash, TxCert, TxOutRef, Voter)
+import Julc.Ledger as Ledger exposing (Address, OutputDatum(..), ProposalProcedure, PubKeyHash, StakingCredential, TxCert, TxOutRef, Voter)
 
 
 {-| The ledger purpose, with what the ledger supplies for it.
@@ -82,6 +83,7 @@ type alias Token =
 type Destination
     = ToScript
     | ToAddress Address
+    | ToStakedScript StakingCredential
 
 
 {-| An output. `hashedDatum` holds a datum by hash: the runner puts the datum's hash in
@@ -307,6 +309,14 @@ withinBudget cpu memory =
 toScript : Int -> Output
 toScript lovelace =
     { destination = ToScript, lovelace = lovelace, tokens = [], datum = NoOutputDatum, hashedDatum = Nothing }
+
+
+{-| An output to the validator's own payment credential with a staking part: a different
+address from `toScript`'s.
+-}
+toStakedScript : StakingCredential -> Int -> Output
+toStakedScript stake lovelace =
+    { destination = ToStakedScript stake, lovelace = lovelace, tokens = [], datum = NoOutputDatum, hashedDatum = Nothing }
 
 
 toAddress : Address -> Int -> Output

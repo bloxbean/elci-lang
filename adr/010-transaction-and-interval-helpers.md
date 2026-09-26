@@ -36,15 +36,17 @@ Times are POSIX milliseconds.
 | `start range : Maybe Int`, `end range : Maybe Int` | the finite bounds, or `Nothing` when unbounded |
 | `after t`, `before t`, `between a b`, `everything` | ranges: from `t` on, up to `t`, both inclusive |
 
-The names follow Aiken's interval module, the closest precedent, and so do the checks. A
-check needs a finite bound on its side:
+The names follow Aiken's interval module, the closest precedent, and the checks agree with
+it on every range with finite or unbounded sides. A check needs a finite bound on its side:
 
 - An unbounded side never satisfies it.
 - Neither does an infinite bound on the wrong side, which only an empty range has: a
   `PosInf` start or a `NegInf` end.
 
-So a range that fails closed, such as one decoded from a datum, never passes a time check.
-The ledger's validity ranges never have these shapes.
+Aiken's stdlib v2 did the same. Its v3 treats such an empty range as satisfying both
+checks, since it contains no time at all. Elci fails closed instead, so an empty range,
+such as one decoded from a datum, never passes a time check. The ledger's validity ranges
+never have these shapes.
 
 ### 2. `Tx`: questions about the transaction
 
@@ -102,7 +104,8 @@ way to break it, and properties over the boundaries:
     included, to the script under the same order datum.
   - A full fill pays the maker the price and everything the order held besides the
     offered tokens.
-  - It uses `Tx.ownInput`, `Tx.continuingOutputs`, `Tx.inlineDatum` and `Value.geq`.
+  - It uses `Tx.ownInput`, `Tx.continuingOutputs`, `Tx.inlineDatum`, `Value.geq` and
+    `Value.withoutLovelace`; the returned order holds exactly the order's other tokens.
   - One input of the script per transaction keeps a returned output from standing for two
     orders.
 
@@ -113,7 +116,8 @@ satisfaction. The scenarios show each attack failing:
 - untagged and wrongly tagged payments;
 - a missing signature;
 - a changed continuing datum;
-- a partial or full fill that keeps part of the order's value.
+- a partial or full fill that keeps part of the order's value, and a returned order padded
+  with other tokens.
 
 ### 4. Equality on `Data`
 
