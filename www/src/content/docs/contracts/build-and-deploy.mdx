@@ -16,7 +16,7 @@ elci build .
 ```
 
 ```text
-validator vesting (spend): checked; 482 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator vesting (spend): checked; 533 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 ```
 
 Each validator gets its own directory:
@@ -57,10 +57,10 @@ Neither `validator.plutus.json` nor `abi.json` is a CIP-57 blueprint; Elci doesn
   "type": "PlutusScriptV3",
   "purpose": "spending",
   "description": "vesting",
-  "cborHex": "5901e55901e20101003232323232322323232323293370e...",
-  "hash": "9de96f3eca78ede39f17355658aae502cf1a7a2d4517e89974cfe33b",
+  "cborHex": "590218590215010100323232323232323232322323232323...",
+  "hash": "cdf09c382832689b016adac7ef1470488e9ff58b8a474b9086c7a0c3",
   "params": "",
-  "sizeBytes": 482
+  "sizeBytes": 533
 }
 ```
 
@@ -175,7 +175,7 @@ type alias VestingDatum =
 ```
 
 ```text
-validator vesting (spend): checked; 482 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator vesting (spend): checked; 533 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 ```
 
 Renaming `deadline` to `unlockAt` does not:
@@ -250,8 +250,8 @@ public class LoadScript {
 Run with Cardano Client Lib 0.7.2 and the Julc adapter on the classpath, it prints:
 
 ```text
-hash    9de96f3eca78ede39f17355658aae502cf1a7a2d4517e89974cfe33b
-address addr_test1wzw7jme7efuwmculzu64vk92u5pv7xn694z306yewn87xwcgv983x
+hash    cdf09c382832689b016adac7ef1470488e9ff58b8a474b9086c7a0c3
+address addr_test1wrxlp8pc9qex3xcpdtdv0mc5wpyga8l43w9ywjussmr6psceanc6r
 ```
 
 The `PlutusV3Script` is an ordinary Cardano Client Lib script: attach it to transactions, together with datums and redeemers you build as `PlutusData` following `abi.json`. Parameterized scripts need their parameters first, either with `elci apply` or in Java, as shown on [Parameterized validators](/contracts/parameters/). To test Elci scripts from JUnit, see [Testing from Java](/testing/java/).

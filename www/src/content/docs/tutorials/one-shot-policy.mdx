@@ -71,7 +71,7 @@ Run: elci check .../one-shot
        List.any (\input -> input.outRef == seed) ctx.txInfo.inputs
    ```
 
-   A mint handler has the shape parameters, redeemer, context. `TxOutRef` is a ledger type that can cross the Data boundary, so it can be a parameter; `==` compares two references. Each entry of `ctx.txInfo.inputs` is a `TxInInfo`, whose `outRef` says which output it spends.
+   A mint handler has the shape parameters, redeemer, context. `TxOutRef` is a ledger type that can cross the Data boundary, so it can be a parameter; `==` compares two references. Each entry of `ctx.txInfo.inputs` is a `TxInInfo`, whose `outRef` says which output it spends. The core `Tx` module has this check as `Tx.spends seed ctx`; this tutorial writes it out to show what it does.
 
    ```sh
    elci check .
@@ -477,7 +477,7 @@ Apply the seed only after you've chosen an output that really exists and is unsp
 ## Recap
 
 - A ledger type such as `TxOutRef` can be a deployment parameter, so a script can be tied to one specific output.
-- `ctx.txInfo.inputs` tells you which outputs a transaction spends; `ctx.scriptInfo` gives a minting policy its own policy id.
+- `ctx.txInfo.inputs` tells you which outputs a transaction spends; `ctx.scriptInfo` gives a minting policy its own policy id. The core `Tx` module packages these checks as `Tx.spends`, `Tx.ownPolicy` and `Tx.mintedOf`.
 - `Value.tokens` gives the tokens a transaction mints under one policy as a `Dict`, which `==` compares exactly.
 - Properties over generated `TxOutRef`s and quantities check the rules far beyond the cases you write by hand.
 

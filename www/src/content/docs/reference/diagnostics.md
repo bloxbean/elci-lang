@@ -185,8 +185,8 @@ main =
 src/Main.elm:11:12: ELCI2003: The operator == cannot compare Int -> Int values: functions have no equality
 ```
 
-Equality is rejected for functions, `Data`, `Map`, `Array` and imported types without approved
-equality, such as `TxOut`. A `Dict` has equality when its values do, and a `Value` always has it. When the
+Equality is rejected for functions, `Map`, `Array` and imported types without approved equality, such as
+`TxOut`. A `Dict` has equality when its values do, and a `Value` and `Data` always have it. When the
 offending type is inside another, the message names it:
 `The operator == cannot compare List (Int -> Int) values: Int -> Int is part of them, and functions have no
 equality`. `++` needs a `String` or a `List`: `1 ++ 2` gives
@@ -597,6 +597,7 @@ Core module names are reserved, for modules and for aliases (see
 
 ```text
 src/String.elm:1:1: ELCI2104: The module name String is taken by Elci's core library; rename this module
+src/Tx.elm:1:1: ELCI2104: The module name Tx is taken by Elci's core library; rename this module
 src/Set.elm:1:1: ELCI2104: The module name Set is reserved for Elci's core library; rename this module
 src/Main.elm:3:1: ELCI2104: The alias String names a core module that every module imports; choose another alias for Utils
 ```

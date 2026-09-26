@@ -9,7 +9,7 @@ import { FileTree } from '@astrojs/starlight/components';
 
 `elci test` covers most contracts. When you need full control over the ledger context, or want your contract tests next to the Java code of your off-chain application, you can test the same scripts from JUnit. In this page you set up a Gradle test suite, evaluate a validator with julc-testkit, and write jqwik properties with generated datums and redeemers.
 
-Reach for Java when a test needs something [scenarios](/testing/scenarios/) cannot describe: datum hashes with a witness table, reference scripts, other staking credentials or several withdrawals, or more than one script in a transaction.
+Reach for Java when a test needs something [scenarios](/testing/scenarios/) cannot describe: reference scripts, other staking credentials or several withdrawals, or more than one script in a transaction.
 
 ## Set up a test suite
 
@@ -111,7 +111,7 @@ julc-testkit provides the rest:
 - `ValidatorTest.evaluate(program, context)` runs a script and returns an `EvalResult`. `assertValidates` and `assertRejects` evaluate and assert in one step.
 - `BudgetAssertions` checks an `EvalResult`: `assertSuccess`, `assertFailure`, `assertBudgetUnder(result, cpu, memory)`, `assertTrace(result, messages...)`, `assertTraceExact` and `assertNoTraces`.
 
-Unlike a scenario, the builder fills in nothing about your script. You choose the spent reference, credentials and policy ids yourself, and `spending(ref, datum)` sets the purpose without adding the spent output to the inputs: add it with `input` when your validator looks for its own input, for example through `getContinuingOutputs`. The fee defaults to 0 and the validity range to always.
+Unlike a scenario, the builder fills in nothing about your script. You choose the spent reference, credentials and policy ids yourself, and `spending(ref, datum)` sets the purpose without adding the spent output to the inputs: add it with `input` when your validator looks for its own input, for example through `Tx.ownInput` or `Tx.continuingOutputs`. The fee defaults to 0 and the validity range to always.
 
 Here is a complete test class for the marketplace's `market` validator:
 

@@ -34,8 +34,8 @@ preview: the profile below is implemented and tested, and everything outside it 
 | Dictionaries, maps and arrays | `Dict k v` (Elm's `Dict`, stored as a sorted Plutus map), `Map k v` (the ledger's association map) and `Array a` (constant-time `get`). |
 | Values | `Value`, the ledger's multi-asset value, with the core `Value` module: arithmetic, comparison and exact `==` on the CIP-153 builtins. |
 | Bytes | The `Bytes` module: every byte-string builtin. |
-| Ledger access | Typed views of the script context, nominal hash types, approved constructors, patterns and equality. |
-| Data conversions | `Julc.Data.decode` and `encode`, optional adapters. |
+| Ledger access | Typed views of the script context, nominal hash types, approved constructors, patterns and equality. The core `Tx` and `Interval` modules answer common questions about the transaction and its validity range. |
+| Data conversions | `Julc.Data.decode` and `encode`, optional adapters, and structural `==` on `Data`. |
 | Java libraries | Julc's on-chain Java libraries and your own library JARs, including generic methods. |
 | Validators | `[validators.<name>]` scripts with spend, mint, withdraw, certify, vote and propose handlers, parameters and datum profiles. |
 | Tests | `elci test` with unit tests, transaction scenarios and property tests. |
@@ -188,7 +188,8 @@ import Tuple
 import Debug
 ```
 
-`Bytes`, `Dict`, `Map`, `Array`, `Value`, `Julc.Data` and Java library modules are imported explicitly.
+`Bytes`, `Dict`, `Map`, `Array`, `Value`, `Interval`, `Tx`, `Julc.Data` and Java library modules are
+imported explicitly.
 Names resolve as in Elm, with one addition:
 
 - A module's own declarations shadow every import.
@@ -197,19 +198,21 @@ Names resolve as in Elm, with one addition:
 - *Addition:* a name listed explicitly, as in `import Utils exposing (clamp)`, takes precedence over a
   default import.
 - Qualified names such as `Basics.max` and `Result.Ok` always work.
-- An import can't be aliased to a default module's name: `import Utils as String` is `ELCI2104`.
+- An import can't be aliased to the name of another module, core or in the project:
+  `import Utils as String` and `import Julc.Interval as Interval` are `ELCI2104`.
 
 [Core modules](/reference/core-modules/#default-imports) has the details and the messages.
 
 ### Reserved names
 
-- **Module names.** `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array` and
-  `Value` are core modules, and `Set` and `Elci` are reserved for the core library. Neither a project module
+- **Module names.** `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`,
+  `Value`, `Interval` and `Tx` are core modules, and `Set` and `Elci` are reserved for the core library. Neither a project module
   nor a `[java-modules]` key can use these names, or a name that starts with `Elci.`:
 
   ```text
   src/String.elm:1:1: ELCI2104: The module name String is taken by Elci's core library; rename this module
   src/Value.elm:1:1: ELCI2104: The module name Value is taken by Elci's core library; rename this module
+  src/Tx.elm:1:1: ELCI2104: The module name Tx is taken by Elci's core library; rename this module
   src/Set.elm:1:1: ELCI2104: The module name Set is reserved for Elci's core library; rename this module
   src/Elci/Tools.elm:1:1: ELCI2104: The module name Elci.Tools is reserved for Elci's core library; rename this module
   elci: ELCI4001: [java-modules] may not map Value, a module name of Elci's core library
@@ -328,14 +331,18 @@ This is also how elm-format writes negative arguments, so formatted code keeps i
 
 ## Equality
 
-`==` and `/=` work on `Int`, `Bool`, `String`, `()`, `Bytes`, ledger hashes of the same type, `Value`, and
-lists, tuples, records, `Maybe`, `Dict` and custom types whose contents are all equality-capable. Two
-dictionaries are equal when they have the same bindings, and two values when they hold the same quantities:
-every `Value` is kept in one canonical form, so `==` compares their encodings. Imported types use the
-equality their provider approves (Java `equals`). Both operands are evaluated once, left to right.
+`==` and `/=` work on `Int`, `Bool`, `String`, `()`, `Bytes`, ledger hashes of the same type, `Value`,
+`Data`, and lists, tuples, records, `Maybe`, `Dict` and custom types whose contents are all
+equality-capable. Two dictionaries are equal when they have the same bindings, and two values when they
+hold the same quantities: every `Value` is kept in one canonical form, so `==` compares their encodings.
+`Data` compares structure exactly, so `Tx.inlineDatum output == Just (Data.encode expected)` checks a datum
+without decoding it. Imported types use the equality their provider approves (Java `equals`). Both operands
+are evaluated once, left to right.
 
-Rejected with `ELCI2003`: functions, `Data`, `Map`, `Array`, imported types without approved equality, and
-the ledger records that contain a `Value` (`TxOut`, `TxInInfo`, `TxInfo`). The message names the part that
+Rejected with `ELCI2003`: functions, `Map`, `Array`, imported types without approved equality, and the
+ledger records that contain a `Value` (`TxOut`, `TxInInfo`, `TxInfo`). Two maps with the same bindings may
+hold them in different orders, so `Data.encode` of the two may differ: compare their sorted `toList`, or use
+a `Dict`. The message names the part that
 has no equality:
 
 ```text

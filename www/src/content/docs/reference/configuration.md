@@ -111,7 +111,8 @@ The key is the module name you import; the value is the fully qualified class na
 read when a module imports it. A module name cannot be both a source module and a Java module.
 `Julc.TypedMap` and `Julc.TypedArray` are reserved by the core `Map` and `Array` modules and cannot be
 remapped. The core module names `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`,
-`Array` and `Value`, the reserved names `Set` and `Elci`, and names starting with `Elci.` cannot be keys. See
+`Array`, `Value`, `Interval` and `Tx`, the reserved names `Set` and `Elci`, and names starting with `Elci.`
+cannot be keys. See
 [standard library](/advanced/standard-library/) for the bundled classes.
 
 ## `[tests]`

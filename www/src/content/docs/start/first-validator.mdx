@@ -109,6 +109,7 @@ Line by line:
 
 - The body reads `ctx.txInfo.signatories`, the key hashes that signed the transaction, and uses `List.any`
   to check whether one of them is the owner. `\signer -> signer == owner` is an anonymous function (a lambda).
+  The core `Tx` module has the same check as `Tx.signedBy owner ctx`, after `import Tx`.
 
 The `_` pattern ignores an argument. The datum and redeemer are still decoded strictly before `spend` runs,
 so they must be unit data.

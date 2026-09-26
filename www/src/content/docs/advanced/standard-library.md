@@ -6,11 +6,11 @@ sidebar:
 ---
 
 Elci's standard library has two layers. The first is Elci's core library: Elm's core modules, with Elm's
-names, argument orders and edge cases, bundled with the compiler, plus a `Value` module for the ledger's
-multi-asset values. Reach for it first. The second is Julc's on-chain Java libraries, which you map in
-`elci.toml`. They fill the gaps, such as floor division, validity intervals and signature checks. This page
-shows what each layer offers, how to import it and which functions you will reach for most. Elm packages
-cannot be installed.
+names, argument orders and edge cases, bundled with the compiler, plus `Value`, `Interval` and `Tx` modules
+for the ledger's multi-asset values, time ranges and transactions. Reach for it first. The second is Julc's
+on-chain Java libraries, which you map in `elci.toml`. They fill the gaps, such as floor division, signature
+verification and matching whole addresses. This page shows what each layer offers, how to import it and
+which functions you will reach for most. Elm packages cannot be installed.
 
 ## The core library
 
@@ -34,6 +34,8 @@ These need an import but no configuration:
 | `Map` | `import Map` | the ledger's association maps, for ledger data and keys that aren't comparable |
 | `Array` | `import Array` | arrays with constant-time `get` and `length` |
 | `Value` | `import Value exposing (Value)` | the ledger's multi-asset values: `lovelaceOf`, `quantityOf`, `add`, `geq` and more |
+| `Interval` | `import Interval` | time ranges such as the validity range: `isEntirelyAfter`, `isEntirelyBefore`, `contains`, without sentinel values |
+| `Tx` | `import Tx` | questions about the transaction: `signedBy`, `ownInput`, `outputsTo`, `continuingOutputs`, `mintedOf`, `inlineDatum` and more |
 | `Bytes` | `import Bytes` | byte-string builtins: slicing, integers, bits, hashes |
 | `Julc.Data` | `import Julc.Data as Data` | explicit `decode`, `encode` and optional/`Maybe` adapters |
 | `Julc.Ledger` | `import Julc.Ledger exposing (...)` | ledger types such as `ScriptContext`, `PubKeyHash` and `TxOutRef` |
@@ -41,11 +43,11 @@ These need an import but no configuration:
 The types `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe` (with `Just` and `Nothing`), `Dict`,
 `Map` and `Array` are built in.
 
-`Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String`, `Dict`, `Map`, `Array` and `Value` are written in
-Elci itself, and compiled with your code; a function you don't call is never compiled into your script.
-`Dict`, `Map` and `Array` sit on top of Julc's typed map and array libraries and of list operations the
-compiler specializes for their key and value types. `Value` sits on the protocol's native value builtins
-(CIP-153). Every signature is on the
+`Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String`, `Dict`, `Map`, `Array`, `Value`, `Interval` and `Tx`
+are written in Elci itself, and compiled with your code; a function you don't call is never compiled into
+your script. `Dict`, `Map` and `Array` sit on top of Julc's typed map and array libraries and of list
+operations the compiler specializes for their key and value types. `Value` sits on the protocol's native
+value builtins (CIP-153). `Interval` and `Tx` read the ledger's types directly. Every signature is on the
 [core modules](/reference/core-modules/) reference page, and
 [lists, dictionaries, maps and arrays](/learn/collections/) teaches them. Bytes get their own page:
 [bytes, hashes and bits](/advanced/bytes-and-crypto/).
@@ -71,7 +73,8 @@ the module names used on this site:
 "Julc.Values" = "org.julclang.stdlib.lib.ValuesLib"
 ```
 
-Map only what you import; an unused mapping is never loaded. The module names are yours to choose. How
+Map only what you import; an unused mapping is never loaded. The module names are yours to choose, except
+the core modules' names: a `[java-modules]` key can't be `Interval`, `Tx` or another core module. How
 mapping, types and rejections work in general is covered in [Java libraries](/advanced/java-libraries/).
 
 ### What "verified" means
@@ -111,19 +114,26 @@ They are listed for completeness; do not build on them.
 
 ## An example
 
-This listing validator uses four libraries and the core `Value` module. It checks that the seller has a
-key address and was paid, that the transaction's validity range includes the deadline, that nothing is
-minted and that the script is spending its own input:
+This listing validator uses two Java libraries next to the core `Tx`, `Interval` and `Value` modules. It
+requires the seller's address to be a key address, and the payment to reach that exact address, staking
+part included. `Tx.outputsTo` would match the key whatever the staking part, so this is a case for
+`OutputLib`:
+
+```toml title="elci.toml"
+[java-modules]
+"Julc.Address" = "org.julclang.stdlib.lib.AddressLib"
+"Julc.Output" = "org.julclang.stdlib.lib.OutputLib"
+```
 
 ```elm title="src/Market.elm"
-module Market exposing (spend)
+module Market exposing (Listing, spend)
 
+import Interval
 import Julc.Address as Address
-import Julc.Contexts as Contexts
 import Julc.Data as Data
-import Julc.Interval as Interval
-import Julc.Ledger exposing (Address, ScriptContext)
+import Julc.Ledger exposing (Address, ScriptContext, TxOut, TxOutRef)
 import Julc.Output as Output
+import Tx
 import Value
 
 
@@ -131,39 +141,42 @@ type alias Listing =
     { seller : Address, price : Int, deadline : Int }
 
 
-spendsOwnInput : ScriptContext -> Bool
-spendsOwnInput ctx =
-    case Data.fromOptional (Contexts.findOwnInput ctx) of
-        Just _ ->
-            True
+{-| Anyone may buy before the deadline by paying the seller's exact address, with the
+listing's output reference as the payment's inline datum.
+-}
+spend : Listing -> () -> ScriptContext -> Bool
+spend listing _ ctx =
+    case Tx.ownRef ctx of
+        Just ref ->
+            Address.isPubKeyAddress listing.seller
+                && Interval.isEntirelyBefore listing.deadline ctx.txInfo.validRange
+                && List.any (pays listing.price ref) (Output.outputsAt ctx.txInfo.outputs listing.seller)
 
         Nothing ->
             False
 
 
-spend : Listing -> () -> ScriptContext -> Bool
-spend listing _ ctx =
-    Address.isPubKeyAddress listing.seller
-        && (Output.lovelacePaidTo ctx.txInfo.outputs listing.seller >= max listing.price 0)
-        && Interval.contains ctx.txInfo.validRange listing.deadline
-        && Value.isZero ctx.txInfo.mint
-        && spendsOwnInput ctx
+pays : Int -> TxOutRef -> TxOut -> Bool
+pays price ref output =
+    (Value.lovelaceOf output.value >= price)
+        && (Tx.inlineDatum output == Just (Data.encode ref))
 ```
 
 ```text
 $ elci check
-validator market (spend): checked; 1446 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator market (spend): checked; 1297 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 ```
 
 Things to notice:
 
 - **Java argument order.** Library functions take the collection or subject first:
-  `Output.lovelacePaidTo outputs address`, `Interval.contains range time`.
-- **Optional results.** `findOwnInput` returns a Julc optional. Convert it with `Data.fromOptional`
-  before you match on `Just` and `Nothing`.
-- **Core and Java together.** `max` comes from the prelude and `Value.isZero` from the core `Value`
-  module; the rest are Java library calls.
-- **Size.** Library code is linked into your script: this validator is 1,446 bytes. Check the size
+  `Output.outputsAt outputs address`. Core functions take it last, as in Elm: `Tx.outputsTo credential ctx`.
+- **Optional results.** A Java function that returns an `Optional`, such as `ContextsLib.findOwnInput`,
+  gives a Julc optional. Convert it with `Data.fromOptional` before you match on `Just` and `Nothing`.
+- **Core and Java together.** `Tx`, `Interval` and `Value` are core modules; `Address` and `Output` are
+  Java library calls. The payment carries the listing's reference, so one payment can't buy two listings
+  ([one payment per input](/contracts/reading-the-transaction/#one-payment-per-input)).
+- **Size.** Library code is linked into your script: this validator is 1,297 bytes. Check the size
   after adding a library.
 
 ## Most useful functions
@@ -195,8 +208,10 @@ Elci's own `//` truncates towards zero, and `modBy` and `remainderBy` are in the
 | `isEmpty` | `Ledger.Interval -> Bool` | |
 | `finiteLowerBound`, `finiteUpperBound` | `Ledger.Interval -> Int` | return `-1` for an infinite bound |
 
-The `-1` sentinel is easy to miss: `Interval.finiteUpperBound (Interval.after 100)` is `-1`. Handle it
-before comparing times.
+The `-1` sentinel is easy to miss: `finiteUpperBound (after 100)` is `-1`, so "no end" looks like "ends at
+-1". Use the core [`Interval`](/reference/core-modules/#interval) module instead: its checks never hold on an
+infinite bound, and its `start` and `end` return `Nothing` for one. Map `IntervalLib` under another name than
+`Interval`, which is the core module's.
 
 ### `ContextsLib`
 
@@ -213,10 +228,12 @@ before comparing times.
 | `getSpendingDatum` | `Ledger.ScriptContext -> JulcOptional Data` |
 | `getRedeemer` | `Ledger.ScriptContext -> Data` |
 
-`signedBy` takes raw bytes, so pass a key hash's `.hash`: `Contexts.signedBy ctx.txInfo owner.hash`. The
-`txInfo...` accessors (`txInfoFee`, `txInfoInputs` and so on) duplicate fields you can read directly,
-such as `ctx.txInfo.fee`. `valuePaid` and `valueSpent` return the ledger's values, one per output or input;
-add them up with `Value.sum`.
+The core [`Tx`](/reference/core-modules/#tx) module covers these with typed results: `Tx.signedBy`,
+`Tx.ownInput`, `Tx.continuingOutputs`, `Tx.outputsTo`, `Tx.valueSpent` and `Tx.datumOf`. Prefer it.
+`ContextsLib.signedBy` takes raw bytes, so it needs a key hash's `.hash`:
+`Contexts.signedBy ctx.txInfo owner.hash`. The `txInfo...` accessors (`txInfoFee`, `txInfoInputs` and so on)
+duplicate fields you can read directly, such as `ctx.txInfo.fee`. `valuePaid` and `valueSpent` return the
+ledger's values, one per output or input.
 
 ### `OutputLib`
 
@@ -233,6 +250,10 @@ add them up with `Value.sum`.
 | `valueHasToken` | `Ledger.Value -> Bytes -> Bytes -> Bool` |
 | `getInlineDatum` | `Ledger.TxOut -> Data` |
 | `txOutAddress`, `txOutValue`, `txOutDatum` | `Ledger.TxOut -> ...` |
+
+`OutputLib` matches whole addresses, staking part included, where `Tx.outputsTo` and `Tx.valuePaidTo` match
+the payment credential only. Use it when the staking part matters. `getInlineDatum` fails the script for an
+output without an inline datum; `Tx.inlineDatum` returns a `Maybe`.
 
 ### `ValuesLib`
 

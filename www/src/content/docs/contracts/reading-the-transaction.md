@@ -1,11 +1,11 @@
 ---
 title: Reading the transaction
-description: What a handler can read from the ScriptContext, the ledger types behind it, and verified recipes for signers, validity ranges, inputs, outputs and minting.
+description: What a handler can read from the ScriptContext, the ledger types behind it, and verified recipes with the Tx and Interval modules for signers, validity ranges, inputs, payments, datums and minting, including the defence against double satisfaction.
 sidebar:
   order: 2
 ---
 
-The last argument of every handler is the `ScriptContext`: the whole transaction being validated, as the ledger describes it. This page lists what you can read from it, explains the ledger types, and gives small recipes for the checks most contracts need.
+The last argument of every handler is the `ScriptContext`: the whole transaction being validated, as the ledger describes it. This page lists what you can read from it, explains the ledger types, and gives small recipes for the checks most contracts need, written with the core `Tx` and `Interval` modules.
 
 ## The script context
 
@@ -79,7 +79,7 @@ The records and custom types you meet while walking the context:
 | `IntervalBoundType` | `NegInf`, `Finite Int` or `PosInf` |
 | `ScriptInfo` | `MintingScript PolicyId`, `SpendingScript TxOutRef (JulcOptional Data)`, `RewardingScript Credential`, `CertifyingScript Int TxCert`, `VotingScript Voter` or `ProposingScript Int ProposalProcedure` |
 
-Hashes have their own types: `PubKeyHash`, `ScriptHash`, `ValidatorHash`, `PolicyId`, `TxId` and `DatumHash`. They are byte strings underneath, but the compiler keeps them apart, so a key hash can't be mistaken for arbitrary bytes. This helper takes the key as `Bytes`:
+Hashes have their own types: `PubKeyHash`, `ScriptHash`, `ValidatorHash`, `PolicyId`, `TokenName`, `TxId` and `DatumHash`. They are byte strings underneath, but the compiler keeps them apart, so a key hash can't be mistaken for arbitrary bytes. This helper takes the key as `Bytes`:
 
 ```elm
 signedByBytes : Bytes -> ScriptContext -> Bool
@@ -92,118 +92,129 @@ elci: .../my-project/elci.toml:9: [validators.main]
 .../my-project/src/Main.elm:8:51: ELCI2002: Type mismatch: expected Bytes, found PubKeyHash
 ```
 
-Take a `PubKeyHash` instead, or use the `.hash` field to get the bytes when you really need them, for example `policy.hash` for a `PolicyId`.
+Take a `PubKeyHash` instead, or use the `.hash` field to get the bytes when you really need them: `policy.hash` for a `PolicyId`, and `token.hash` for a `TokenName`, which has no other field.
 
 What you can do with a ledger type is decided per type:
 
 - **Fields**: read record fields with `.field`, including nested ones such as `output.address.credential`.
 - **Patterns and constructors**: match on custom types in `case`, and build values such as `Ledger.TxOutRef txId 0`.
-- **Equality**: `==` and `/=` work on hashes, `TxOutRef`, `Credential`, `Address`, `Interval`, `OutputDatum`, `ScriptInfo`, `Value` and the other plain ledger types. A `JulcOptional` has no equality: convert it with `Data.fromOptional` and compare the `Maybe`.
+- **Equality**: `==` and `/=` work on hashes, `TxOutRef`, `Credential`, `Address`, `Interval`, `OutputDatum`, `ScriptInfo`, `Value`, `Data` and the other plain ledger types. A `JulcOptional` has no equality: convert it with `Data.fromOptional` and compare the `Maybe`.
 - **Records that contain a `Value`** (`TxOut`, `TxInInfo`, `TxInfo`) have no equality: compare their fields. Neither they nor a `Value` can be a datum, redeemer or parameter.
-- **`Value` has its own module.** Read, build and compare values with the core [`Value`](/reference/core-modules/#value) module, shown below.
+- **`Value` and `Interval` have their own modules.** Read, build and compare values with the core [`Value`](/reference/core-modules/#value) module and time ranges with the [`Interval`](/reference/core-modules/#interval) module, both shown below.
 
 ## Recipes
 
-Each recipe is a small function to put in a handler's module, next to the imports it needs. Test the rules you build from them with [transaction scenarios](/testing/scenarios/).
+The core `Tx` and `Interval` modules answer the questions most contracts ask. They need an import and no
+configuration:
+
+```elm
+import Interval
+import Tx
+```
+
+Each recipe is a check to use in a handler, or a small function to put next to it. The
+[core modules](/reference/core-modules/#tx) reference lists every function with its cost. Test the rules you
+build from them with [transaction scenarios](/testing/scenarios/).
 
 ### Who signed
 
-`signatories` lists the key hashes that must sign the transaction. A signature check is a list search:
+`signatories` lists the key hashes that must sign the transaction. `Tx.signedBy` searches it:
 
 ```elm
-signedBy : PubKeyHash -> ScriptContext -> Bool
-signedBy key ctx =
-    List.any (\signer -> signer == key) ctx.txInfo.signatories
+Tx.signedBy owner ctx
 ```
 
 ### When the transaction runs
 
-A script can't read the clock. Instead, the transaction declares a validity range and the ledger only accepts it inside that range, so the script reasons about the range. The `IntervalLib` Java library reads its bounds. Map it in `elci.toml`:
+A script can't read the clock. Instead, the transaction declares a validity range and the ledger only
+accepts it inside that range, so the script reasons about the range with the `Interval` module:
 
-```toml
-[java-modules]
-"Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
-```
-
-```elm
-import Julc.Interval as Interval
-```
-
-| Function | Returns |
+| Check | Holds when |
 | --- | --- |
-| `Interval.finiteLowerBound range` | the start time, or `-1` when the range has no start |
-| `Interval.finiteUpperBound range` | the end time, or `-1` when the range has no end |
-| `Interval.contains range time` | whether `time` lies in the range, honoring inclusive bounds |
+| `Interval.isEntirelyAfter deadline ctx.txInfo.validRange` | the transaction can't run at or before `deadline` |
+| `Interval.isEntirelyBefore deadline ctx.txInfo.validRange` | the transaction can't run at or after `deadline` |
+| `Interval.contains time ctx.txInfo.validRange` | `time` lies in the range |
 
-`finiteLowerBound` and `finiteUpperBound` return the bound's time whether or not it is inclusive. Always handle the `-1` sentinel: "no end" must not look like "ends at -1". To require that something happens **after** a time, check the start of the range (every moment in the range is then late enough). To require **before** a time, check the end, and require that there is one. The [vesting tutorial](/tutorials/vesting/) builds a deadline check step by step.
+The two deadline checks never hold on an infinite bound. A transaction without a validity range could run
+at any time, so it fails both. "After" and "before" are strict, and the checks honor inclusive and
+exclusive bounds. A scenario's `Scenario.validFrom t` is inclusive, so `isEntirelyAfter deadline` accepts
+`validFrom (deadline + 1)` but not `validFrom deadline`; check `isEntirelyAfter (deadline - 1)` to accept a
+transaction from the deadline itself. `Scenario.validBefore t` is exclusive, so `isEntirelyBefore deadline`
+accepts `validBefore deadline`. The [vesting tutorial](/tutorials/vesting/) builds a deadline check step by
+step.
 
 ### Which outputs are spent
 
-`inputs` holds every spent output with its reference. To require that the transaction spends a particular output:
+`inputs` holds every spent output with its reference. `Tx.spends` asks whether the transaction spends a
+particular output, and `Tx.findInput` returns it as a `Maybe TxInInfo`:
 
 ```elm
-spends : TxOutRef -> ScriptContext -> Bool
-spends ref ctx =
-    List.any (\input -> input.outRef == ref) ctx.txInfo.inputs
+Tx.spends ref ctx
 ```
 
-The [one-shot minting policy](/tutorials/one-shot-policy/) is built on this check.
+Reference inputs are read, not spent, so they don't count; they are in `ctx.txInfo.referenceInputs`. The
+[one-shot minting policy](/tutorials/one-shot-policy/) is built on this check.
 
 ### The output being spent
 
-When spending, `scriptInfo` says which output is being validated. Find it among the inputs to read its address or value:
+When spending, `Tx.ownRef ctx` is the reference of the output being validated, and `Tx.ownInput ctx` is that
+output with its address, value and datum. For other purposes both are `Nothing`:
 
 ```elm
-ownRef : ScriptContext -> Maybe TxOutRef
-ownRef ctx =
-    case ctx.scriptInfo of
-        SpendingScript ref _ ->
-            Just ref
-
-        _ ->
-            Nothing
-
-
-ownInput : ScriptContext -> Maybe TxInInfo
-ownInput ctx =
-    case ownRef ctx of
-        Just ref ->
-            List.foldl
-                (\input found ->
-                    if input.outRef == ref then
-                        Just input
-
-                    else
-                        found
-                )
-                Nothing
-                ctx.txInfo.inputs
+ownLovelace : ScriptContext -> Int
+ownLovelace ctx =
+    case Tx.ownInput ctx of
+        Just own ->
+            Value.lovelaceOf own.resolved.value
 
         Nothing ->
-            Nothing
+            0
 ```
+
+`Tx.continuingOutputs ctx` lists the outputs paid back to the spent output's address, staking part
+included: the outputs that keep funds at the script.
+
+### Payments
+
+`Tx.outputsTo credential ctx` lists the outputs paid to a key or a script, in order, and
+`Tx.valuePaidTo credential ctx` adds up their value:
+
+```elm
+Tx.outputsTo (PubKeyCredential seller) ctx
+```
+
+Both match the address's payment credential and ignore its staking part: whoever builds the transaction
+chooses the payee's staking part. So a payment to the seller's key counts whatever staking credential it
+carries. When the staking part matters, store the payee's full `Address` and compare `output.address`.
+Before you check a total, read [one payment per input](#one-payment-per-input).
 
 ### The script's own policy id
 
-When minting, `scriptInfo` carries the policy id, which is the script's own hash:
+When minting, `Tx.ownPolicy ctx` is the policy id, which is the script's own hash, and
+`Tx.mintedOf policy ctx` holds the tokens minted (positive) and burned (negative) under it, as a
+`Dict TokenName Int`:
 
 ```elm
-ownPolicy : ScriptContext -> Maybe PolicyId
-ownPolicy ctx =
-    case ctx.scriptInfo of
-        MintingScript policy ->
-            Just policy
+{-| The transaction mints exactly one BADGE under this policy, and nothing else under it.
+-}
+mintsOneBadge : ScriptContext -> Bool
+mintsOneBadge ctx =
+    case Tx.ownPolicy ctx of
+        Just policy ->
+            Dict.toList (Tx.mintedOf policy ctx) == [ ( TokenName (Bytes.fromString "BADGE"), 1 ) ]
 
-        _ ->
-            Nothing
+        Nothing ->
+            False
 ```
+
+Comparing the whole dictionary also rejects a transaction that mints a second token name under the policy.
+Build a token name from bytes after `import Julc.Ledger exposing (TokenName(..))`. Like the other ledger
+hashes, a token name exposes its bytes as its `.hash` field.
 
 ### Amounts and tokens
 
 An output's `value` and the transaction's `mint` are `Value`s: lovelace and quantities of native tokens.
-Read them with the core `Value` module (`import Value`). A token is named by a `PolicyId` and a `TokenName`;
-build a token name from bytes with `TokenName (Bytes.fromString "BADGE")`, after
-`import Julc.Ledger exposing (TokenName(..))`.
+Read them with the core `Value` module (`import Value`). A token is named by a `PolicyId` and a `TokenName`.
 
 | Function | Returns |
 | --- | --- |
@@ -213,17 +224,6 @@ build a token name from bytes with `TokenName (Bytes.fromString "BADGE")`, after
 | `Value.geq value required` | whether `value` holds at least as much of every token as `required` |
 | `Value.isZero value` | whether `value` holds nothing |
 
-For example, the quantity of `BADGE` tokens this policy mints:
-
-```elm
-case ctx.scriptInfo of
-    MintingScript policy ->
-        Value.quantityOf policy (TokenName (Bytes.fromString "BADGE")) ctx.txInfo.mint
-
-    _ ->
-        0
-```
-
 Values have `==`, and it is exact: two values are equal when they hold the same quantities. So
 `output.value == Value.lovelace 2000000` checks that an output holds exactly 2 ada and nothing else.
 `Value.positive` and `Value.negative` split a mint into what it mints and what it burns. The
@@ -231,7 +231,10 @@ Values have `==`, and it is exact: two values are equal when they hold the same 
 
 ### Datums on other outputs
 
-An output's datum arrives as `OutputDatum`. An inline datum is raw `Data`; decode it into your own type with `Julc.Data.decode`. Decoding is strict, so a datum of the wrong shape fails the whole script rather than producing `Nothing`:
+An output's datum arrives as `OutputDatum`. `Tx.inlineDatum output` is its inline datum, as `Maybe Data`.
+`Tx.datumOf output ctx` also finds a datum given by its hash among the datums the transaction supplies.
+Decode the `Data` into your own type with `Julc.Data.decode`, annotating the result type. Decoding is
+strict, so a datum of the wrong shape fails the whole script rather than producing `Nothing`:
 
 ```elm
 type alias Order =
@@ -240,15 +243,20 @@ type alias Order =
     }
 
 
-inlineOrder : TxOut -> Maybe Order
-inlineOrder output =
-    case output.datum of
-        OutputDatumInline raw ->
-            Just (Data.decode raw)
-
-        _ ->
-            Nothing
+orderOf : TxOut -> Maybe Order
+orderOf output =
+    Maybe.map Data.decode (Tx.inlineDatum output)
 ```
+
+To check that an output carries a datum you expect, compare encodings. `==` on `Data` compares structure,
+and nothing is decoded, so a datum of another shape makes the check `False`:
+
+```elm
+Tx.inlineDatum output == Just (Data.encode expected)
+```
+
+Off-chain code must then build the datum exactly as Elci encodes it, with a record's fields in name order.
+The validator's `abi.json` records the layout.
 
 ### Withdrawals
 
@@ -265,9 +273,58 @@ withdrawn credential ctx =
             0
 ```
 
+### One payment per input
+
+A check such as "some output pays the seller the price" does not say which input the output pays for. When
+a transaction spends two outputs of your script that are both for the same seller, the script runs once for
+each, and both runs find the same payment. The seller is paid once for two sales. This is the
+**double-satisfaction** attack. There are two defences.
+
+**Tag each payment** with the output reference of the input it pays for, as its inline datum. An output has
+one datum, so each input needs its own payment:
+
+```elm
+paidFor : PubKeyHash -> Int -> ScriptContext -> Bool
+paidFor seller price ctx =
+    case Tx.ownRef ctx of
+        Just ref ->
+            List.any
+                (\output ->
+                    (Value.lovelaceOf output.value >= price)
+                        && (Tx.inlineDatum output == Just (Data.encode ref))
+                )
+                (Tx.outputsTo (PubKeyCredential seller) ctx)
+
+        Nothing ->
+            False
+```
+
+**Allow one input of the script per transaction** when an output can't carry a tag, for example an output
+that returns funds to the script under the script's own datum:
+
+```elm
+onlyScriptInput : TxInInfo -> ScriptContext -> Bool
+onlyScriptInput own ctx =
+    List.length
+        (List.filter (\input -> input.resolved.address.credential == own.resolved.address.credential)
+            ctx.txInfo.inputs
+        )
+        == 1
+```
+
+Call it with the input from `Tx.ownInput ctx`. When funds return to the script, check the whole value that
+stays, not only the token you care about: an output that keeps the tokens but not the lovelace lets the
+spender take the rest. `Value.geq output.value expected` requires at least `expected`. To also stop a
+spender from padding the output with other tokens, require the tokens exactly:
+`Value.withoutLovelace output.value == Value.withoutLovelace expected`, with `Value.lovelaceOf` compared
+by `>=`. The [escrow, marketplace and order-swap examples](/reference/examples/)
+use these defences, and each has a scenario that shows the attack failing.
+
 ## A complete example: settling an invoice
 
-This validator locks an invoice. Anyone may spend it, but only in a transaction that pays the payee the full amount and that is guaranteed to run before the due date. It reads outputs, addresses, values and the validity range.
+This validator locks an invoice. Anyone may spend it, but only in a transaction that pays the payee the full
+amount and that is guaranteed to run before the due date. The payment carries the invoice's output
+reference, so one payment can't settle two invoices.
 
 ```toml title="elci.toml"
 [project]
@@ -278,16 +335,15 @@ julc-version = "0.1.0-gb-5a3378b"
 [validators.invoice]
 boundary = "julc-strict-v1"
 spend = "Invoice.spend"
-
-[java-modules]
-"Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
 ```
 
 ```elm title="src/Invoice.elm"
 module Invoice exposing (Invoice, spend)
 
-import Julc.Interval as Interval
-import Julc.Ledger exposing (Credential(..), PubKeyHash, ScriptContext, TxOut)
+import Interval
+import Julc.Data as Data
+import Julc.Ledger exposing (Credential(..), PubKeyHash, ScriptContext, TxOut, TxOutRef)
+import Tx
 import Value
 
 
@@ -302,33 +358,46 @@ type alias Invoice =
 -}
 spend : Invoice -> () -> ScriptContext -> Bool
 spend invoice _ ctx =
-    let
-        paysPayee : TxOut -> Bool
-        paysPayee output =
-            (output.address.credential == PubKeyCredential invoice.payee)
-                && (Value.lovelaceOf output.value >= invoice.amount)
+    case Tx.ownRef ctx of
+        Just ref ->
+            Interval.isEntirelyBefore invoice.due ctx.txInfo.validRange
+                && List.any (settles invoice ref) (Tx.outputsTo (PubKeyCredential invoice.payee) ctx)
 
-        validUntil : Int
-        validUntil =
-            Interval.finiteUpperBound ctx.txInfo.validRange
-    in
-    List.any paysPayee ctx.txInfo.outputs
-        && (validUntil >= 0)
-        && (validUntil <= invoice.due)
+        Nothing ->
+            False
+
+
+{-| The output pays the full amount and carries the invoice's output reference.
+-}
+settles : Invoice -> TxOutRef -> TxOut -> Bool
+settles invoice ref output =
+    (Value.lovelaceOf output.value >= invoice.amount)
+        && (Tx.inlineDatum output == Just (Data.encode ref))
 ```
 
-- `paysPayee` compares the output's payment credential with the payee's key and reads its lovelace. It ignores the staking part of the address, so any address of the payee's key counts.
-- `validUntil >= 0` rejects a transaction without an upper bound, which could run at any time.
+- `Tx.ownRef` is the invoice's output reference. It is `Nothing` only when the script runs for another
+  purpose, which this validator doesn't handle.
+- `Interval.isEntirelyBefore` rejects a transaction without an end to its validity range, which could run
+  at any time.
+- `Tx.outputsTo` ignores the staking part of the address, so any address of the payee's key counts.
 
-The tests build the payee's address from its key and add an output paying it:
+The tests pay the payee with `Scenario.toKey`, an output to the key's address without a staking part, and
+tag the payment with `Scenario.withDatum`:
 
 ```elm title="tests/InvoiceTest.elm"
-module InvoiceTest exposing (latePaymentsFail, openEndedPaymentsFail, paymentSettles, shortPaymentsFail)
+module InvoiceTest exposing
+    ( latePaymentsFail
+    , openEndedPaymentsFail
+    , paymentForAnotherInvoiceFails
+    , paymentSettles
+    , shortPaymentsFail
+    , untaggedPaymentsFail
+    )
 
 import Invoice exposing (Invoice)
 import Julc.Data as Data
-import Julc.Ledger as Ledger exposing (Address, PubKeyHash)
-import Scenario exposing (Scenario)
+import Julc.Ledger exposing (PubKeyHash)
+import Scenario exposing (Output, Scenario)
 
 
 payee : PubKeyHash
@@ -336,75 +405,103 @@ payee =
     Scenario.key "payee"
 
 
-payeeAddress : Address
-payeeAddress =
-    Ledger.Address (Ledger.PubKeyCredential payee) (Data.toOptional Nothing)
-
-
 invoice : Invoice
 invoice =
     { payee = payee, amount = 5000000, due = 10000 }
 
 
-settle : Int -> Scenario
-settle lovelace =
+{-| A payment to the payee, tagged with the output reference of invoice `index`.
+-}
+payment : Int -> Int -> Output
+payment index lovelace =
+    Scenario.toKey payee lovelace
+        |> Scenario.withDatum (Data.encode (Scenario.outRef "invoice" index))
+
+
+settle : Output -> Scenario
+settle paid =
     Scenario.spend "invoice" (Scenario.outRef "invoice" 0) (Data.encode invoice)
-        |> Scenario.output (Scenario.toAddress payeeAddress lovelace)
+        |> Scenario.output paid
 
 
 paymentSettles : Scenario
 paymentSettles =
-    settle 5000000
+    settle (payment 0 5000000)
         |> Scenario.validBefore 9000
 
 
 shortPaymentsFail : Scenario
 shortPaymentsFail =
-    settle 4999999
+    settle (payment 0 4999999)
         |> Scenario.validBefore 9000
         |> Scenario.expectFailure
 
 
 latePaymentsFail : Scenario
 latePaymentsFail =
-    settle 5000000
+    settle (payment 0 5000000)
         |> Scenario.validBefore 10001
         |> Scenario.expectFailure
 
 
-{-| Without an upper bound the transaction could run after the due date.
+{-| Without an end to its validity range, the transaction could run after the due date.
 -}
 openEndedPaymentsFail : Scenario
 openEndedPaymentsFail =
-    settle 5000000
+    settle (payment 0 5000000)
+        |> Scenario.expectFailure
+
+
+untaggedPaymentsFail : Scenario
+untaggedPaymentsFail =
+    settle (Scenario.toKey payee 5000000)
+        |> Scenario.validBefore 9000
+        |> Scenario.expectFailure
+
+
+{-| A payment tagged for another invoice can't settle this one too.
+-}
+paymentForAnotherInvoiceFails : Scenario
+paymentForAnotherInvoiceFails =
+    settle (payment 1 5000000)
+        |> Scenario.validBefore 9000
         |> Scenario.expectFailure
 ```
-
-`Data.toOptional Nothing` builds the address's empty staking part: the ledger field is a `JulcOptional`, the reverse of `fromOptional`.
 
 ```sh
 elci test .
 ```
 
 ```text
-PASS InvoiceTest.paymentSettles (cpu 21152628, mem 74985)
-PASS InvoiceTest.shortPaymentsFail (cpu 20673797, mem 74155)
-PASS InvoiceTest.latePaymentsFail (cpu 21136628, mem 74885)
-PASS InvoiceTest.openEndedPaymentsFail (cpu 20220760, mem 72060)
-4 passed, 0 failed
+PASS InvoiceTest.paymentSettles (cpu 31704477, mem 108622)
+PASS InvoiceTest.shortPaymentsFail (cpu 28198789, mem 101740)
+PASS InvoiceTest.latePaymentsFail (cpu 18812622, mem 71468)
+PASS InvoiceTest.openEndedPaymentsFail (cpu 16656709, mem 65018)
+PASS InvoiceTest.untaggedPaymentsFail (cpu 31025075, mem 108726)
+PASS InvoiceTest.paymentForAnotherInvoiceFails (cpu 32082910, mem 110554)
+6 passed, 0 failed
 ```
 
-## Helper libraries
+`validBefore 10000` would also settle: its end is exclusive, so the transaction can't run at the due time.
 
-Julc's standard library has more helpers over the context. Map a class under `[java-modules]` and import it with the alias you chose. Some useful ones:
+## Julc's helper libraries
 
-| Class under `org.julclang.stdlib.lib` | Examples |
+The core modules cover what Julc's `ContextsLib`, `IntervalLib` and most of `OutputLib` are used for. Julc's
+libraries still help in a few cases. Map a class under `[java-modules]` and import it with the alias you
+chose:
+
+| Class under `org.julclang.stdlib.lib` | Still useful for |
 | --- | --- |
-| `IntervalLib` | `finiteLowerBound`, `finiteUpperBound`, `contains`, `between` |
-| `OutputLib` | `paidAtLeast`, `lovelacePaidTo`, `outputsAt`, `getInlineDatum` |
-| `ContextsLib` | `findOwnInput`, `getContinuingOutputs`, `ownHash`, `valuePaid` |
-| `AddressLib` | `paymentCredential`, `isScriptAddress`, `credentialHash` |
+| `OutputLib` | matching outputs by whole address, staking part included: `outputsAt`, `lovelacePaidTo`, `paidAtLeast` |
+| `AddressLib` | classifying an address: `isPubKeyAddress`, `isScriptAddress`, `paymentCredential`, `credentialHash` |
 
-Functions that return a Java `Optional`, such as `findOwnInput`, give you a `JulcOptional`; convert it with `Julc.Data.fromOptional`. `ContextsLib` and `OutputLib` may return the ledger's own values, as `valuePaid` does, but no other Java library may hand Elci a `Value`: `ValuesLib.add` and the other exports that build one are rejected (`ELCI2105`), because Java libraries don't keep values in the ledger's order. Use the `Value` module for those. The [standard library](/advanced/standard-library/) page lists every verified export.
+Prefer the `Interval` module to `IntervalLib`: `IntervalLib.finiteLowerBound` and `finiteUpperBound` return
+`-1` for an infinite bound, a sentinel that makes "no end" look like "ends at -1". Don't alias a Java module
+as `Interval` or `Tx`; those names belong to the core modules. Functions that return a Java `Optional`, such
+as `ContextsLib.findOwnInput`, give you a `JulcOptional`; convert it with `Julc.Data.fromOptional`.
+`ContextsLib` and `OutputLib` may return the ledger's own values, as `valuePaid` does, but no other Java
+library may hand Elci a `Value`: `ValuesLib.add` and the other exports that build one are rejected
+(`ELCI2105`), because Java libraries don't keep values in the ledger's order. Use the `Value` module for
+those. The [standard library](/advanced/standard-library/) page lists every verified export.
 
 Next, see how your own datum and redeemer types cross the boundary in [Datums and redeemers](/contracts/datums-and-redeemers/).

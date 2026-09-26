@@ -1,14 +1,14 @@
 ---
 title: Core modules
-description: Exact signatures and semantics of Elci's core library, imported by default as in Elm, and of the Dict, Map, Array, Value, Bytes, Julc.Data and Debug modules.
+description: Exact signatures and semantics of Elci's core library, imported by default as in Elm, and of the Dict, Map, Array, Value, Interval, Tx, Bytes, Julc.Data and Debug modules.
 sidebar:
   order: 3
 ---
 
 This page lists every function the compiler provides without configuration: the `Basics` prelude, the
 `List`, `Maybe`, `Result`, `Tuple` and `String` modules that every module imports, and the `Dict`, `Map`,
-`Array`, `Value`, `Bytes`, `Julc.Data` and `Debug` modules. Signatures are exact; the notes describe behavior,
-failure cases and cost. Names, argument orders and edge cases follow Elm 0.19's core library; the few differences
+`Array`, `Value`, `Interval`, `Tx`, `Bytes`, `Julc.Data` and `Debug` modules. Signatures are exact; the notes
+describe behavior, failure cases and cost. Names, argument orders and edge cases follow Elm 0.19's core library; the few differences
 are listed [at the end](#differences-from-elm).
 
 ## Default imports
@@ -29,8 +29,8 @@ So `max`, `compare`, `Just` and `Ok` work unqualified, and `List.map`, `String.f
 work qualified. Writing one of these imports yourself is allowed; an `exposing` list then adds names, as
 in `import List exposing (head)`.
 
-`Bytes`, `Dict`, `Map`, `Array`, `Value` and `Julc.Data` need an explicit import, as `Dict` and `Array` do
-in Elm. Using one without it names the import to add:
+`Bytes`, `Dict`, `Map`, `Array`, `Value`, `Interval`, `Tx` and `Julc.Data` need an explicit import, as `Dict`
+and `Array` do in Elm. Using one without it names the import to add:
 
 ```text
 src/Main.elm:6:5: ELCI2104: Bytes.fromString needs the Bytes module; add `import Bytes`
@@ -53,6 +53,9 @@ src/Main.elm:6:5: ELCI2104: Bytes.fromString needs the Bytes module; add `import
 - Qualified names always work: `Basics.max`, `Maybe.withDefault`, `Result.Ok`.
 - An import can't use a default module's name as its alias. `import Utils as String` gives
   `ELCI2104: The alias String names a core module that every module imports; choose another alias for Utils`.
+- Nor can it use the name of any other core module or of a module in the project, since the
+  two modules' names would merge. `import Julc.Interval as Interval` gives
+  `ELCI2104: The alias Interval names Elci's core module Interval; choose another alias for Julc.Interval`.
 
 The core modules are compiled with your code. A function you don't use is never compiled into the
 script, so the default imports cost nothing.
@@ -66,7 +69,7 @@ script, so the default imports cost nothing.
 | `String` | UTF-8 text; `++` appends; functions in [`String`](#string) |
 | `()` | the unit value `()` |
 | `Bytes` | byte strings; functions in [`Bytes`](#bytes) |
-| `Data` | opaque Plutus Data; convert with [`Julc.Data`](#julcdata) |
+| `Data` | Plutus Data; `==` compares structure; convert with [`Julc.Data`](#julcdata) |
 | `List a` | linked lists; functions in [`List`](#list) |
 | `Maybe a` | `Nothing`, `Just a`; functions in [`Maybe`](#maybe) |
 | `Result error value` | `Ok value`, `Err error`; functions in [`Result`](#result) |
@@ -83,7 +86,8 @@ importing their modules. You may also write them as in Elm, with `import Dict ex
 qualified as `Dict.Dict`, and likewise for `Map` and `Array`. The compiler's own modules qualify their types
 the same way: `Bytes.Bytes` after `import Bytes`, and `Data.Data` after `import Julc.Data as Data`. `Value`
 is not an Elm type, so its name needs an import: `import Value exposing (Value)`, or `Value.Value` after
-`import Value`. Reading `out.value` needs no import.
+`import Value`. Reading `out.value` needs no import. The same holds for `Interval`: name it after
+`import Interval exposing (Interval)`, but read `ctx.txInfo.validRange` without one.
 
 `Maybe`, `Just` and `Nothing` are built into the compiler. A module can't declare constructors named
 `Just`, `Nothing`, `True` or `False` (`ELCI2011: Nothing is a constructor of the built-in Maybe type;
@@ -597,7 +601,9 @@ cpu 36520840, mem 151709
 Avoid making results depend on map order. To process the bindings in key order, sort them,
 `List.sortBy Tuple.first (Map.toList prices)`, or keep them in a [`Dict`](#dict).
 
-**No equality.** `==` on maps is rejected (`ELCI2003`). Compare the lookups you care about.
+**No equality.** `==` on maps is rejected (`ELCI2003`): two maps with the same bindings may hold them in
+different orders. For the same reason `Data.encode` of two such maps may differ. Compare the lookups you
+care about, or their `toList` after sorting, or use a `Dict`.
 
 **Repeated keys.** A map built in Elci never repeats a key, but a map decoded from Data can, because
 decoding doesn't check a `Map`'s keys. In such a map, `get` returns the first binding of the key, `remove`
@@ -838,6 +844,168 @@ this module covers them. A value has no constructors or patterns of its own:
 `import Julc.Ledger exposing (Value(..))` gives
 `ELCI2104: Value has no approved constructors or patterns; its values come from the Value module`.
 
+## `Interval`
+
+`import Interval`. An `Interval` is the ledger's time range, such as the transaction's validity range
+`ctx.txInfo.validRange`. Times are POSIX milliseconds. A range has a start, `range.from`, and an end,
+`range.to`. Each bound is `NegInf`, `Finite time` or `PosInf`, and is inclusive or exclusive.
+
+A script can't read the clock. The ledger accepts a transaction only inside its validity range, so a time
+check asks where the whole range lies: `isEntirelyAfter deadline ctx.txInfo.validRange` holds only when
+the transaction cannot run at or before the deadline.
+
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `isEntirelyAfter` | `Int -> Interval -> Bool` | `isEntirelyAfter t range`: the range has a finite start, and every time in it is after `t` |
+| `isEntirelyBefore` | `Int -> Interval -> Bool` | `isEntirelyBefore t range`: the range has a finite end, and every time in it is before `t` |
+| `contains` | `Int -> Interval -> Bool` | `contains t range`: `t` is in the range |
+| `start` | `Interval -> Maybe Int` | the finite start, or `Nothing` |
+| `end` | `Interval -> Maybe Int` | the finite end, or `Nothing` |
+| `after` | `Int -> Interval` | from `t` on, inclusive |
+| `before` | `Int -> Interval` | up to `t`, inclusive |
+| `between` | `Int -> Int -> Interval` | `between low high`: from `low` to `high`, both inclusive |
+| `everything` | `Interval` | all time |
+
+"After" and "before" are strict: no time in the range may equal `t`. The checks honor each bound's
+inclusiveness. A scenario's `Scenario.validFrom t` gives the range an inclusive start, and
+`Scenario.validBefore t` an exclusive end, so:
+
+- `isEntirelyAfter deadline` holds for a range valid from `deadline + 1` on, not from `deadline`. To
+  accept a transaction valid from the deadline itself, check `isEntirelyAfter (deadline - 1)`.
+- `isEntirelyBefore deadline` holds for a range valid before `deadline`: the exclusive end may equal it.
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+import Interval exposing (Interval)
+import Julc.Ledger exposing (Interval(..), IntervalBound(..), IntervalBoundType(..))
+
+
+{-| A validity range from 1000, inclusive, to 2000, exclusive.
+-}
+window : Interval
+window =
+    Interval (IntervalBound (Finite 1000) True) (IntervalBound (Finite 2000) False)
+
+
+main : ( ( Bool, Bool, Bool ), ( Bool, Bool, Bool ), ( Bool, Bool, Maybe Int ) )
+main =
+    ( ( Interval.isEntirelyAfter 999 window, Interval.isEntirelyAfter 1000 window, Interval.contains 1000 window )
+    , ( Interval.isEntirelyBefore 2000 window, Interval.isEntirelyBefore 1999 window, Interval.contains 2000 window )
+    , ( Interval.isEntirelyAfter 0 (Interval.before 5), Interval.isEntirelyBefore 10 (Interval.after 5), Interval.end (Interval.after 5) )
+    )
+```
+
+```text
+$ elci eval
+( ( True, False, True ), ( True, False, False ), ( False, False, Nothing ) )
+cpu 44424561, mem 167367
+```
+
+The window starts at 1000, inclusive: it is entirely after 999 but not after 1000, and it contains 1000.
+It ends at 2000, exclusive: it is entirely before 2000 but not before 1999, and it doesn't contain 2000.
+
+**Unbounded ranges.** The two deadline checks never hold on an infinite bound. `isEntirelyAfter` needs a
+finite start and `isEntirelyBefore` a finite end, so a transaction that sets no validity range passes
+neither check, and `Interval.before 5` is not entirely after any time. A `PosInf` start or a `NegInf` end,
+which only an empty range has, fails the check that reads it, as in Aiken's stdlib v2; Aiken v3 lets such
+an empty range pass both checks. `start` and `end` return `Nothing` for an infinite bound, never a sentinel
+time. They return the bound's time whether or not it is inclusive; read `range.from.isInclusive` when that
+matters, or use the checks, which account for it.
+
+The constructors `Interval`, `IntervalBound`, `Finite`, `NegInf` and `PosInf` come from `Julc.Ledger`, as in
+the example. The `Interval` type is the ledger's, so `import Julc.Ledger exposing (Interval)` names the
+same type.
+
+**Cost.** Each check reads one or two bounds and compares integers. `isEntirelyAfter` and
+`isEntirelyBefore` cost about 2.8 million CPU units, `contains` about 5.5 million.
+
+## `Tx`
+
+`import Tx`. Questions about the transaction a script validates. Every function takes the `ScriptContext`
+last, so a check reads `Tx.signedBy owner ctx`.
+
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `signedBy` | `PubKeyHash -> ScriptContext -> Bool` | the key is among the transaction's signatories |
+| `spends` | `TxOutRef -> ScriptContext -> Bool` | the transaction spends the output; reference inputs don't count |
+| `findInput` | `TxOutRef -> ScriptContext -> Maybe TxInInfo` | the spent output with that reference, with its address, value and datum |
+| `ownRef` | `ScriptContext -> Maybe TxOutRef` | when spending, the reference of the output being validated |
+| `ownInput` | `ScriptContext -> Maybe TxInInfo` | when spending, the output being validated |
+| `ownPolicy` | `ScriptContext -> Maybe PolicyId` | when minting, the script's own policy id |
+| `outputsTo` | `Credential -> ScriptContext -> List TxOut` | the outputs whose payment credential is the credential, in order |
+| `valuePaidTo` | `Credential -> ScriptContext -> Value` | the total value of those outputs |
+| `continuingOutputs` | `ScriptContext -> List TxOut` | when spending, the outputs to the spent output's address |
+| `valueSpent` | `ScriptContext -> Value` | the total value of the spent outputs |
+| `valueProduced` | `ScriptContext -> Value` | the total value of the outputs |
+| `mintedOf` | `PolicyId -> ScriptContext -> Dict TokenName Int` | the tokens the policy mints; a burn is a negative quantity |
+| `inlineDatum` | `TxOut -> Maybe Data` | the output's inline datum |
+| `datumOf` | `TxOut -> ScriptContext -> Maybe Data` | the output's datum: inline, or by its hash from the datums the transaction supplies |
+
+- **Purposes.** `ownRef`, `ownInput` and `continuingOutputs` describe the output a spend handler
+  validates, and `ownPolicy` the policy a mint handler validates. For any other purpose they return
+  `Nothing` or `[]`. Match the `Nothing` case and return `False`.
+- **Credentials, not addresses.** `outputsTo` and `valuePaidTo` match an output's payment credential
+  (`output.address.credential`) and ignore its staking part. Whoever builds the transaction chooses the
+  payee's staking part: a payment to the seller's key counts whatever staking credential its address
+  carries. When the staking part matters, store the payee's full `Address` and compare `output.address`. `continuingOutputs` compares whole addresses, staking part included.
+- **Payments must be tagged.** "Some output pays the seller" is true for two script inputs spent in one
+  transaction when one output pays for both. This is the double-satisfaction attack, and an untagged
+  `valuePaidTo` check has it. Require each payment to carry the spent output's reference as its inline
+  datum, as below, or allow one script input per transaction.
+  [Reading the transaction](/contracts/reading-the-transaction/#one-payment-per-input) explains both
+  defences.
+- **Datums stay `Data`.** `inlineDatum` returns `Nothing` for an output with a datum hash or no datum.
+  `datumOf` also finds a datum by its hash in `txInfo.datums`, and returns `Nothing` when the transaction
+  doesn't supply it. Decode a datum with an annotated `Data.decode`, which fails the script on a malformed
+  datum, or compare it with an expected encoding: `==` on `Data` compares structure.
+- **Values.** `valueSpent` sums the spent outputs, not the reference inputs. `valueProduced` sums the
+  outputs; the fee and the minted tokens are separate fields, `txInfo.fee` and `txInfo.mint`. `mintedOf`
+  is `Value.tokens policy ctx.txInfo.mint`: an empty `Dict` when the policy mints nothing.
+
+A payment check that pays for this input only:
+
+```elm title="src/Sale.elm"
+module Sale exposing (paidFor)
+
+import Julc.Data as Data
+import Julc.Ledger exposing (Credential(..), PubKeyHash, ScriptContext)
+import Tx
+import Value
+
+
+{-| An output pays the seller at least `price` lovelace and carries this input's
+reference as its inline datum.
+-}
+paidFor : PubKeyHash -> Int -> ScriptContext -> Bool
+paidFor seller price ctx =
+    case Tx.ownRef ctx of
+        Just ref ->
+            List.any
+                (\output ->
+                    (Value.lovelaceOf output.value >= price)
+                        && (Tx.inlineDatum output == Just (Data.encode ref))
+                )
+                (Tx.outputsTo (PubKeyCredential seller) ctx)
+
+        Nothing ->
+            False
+```
+
+**Cost.** The functions walk the transaction's lists. Measured per element, in CPU units:
+
+| Function | Cost |
+| --- | --- |
+| `signedBy` | about 0.7 million per signatory before the key |
+| `spends`, `findInput`, `ownInput` | about 2.5 million per input before the match; `spends` walks every input when the output isn't spent |
+| `outputsTo` | about 2.8 million per output |
+| `valuePaidTo` | as `outputsTo`, plus about 2.9 million per matching output to add its value |
+| `continuingOutputs` | `ownInput`, then about 3.6 million per output |
+| `valueSpent`, `valueProduced` | about 3.3 million per input and 2.8 million per output |
+| `ownRef`, `ownPolicy`, `inlineDatum` | a few field reads, whatever the transaction's size |
+
+When a branch needs a result twice, bind it once in a `let` inside that branch.
+
 ## `Bytes`
 
 `import Bytes`. Each function is a direct Plutus builtin call, with the byte string last.
@@ -922,7 +1090,46 @@ inlineAmount datum =
   A `Dict` whose keys are not strictly ascending fails too, and so does a `Value` that is not canonical.
 - **Optionals.** Julc's optional tags `Some` as 0 and `None` as 1, the reverse of `Maybe`. The adapters
   swap the tags without decoding the payload.
-- **Opaque.** `Data` has no `==` and no order; decode it first.
+- **Equality.** `==` and `/=` on `Data` compare structure exactly, with the `equalsData` builtin. Elci's
+  encodings are deterministic, so `Data.encode a == Data.encode b` exactly when `a == b` for your records,
+  custom types, lists and dictionaries. That makes a datum check one comparison:
+  `Tx.inlineDatum output == Just (Data.encode expected)`. A `Map` has no `==`: two maps with the same
+  bindings may hold them in different orders, so their encodings may differ too. Compare their `toList`
+  after sorting, or use a `Dict`. `Data` is not comparable: `<` and sorting reject it.
+
+```elm title="src/Main.elm"
+module Main exposing (main)
+
+import Dict
+import Julc.Data as Data
+import Map
+
+
+type alias Payout =
+    { beneficiary : Int
+    , amount : Int
+    }
+
+
+main : ( Bool, Bool, ( Bool, Bool ) )
+main =
+    ( Data.encode (Payout 1 2) == Data.encode { amount = 2, beneficiary = 1 }
+    , Data.encode (Just 5) == Data.encode 5
+    , ( Data.encode (Dict.fromList [ ( 1, 10 ), ( 2, 20 ) ]) == Data.encode (Dict.fromList [ ( 2, 20 ), ( 1, 10 ) ])
+      , Data.encode (Map.fromList [ ( 1, 10 ), ( 2, 20 ) ]) == Data.encode (Map.fromList [ ( 2, 20 ), ( 1, 10 ) ])
+      )
+    )
+```
+
+```text
+$ elci eval
+( True, False, ( True, False ) )
+cpu 62954744, mem 240991
+```
+
+The record and the record literal with the same fields encode alike; `Just 5` and `5` do not. The two
+dictionaries hold the same bindings, so their encodings are equal; the two maps hold them in different
+orders, so theirs are not.
 
 The encoding rules are in the [language reference](/reference/language/#data-encoding).
 
@@ -966,7 +1173,9 @@ tests. See [debugging and budgets](/testing/debugging/).
 `Julc.Ledger` provides the ledger types (`ScriptContext`, `TxInfo`, `PubKeyHash`, `TxOutRef`,
 `Credential` and more) rather than functions. See
 [reading the transaction](/contracts/reading-the-transaction/). Its `Value` is the type of the
-[`Value`](#value) module, so `import Julc.Ledger exposing (Value)` names the same type.
+[`Value`](#value) module and its `Interval` the type of the [`Interval`](#interval) module, so
+`import Julc.Ledger exposing (Value)` names the same type. The [`Tx`](#tx) module answers the common
+questions about a `ScriptContext`.
 
 ## Differences from Elm
 

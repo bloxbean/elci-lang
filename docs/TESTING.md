@@ -182,16 +182,27 @@ For each scenario, the runner does the following:
 | `expectFailure` | the validator must reject the transaction |
 | `withinBudget cpu memory` | the execution must stay within the budget |
 
-Outputs are built with `toScript lovelace` (the validator's own address) or
-`toAddress address lovelace`, and extended with `withDatum data` and
-`withToken policy name quantity`. A policy is `Own` or `Policy bytes`.
+Outputs are built with `toScript lovelace` (the validator's own address),
+`toStakedScript stake lovelace` (the validator's payment credential with a staking
+part, another address), `toAddress address lovelace` or `toKey key lovelace` (a
+key's address without a staking part), and extended with `withDatum data` (an inline datum),
+`withDatumHash data` (the datum's hash on the output, and the datum among the
+transaction's witnesses, where `Tx.datumOf` finds it) and
+`withToken policy name quantity`. A policy is `Own` or `Policy bytes`. An
+`Output` record holds an inline datum in `datum` and a datum by hash in
+`hashedDatum : Maybe Data`.
 
 Every value the runner builds (outputs, inputs and the minted value) is canonical,
 as the core `Value` module requires ([ADR-009](../adr/009-dict-native-value-and-map.md)):
 policies and token names ascend by unsigned bytes, quantities of a repeated token
 are added, and zero quantities are dropped. A policy id or token name longer than
-32 bytes stops the run with `A scenario value has a policy id or token name longer
-than 32 bytes, which the ledger does not allow`.
+32 bytes fails the scenario before the validator runs, even with `expectFailure`:
+`cannot build the transaction: A scenario value has a policy id or token name
+longer than 32 bytes, which the ledger does not allow`. An input listed at the
+spent reference replaces the default spent output and must hold the datum the
+spend gives, inline or by hash; otherwise the scenario fails the same way, with
+`the spent output ... is listed with a different datum from the one
+Scenario.spend gives`.
 
 `Scenario.key name` and `Scenario.outRef name index` derive deterministic test key
 hashes and output references from a name. `Bytes.fromString` makes token names.
@@ -200,10 +211,10 @@ hashes and output references from a name. `Bytes.fromString` makes token names.
 ### Limits
 
 A scenario covers single-signature and multi-signature checks, validity ranges,
-lovelace, the own policy's tokens and other given policies, inline datums, and
-every purpose. The following need the JVM facade below:
+lovelace, the own policy's tokens and other given policies, inline datums, datums
+by hash with their witnesses, and every purpose. The following need the JVM facade
+below:
 
-- datum hashes with witness tables;
 - reference scripts;
 - other staking credentials and additional withdrawals;
 - more than one script in a transaction.
@@ -296,8 +307,8 @@ To narrow a value, transform it in the property. Arguments shrink before the
 transformation, so the counterexample stays small:
 
 ```elm
-claimsSucceedFromTheDeadline : Int -> Property
-claimsSucceedFromTheDeadline raw =
+claimsSucceedAfterTheDeadline : Int -> Property
+claimsSucceedAfterTheDeadline raw =
     let
         time =
             modBy 2000 raw

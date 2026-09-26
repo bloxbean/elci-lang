@@ -15,16 +15,18 @@ Elci compiles an Elm 0.19 syntax subset (`.elm` files) to Plutus V3 validators f
 browser Elm: there is no `Html`, `Cmd`, `port`, `elm.json`, Elm package, `Float`, `Char` or `Set`. Elm's
 core modules `Basics`, `List`, `Maybe`, `Result`, `Tuple`, `String` and `Dict` exist with Elm's names and
 argument orders, but `String` has only a few functions. A `Value` module handles the ledger's multi-asset
-values. Evaluation is strict.
+values, and the `Tx` and `Interval` modules answer questions about the transaction and its validity range.
+Evaluation is strict.
 
 ## Must-follow rules
 
 1. Give every top-level declaration a type signature. Module `A.B` lives at `src/A/B.elm`.
 2. Elm's default imports apply: `Basics exposing (..)`, `List`, `Maybe exposing (Maybe(..))`,
    `Result exposing (Result(..))`, `String`, `Tuple`, `Debug`. Import `Dict exposing (Dict)`, `Map`,
-   `Array`, `Value exposing (Value)`, `Bytes` and `Julc.Data as Data` when you use them. `Julc.Ledger` provides ledger types; expose
-   constructors with `Type(..)`. Never name a module or alias `Basics`, `List`, `Maybe`, `Result`, `String`,
-   `Tuple`, `Map`, `Dict`, `Array`, `Set`, `Value` or `Elci`, a constructor `Just`, `Nothing`, `True` or
+   `Array`, `Value exposing (Value)`, `Interval`, `Tx`, `Bytes` and `Julc.Data as Data` when you use them.
+   `Julc.Ledger` provides ledger types; expose constructors with `Type(..)`. Never name a module or alias
+   `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`, `Set`, `Value`, `Interval`,
+   `Tx` or `Elci`, a constructor `Just`, `Nothing`, `True` or
    `False`, or a type `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Dict`, `Map`, `Array` or
    `Float`.
 3. Use only the core functions that exist (see `/ai/catalog.json`). Prelude: `min`, `max`, `abs`,
@@ -40,7 +42,8 @@ values. Evaluation is strict.
 5. `<`, `>`, `<=`, `>=`, `compare`, `max` and `List.sort` work on comparable types: `Int`, `String`,
    `Bytes`, ledger hashes such as `PubKeyHash`, and lists and tuples of these. Sort records with
    `List.sortBy`. A signature variable used with `<` must be named `comparable`, with `++` `appendable`.
-   `==` does not work on functions, `Data`, `Map`, `Array` or `TxOut`; it works on `Dict` and `Value`.
+   `==` does not work on functions, `Map`, `Array` or `TxOut`; it works on `Dict`, `Value` and `Data`
+   (exact structure: `Tx.inlineDatum out == Just (Data.encode expected)`).
    Arguments are strict: `Maybe.withDefault` evaluates its default.
 6. Negation is Elm's: `f -1` passes `-1`; write `x - 1` to subtract.
 7. Configure validators in `elci.toml`, never in source: `[validators.<name>]` with
@@ -61,11 +64,16 @@ values. Evaluation is strict.
 11. Use `Dict` for data you build or look up by a comparable key, including datums. Use `Map` for ledger
     maps (`txInfo.withdrawals`, `txInfo.redeemers`) and keys that are not comparable. Both look up in
     O(n); `Map.fromList` is O(n²), `Dict.fromList` O(n log n).
-12. Keep `PubKeyHash` and `Bytes` apart; use `.hash` when raw bytes are needed. Signature check:
-    `List.member key ctx.txInfo.signatories`.
+12. Keep `PubKeyHash` and `Bytes` apart; use `.hash` when raw bytes are needed, including `token.hash` for
+    a `TokenName` (it has no `.name`). Read the transaction with the core `Tx` module:
+    `Tx.signedBy key ctx`, `Tx.ownRef`, `Tx.ownInput`, `Tx.ownPolicy`, `Tx.outputsTo`,
+    `Tx.continuingOutputs`, `Tx.mintedOf`, `Tx.inlineDatum`, `Tx.datumOf`. Don't hand-write these walks.
 13. Every `let` value is evaluated even if unused. Put cheap checks first, inline, in `&&` chains.
     Keep expensive work out of top-level values; they run for every purpose of the script.
-14. `Interval.finiteLowerBound`/`finiteUpperBound` return `-1` for an infinite bound. Handle it.
+14. Check deadlines with the core `Interval` module: `Interval.isEntirelyAfter deadline ctx.txInfo.validRange`
+    and `Interval.isEntirelyBefore deadline ctx.txInfo.validRange`. Both are strict and need a finite bound,
+    so a transaction without a validity range fails them. `Scenario.validFrom` is inclusive and
+    `Scenario.validBefore` exclusive. Don't use Julc's `IntervalLib`, whose bounds use a `-1` sentinel.
 15. Read and build ledger values (`out.value`, `ctx.txInfo.mint`) with the core `Value` module:
     `Value.lovelaceOf v`, `Value.quantityOf policy name v`, `Value.geq paid required`, `==` (exact). Make
     asset ids with `PolicyId bytes` and `TokenName bytes` from `Julc.Ledger exposing (PolicyId(..),
@@ -73,7 +81,7 @@ values. Evaluation is strict.
     `Value.negative`. Never read values through `Julc.Values` (`ValuesLib`): Java exports that return a
     `Value` are rejected (`ELCI2105`), except the ledger accessors of `ContextsLib` and `OutputLib`.
 16. Java libraries need a `[java-modules]` mapping, explicit `exposing` lists, and take the subject
-    first (`Interval.contains range time`). Never pass a type containing a `Dict` or a `Value` to a
+    first (`Output.outputsAt outputs address`). Never pass a type containing a `Dict` or a `Value` to a
     generic Java function (`ELCI3003`).
 17. Annotate a `Data.decode` result when inference cannot see its type (`ELCI3001`).
 18. Tests live in `tests/`. Only test modules may import `Expect`, `Scenario` and `Property`. A test is
@@ -81,8 +89,30 @@ values. Evaluation is strict.
     function returning `Property` is a property test. Keep helpers unexposed.
 19. Every scenario passes all validator parameters with `Scenario.parameters [ Data.encode x, ... ]`.
     Cover the success path, every failure path (`Scenario.expectFailure`) and at least one property
-    that generates offsets around each boundary.
+    that generates offsets around each boundary. Pay a key with `Scenario.toKey key lovelace`; attach an
+    inline datum with `Scenario.withDatum` or a datum by hash with `Scenario.withDatumHash`.
 20. Do not weaken tests or add `expectFailure` to make a failing test pass. Fix the validator.
+
+## Security rules for validators
+
+The `escrow`, `marketplace` and `order-swap` example projects follow the rules for spend validators and test each attack.
+
+1. Tag every payment a spend validator requires: the paying output carries the spent output's reference,
+   `Tx.inlineDatum output == Just (Data.encode ref)` with `ref` from `Tx.ownRef ctx`. An untagged
+   `Tx.valuePaidTo` check lets one output pay for two script inputs (double satisfaction).
+2. When outputs back to the script are matched by address (`Tx.continuingOutputs`), allow one input of
+   the script per transaction.
+3. Check the whole value that stays at the script with `Value.geq`, not one token, so the spender can't keep
+   the lovelace or other tokens. To stop padding with junk tokens too, compare `Value.withoutLovelace` of
+   both values with `==` and their lovelace with `>=`.
+4. Use `Value.geq` or `>=` for "pays at least"; `==` on values is exact.
+5. Require `Tx.signedBy` for every privileged action, and test it with a stranger's signature.
+6. Bound numbers from datums and parameters before using them: a fee in basis points between 0 and 10000,
+   quantities above 0. Parameters are not validated on-chain.
+7. `Tx.outputsTo` matches the payment credential; whoever builds the transaction chooses the payee's
+   staking part. Store and compare the full `output.address` when the staking part matters.
+8. A minting policy checks the whole mint under its policy:
+   `Dict.toList (Tx.mintedOf policy ctx) == [ ( TokenName name, quantity ) ]`.
 
 ## Workflow
 
@@ -110,6 +140,6 @@ Elci can't use, such as one that returns a `Value`.
 
 - `elci check` and `elci test` both exit with status 0.
 - Every rule of the validator has a passing scenario, and every way to break it has an
-  `expectFailure` scenario or a property.
+  `expectFailure` scenario or a property, including each attack in the security rules that applies.
 - elm-format 0.8.8 `--validate` passes. elm-format corrupts integer literals beyond 64 bits, so
   re-check any large constant after formatting.

@@ -79,9 +79,9 @@ boundary = "julc-strict-v1"
 parameters = ["admin"]
 mint = "Badge.mint"
 
-# Julc Java libraries, imported in Elci as `import Julc.Interval as Interval`.
+# Julc Java libraries, imported in Elci as `import Julc.Math as Math`.
 [java-modules]
-"Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
+"Julc.Math" = "org.julclang.stdlib.lib.MathLib"
 
 [tests]
 source-directories = ["tests"]
@@ -92,7 +92,7 @@ source-directories = ["tests"]
 | `[project]` | `source-directories`, the on-chain `target` and the `julc-version` the compiler must match. Optionally `library-jars` for custom Java libraries. |
 | `[validators.<name>]` | One deployed script with its own hash: `boundary`, handler keys (`spend`, `mint`, `withdraw`, `certify`, `vote`, `propose`), and optionally `parameters`, `spend-datum` and `expected-abi`. |
 | `[entrypoint]` | A function project: `module`, `function` and `purpose = "function"`. |
-| `[java-modules]` | Maps an Elm-style module name to a Julc on-chain Java library class. |
+| `[java-modules]` | Maps an Elm-style module name to a Julc on-chain Java library class. The core modules, such as `Tx` and `Interval`, need no mapping. |
 | `[tests]` | Where test modules live. The default is `["tests"]`. |
 
 Validator names use lowercase letters, digits, `-` and `_`, and start with a letter. The name becomes the

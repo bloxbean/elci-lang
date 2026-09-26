@@ -67,7 +67,8 @@ The rules:
   explicitly takes precedence over a prelude name, so `import Julc.Math exposing (max)` replaces the
   prelude's `max` in that module.
 - **Core module names are taken.** A `[java-modules]` key can't be `Basics`, `List`, `Maybe`, `Result`,
-  `String`, `Tuple`, `Map`, `Array`, `Dict`, `Value`, `Set` or `Elci`, or start with `Elci.`.
+  `String`, `Tuple`, `Map`, `Array`, `Dict`, `Value`, `Interval`, `Tx`, `Set` or `Elci`, or start with
+  `Elci.`.
 - **Names are checked where you use them.** A misspelled export is reported as
   `ELCI2005: Unknown name 'Math.maximum'; check that the imported module exports it`.
 
@@ -79,9 +80,9 @@ class is in the `org.julclang.stdlib.lib` package:
 | Class | Use it for |
 | --- | --- |
 | `MathLib` | `expMod`, `sign`, floor division and modulus (`max`, `min`, `abs` and `pow` are in the prelude as `max`, `min`, `abs` and `^`) |
-| `IntervalLib` | building and testing validity intervals |
-| `ContextsLib` | reading the script context: signers, own input, continuing outputs |
-| `OutputLib` | finding outputs and amounts paid to an address |
+| `IntervalLib` | building validity intervals; for deadline checks, use the core [`Interval`](/reference/core-modules/#interval) module, which has no `-1` sentinel |
+| `ContextsLib` | reading the script context; the core [`Tx`](/reference/core-modules/#tx) module covers signers, own input and continuing outputs |
+| `OutputLib` | finding outputs and amounts paid to an exact address, staking part included |
 | `ValuesLib` | a few `Value` queries; the core [`Value`](/reference/core-modules/#value) module covers the rest, and exports that return a `Value` are rejected |
 | `AddressLib` | address and credential helpers |
 | `CryptoLib` | hashes and Ed25519/ECDSA/Schnorr signature checks |

@@ -43,12 +43,13 @@ deployed script, run with a full ledger context. For a property it is the larges
 
 ```text
 $ elci test --seed 42
-PASS VestingTest.claimsAtTheDeadline (cpu 14681744, mem 54515)
-PASS VestingTest.claimsAfterTheDeadline (cpu 14681744, mem 54515)
-PASS VestingTest.earlyClaimsFail (cpu 11653545, mem 44742)
-PASS VestingTest.unsignedClaimsFail (cpu 13882675, mem 51354)
-PASS VestingTest.claimsSucceedExactlyFromTheDeadline (100 runs, max cpu 14681744, mem 54515)
-5 passed, 0 failed (seed 42)
+PASS VestingTest.claimsAfterTheDeadline (cpu 16763911, mem 61637)
+PASS VestingTest.claimsInAClosedRange (cpu 16763911, mem 61637)
+PASS VestingTest.claimsAtTheDeadlineFail (cpu 13950292, mem 52228)
+PASS VestingTest.earlyClaimsFail (cpu 13950292, mem 52228)
+PASS VestingTest.unsignedClaimsFail (cpu 16458714, mem 60004)
+PASS VestingTest.claimsSucceedExactlyAfterTheDeadline (100 runs, max cpu 16763911, mem 61637)
+6 passed, 0 failed (seed 42)
 ```
 
 To turn a budget into a requirement, add `Scenario.withinBudget cpu memory` to a scenario. See
@@ -75,7 +76,7 @@ example projects build to:
 | --- | --- | ---: |
 | `threshold` | spend | 149 |
 | `signed` | spend | 241 |
-| `vesting` | spend | 482 |
+| `vesting` | spend | 533 |
 | `treasury` (`badge`) | mint | 198 |
 | `treasury` (`treasury`) | spend, withdraw | 540 |
 

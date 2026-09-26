@@ -63,7 +63,7 @@ Elm, `n // 0` evaluates to `0`. In Elci, it fails the script, as do `modBy 0` an
 | `comparable`, `appendable`, `compappend` | Constrained type variables | The same. `Bytes` and ledger hashes such as `PubKeyHash` are also comparable |
 | `number` | `Int` or `Float` | Not available: write `Int` |
 | `2 ^ -1` | `0.5` | Fails the script |
-| `==` on functions | Runtime crash | Compile error, as for `Map` and opaque `Data` |
+| `==` on functions | Runtime crash | Compile error, as for `Map`. `==` on `Data` compares structure |
 | Extensible records `{ r \| x : Int }` | Available | Not available. Records are closed |
 | Accessor functions (`.price`) | Available | Not available. Use `\item -> item.price` |
 | Let-polymorphism | Values and functions | Only for non-expansive bindings (functions, lambdas, plain values) |

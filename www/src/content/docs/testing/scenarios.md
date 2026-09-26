@@ -60,21 +60,16 @@ withdraw = "Market.withdraw"
 boundary = "julc-strict-v1"
 parameters = ["organizer"]
 mint = "Ticket.mint"
-
-[java-modules]
-"Julc.Contexts" = "org.julclang.stdlib.lib.ContextsLib"
-"Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
-"Julc.Output" = "org.julclang.stdlib.lib.OutputLib"
 ```
 
 ```elm title="src/Market.elm"
 module Market exposing (Action(..), Listing, spend, withdraw)
 
-import Julc.Contexts as Contexts
+import Interval
 import Julc.Data as Data
-import Julc.Interval as Interval
-import Julc.Ledger as Ledger exposing (Address, OutputDatum(..), PubKeyHash, ScriptContext, TxOut)
-import Julc.Output as Output
+import Julc.Ledger exposing (Credential(..), PubKeyHash, ScriptContext, TxOut)
+import Tx
+import Value
 
 
 type alias Listing =
@@ -97,60 +92,53 @@ spend : PubKeyHash -> Listing -> Action -> ScriptContext -> Bool
 spend _ listing action ctx =
     case action of
         Buy ->
-            Output.paidAtLeast ctx.txInfo.outputs (walletOf listing.seller) listing.price
-                && endsBy listing.expires ctx
+            sellerPaid listing ctx
+                && Interval.isEntirelyBefore listing.expires ctx.txInfo.validRange
 
         Reprice newPrice ->
-            signedBy listing.seller ctx
-                && List.any (holds { listing | price = newPrice }) (Contexts.getContinuingOutputs ctx)
+            Tx.signedBy listing.seller ctx
+                && List.any (holds { listing | price = newPrice }) (Tx.continuingOutputs ctx)
 
         Delist ->
-            signedBy listing.seller ctx
+            Tx.signedBy listing.seller ctx
 
 
 {-| Only the operator withdraws the market's staking rewards.
 -}
 withdraw : PubKeyHash -> () -> ScriptContext -> Bool
 withdraw operator _ ctx =
-    signedBy operator ctx
+    Tx.signedBy operator ctx
 
 
-walletOf : PubKeyHash -> Address
-walletOf key =
-    Ledger.Address (Ledger.PubKeyCredential key) (Data.toOptional Nothing)
-
-
-{-| The transaction's validity range must end, and end no later than `time`.
+{-| An output pays the seller the price and carries this listing's output reference, so
+that it can't also pay for another listing in the same transaction.
 -}
-endsBy : Int -> ScriptContext -> Bool
-endsBy time ctx =
-    let
-        upper =
-            Interval.finiteUpperBound ctx.txInfo.validRange
-    in
-    upper >= 0 && upper <= time
+sellerPaid : Listing -> ScriptContext -> Bool
+sellerPaid listing ctx =
+    case Tx.ownRef ctx of
+        Just ref ->
+            List.any
+                (\output ->
+                    (Value.lovelaceOf output.value >= listing.price)
+                        && (Tx.inlineDatum output == Just (Data.encode ref))
+                )
+                (Tx.outputsTo (PubKeyCredential listing.seller) ctx)
+
+        Nothing ->
+            False
 
 
 holds : Listing -> TxOut -> Bool
 holds expected output =
-    case output.datum of
-        OutputDatumInline raw ->
-            Data.decode raw == expected
-
-        _ ->
-            False
-
-
-signedBy : PubKeyHash -> ScriptContext -> Bool
-signedBy key ctx =
-    List.any (\signer -> signer == key) ctx.txInfo.signatories
+    Tx.inlineDatum output == Just (Data.encode expected)
 ```
 
 ```elm title="src/Ticket.elm"
 module Ticket exposing (mint)
 
 import Bytes
-import Julc.Ledger exposing (PubKeyHash, ScriptContext, ScriptInfo(..), TokenName(..))
+import Julc.Ledger exposing (PubKeyHash, ScriptContext, TokenName(..))
+import Tx
 import Value
 
 
@@ -158,19 +146,25 @@ import Value
 -}
 mint : PubKeyHash -> () -> ScriptContext -> Bool
 mint organizer _ ctx =
-    case ctx.scriptInfo of
-        MintingScript policy ->
-            Value.quantityOf policy (TokenName (Bytes.fromString "TICKET")) ctx.txInfo.mint
-                == 1
-                && List.any (\signer -> signer == organizer) ctx.txInfo.signatories
+    case Tx.ownPolicy ctx of
+        Just policy ->
+            (Value.quantityOf policy (TokenName (Bytes.fromString "TICKET")) ctx.txInfo.mint == 1)
+                && Tx.signedBy organizer ctx
 
-        _ ->
+        Nothing ->
             False
 ```
 
+The validators read the transaction with the core [`Tx` and `Interval`](/reference/core-modules/#tx)
+modules. A buyer's payment must carry the listing's output reference as its inline datum, so one payment
+can't pay for two listings bought in the same transaction; [reading the
+transaction](/contracts/reading-the-transaction/#one-payment-per-input) explains why.
+
 ## Test keys and a helper
 
-Start the test module with the people involved and a helper that builds the common part of every spend. `Scenario.key` derives a deterministic 28-byte key hash from a name, so `Scenario.key "seller"` is the same in every test and every run:
+Start the test module with the people involved and helpers that build the common parts of every spend.
+`Scenario.key` derives a deterministic 28-byte key hash from a name, so `Scenario.key "seller"` is the same
+in every test and every run:
 
 ```elm title="tests/MarketTest.elm"
 module MarketTest exposing
@@ -179,6 +173,7 @@ module MarketTest exposing
     , buyingWithoutADeadlineFails
     , operatorWithdrawsRewards
     , othersCannotWithdraw
+    , paymentForAnotherListingFails
     , sellerDelists
     , sellerReprices
     , strangerCannotDelist
@@ -186,9 +181,9 @@ module MarketTest exposing
     )
 
 import Julc.Data as Data
-import Julc.Ledger as Ledger exposing (Address, PubKeyHash)
+import Julc.Ledger exposing (PubKeyHash)
 import Market exposing (Action(..), Listing)
-import Scenario exposing (Scenario)
+import Scenario exposing (Output, Scenario)
 
 
 operator : PubKeyHash
@@ -206,11 +201,6 @@ listing =
     { seller = seller, price = 50000000, expires = 2000 }
 
 
-wallet : PubKeyHash -> Address
-wallet key =
-    Ledger.Address (Ledger.PubKeyCredential key) (Data.toOptional Nothing)
-
-
 {-| Spend the listed output with an action.
 -}
 settle : Action -> Scenario
@@ -218,11 +208,19 @@ settle action =
     Scenario.spend "market" (Scenario.outRef "listing" 0) (Data.encode listing)
         |> Scenario.parameters [ Data.encode operator ]
         |> Scenario.redeemer (Data.encode action)
+
+
+{-| A payment to the seller, tagged with the listing's output reference.
+-}
+payment : Int -> Output
+payment lovelace =
+    Scenario.toKey seller lovelace
+        |> Scenario.withDatum (Data.encode (Scenario.outRef "listing" 0))
 ```
 
-`settle` returns a `Scenario` but takes an argument, so it is a helper, not a test. The same goes for `operator`, `seller`, `listing` and `wallet`, whose types are not test types. `wallet` builds a key address without a staking part: the ledger's optional staking field takes `Data.toOptional Nothing`.
+`settle` returns a `Scenario` but takes an argument, so it is a helper, not a test. The same goes for `operator`, `seller`, `listing` and `payment`, whose types are not test types. `payment` builds an output with `Scenario.toKey`, which pays a key's address without a staking part, and tags it with the listing's reference.
 
-Everything that crosses into the script is `Data`, so datums, redeemers and parameters are encoded with `Data.encode`. `Scenario.parameters` must give every parameter the validator declares, in order; `market` declares one, `operator`. `Scenario.outRef "listing" 0` makes a deterministic output reference from a name and an index.
+Everything that crosses into the script is `Data`, so datums, redeemers and parameters are encoded with `Data.encode`. `Scenario.parameters` must give every parameter the validator declares, in order; `market` declares one, `operator`. `Scenario.outRef "listing" 0` makes a deterministic output reference from a name and an index; `settle` spends that output, and `payment` tags with the same reference.
 
 ## Spending
 
@@ -232,19 +230,35 @@ Everything that crosses into the script is `Data`, so datums, redeemers and para
 buyerPaysTheSeller : Scenario
 buyerPaysTheSeller =
     settle Buy
-        |> Scenario.output (Scenario.toAddress (wallet seller) 50000000)
+        |> Scenario.output (payment 50000000)
         |> Scenario.validBefore 1500
 
 
 underpayingFails : Scenario
 underpayingFails =
     settle Buy
-        |> Scenario.output (Scenario.toAddress (wallet seller) 49999999)
+        |> Scenario.output (payment 49999999)
         |> Scenario.validBefore 1500
         |> Scenario.expectFailure
 ```
 
 `Scenario.expectFailure` turns a scenario into a negative test: it passes only when the validator rejects the transaction. Write one next to each rule: a validator that accepts everything passes every positive test.
+
+Test the attacks too. A payment tagged with another listing's reference must not pay for this one:
+
+```elm
+{-| A payment tagged for another listing can't also pay for this one.
+-}
+paymentForAnotherListingFails : Scenario
+paymentForAnotherListingFails =
+    settle Buy
+        |> Scenario.output
+            (Scenario.toKey seller 50000000
+                |> Scenario.withDatum (Data.encode (Scenario.outRef "listing" 1))
+            )
+        |> Scenario.validBefore 1500
+        |> Scenario.expectFailure
+```
 
 Signatures work the same way. `Scenario.signedBy` adds a required signer, and you can call it more than once:
 
@@ -275,7 +289,7 @@ A transaction without `validFrom` or `validBefore` is valid at any time: both bo
 buyingAfterExpiryFails : Scenario
 buyingAfterExpiryFails =
     settle Buy
-        |> Scenario.output (Scenario.toAddress (wallet seller) 50000000)
+        |> Scenario.output (payment 50000000)
         |> Scenario.validFrom 1800
         |> Scenario.validBefore 2500
         |> Scenario.expectFailure
@@ -284,24 +298,27 @@ buyingAfterExpiryFails =
 buyingWithoutADeadlineFails : Scenario
 buyingWithoutADeadlineFails =
     settle Buy
-        |> Scenario.output (Scenario.toAddress (wallet seller) 50000000)
+        |> Scenario.output (payment 50000000)
         |> Scenario.expectFailure
 ```
 
-The second test matters: `Interval.finiteUpperBound` returns `-1` for an infinite bound, and without the `upper >= 0` check the validator would accept an open-ended purchase long after the listing expired.
+The second test matters: a transaction without an upper bound could run long after the listing expired. `Interval.isEntirelyBefore` needs a finite end, so the validator rejects it.
 
 ## Outputs, datums and tokens
 
-An output is built with one of two functions and then extended:
+An output is built with one of four functions and then extended:
 
-- `Scenario.toAddress address lovelace` pays an address, such as a wallet.
-- `Scenario.toScript lovelace` pays the validator's own script address.
+- `Scenario.toKey key lovelace` pays a key's address, without a staking part.
+- `Scenario.toAddress address lovelace` pays any address, such as one with a staking part.
+- `Scenario.toScript lovelace` pays the validator's own script address, which has no staking part.
+- `Scenario.toStakedScript stake lovelace` pays the validator's own payment credential with a staking part. That is another address: `Tx.continuingOutputs` of an output spent from `toScript`'s address doesn't include it.
 - `Scenario.withDatum data` attaches an inline datum.
+- `Scenario.withDatumHash data` holds the datum by hash instead: the output carries the datum's hash, and the transaction carries the datum among its witnesses. `Tx.datumOf` finds it there; `Tx.inlineDatum` returns `Nothing` for such an output.
 - `Scenario.withToken policy name quantity` adds tokens. The policy is `Scenario.Own`, the validator's own policy, or `Scenario.Policy bytes` for any other.
 
-The runner builds every value the ledger's way, as the script expects a [`Value`](/reference/core-modules/#value) to be: policies and token names in ascending order, quantities of a repeated token added up, and zero quantities left out. So the order of your `withToken` and `Scenario.minting` calls never matters, and `Scenario.minting name 0` mints nothing. The ledger limits policy ids and token names to 32 bytes, and so does the runner: a longer one stops `elci test` with `elci: A scenario value has a policy id or token name longer than 32 bytes, which the ledger does not allow`.
+The runner builds every value the ledger's way, as the script expects a [`Value`](/reference/core-modules/#value) to be: policies and token names in ascending order, quantities of a repeated token added up, and zero quantities left out. So the order of your `withToken` and `Scenario.minting` calls never matters, and `Scenario.minting name 0` mints nothing. The ledger limits policy ids and token names to 32 bytes, and so does the runner: a longer one fails the scenario before the validator runs, even with `expectFailure`, with `cannot build the transaction: A scenario value has a policy id or token name longer than 32 bytes, which the ledger does not allow`.
 
-Repricing requires a continuing output: an output back at the market's address that carries the updated listing:
+Repricing requires a continuing output, one of `Tx.continuingOutputs`: an output back at the market's address that carries the updated listing:
 
 ```elm
 sellerReprices : Scenario
@@ -314,7 +331,7 @@ sellerReprices =
             )
 ```
 
-To give the spent output tokens, a different value or another datum, list it yourself with `Scenario.input` and the same reference. The runner then uses your input instead of the default one. This test also needs `import Bytes`:
+To give the spent output tokens or a different value, list it yourself with `Scenario.input` and the same reference. The runner then uses your input instead of the default one. As on the ledger, it must hold the datum that `Scenario.spend` gives, inline or by hash; otherwise the scenario fails before the validator runs with `cannot build the transaction: the spent output ... is listed with a different datum from the one Scenario.spend gives`. This test also needs `import Bytes`:
 
 ```elm
 listingHoldsAnNft : Scenario
@@ -393,10 +410,10 @@ elci test --match TicketTest
 ```
 
 ```text
-PASS TicketTest.organizerMintsOneTicket (cpu 10322580, mem 35869)
-PASS TicketTest.twoTicketsAreRejected (cpu 7740253, mem 27324)
-PASS TicketTest.burningIsRejected (cpu 7740253, mem 27324)
-PASS TicketTest.unsignedMintIsRejected (cpu 9969383, mem 33936)
+PASS TicketTest.organizerMintsOneTicket (cpu 11788207, mem 41590)
+PASS TicketTest.twoTicketsAreRejected (cpu 9157880, mem 32745)
+PASS TicketTest.burningIsRejected (cpu 9157880, mem 32745)
+PASS TicketTest.unsignedMintIsRejected (cpu 11483010, mem 39957)
 4 passed, 0 failed
 ```
 
@@ -443,16 +460,17 @@ elci test --match MarketTest
 ```
 
 ```text
-PASS MarketTest.buyerPaysTheSeller (cpu 28377493, mem 102368)
-PASS MarketTest.underpayingFails (cpu 19476234, mem 75550)
-PASS MarketTest.buyingAfterExpiryFails (cpu 28361493, mem 102268)
-PASS MarketTest.buyingWithoutADeadlineFails (cpu 28021762, mem 101003)
-PASS MarketTest.sellerReprices (cpu 37111097, mem 132234)
-PASS MarketTest.sellerDelists (cpu 14757596, mem 60877)
-PASS MarketTest.strangerCannotDelist (cpu 15136029, mem 62809)
-PASS MarketTest.operatorWithdrawsRewards (cpu 7063274, mem 30333)
-PASS MarketTest.othersCannotWithdraw (cpu 7441707, mem 32265)
-9 passed, 0 failed
+PASS MarketTest.buyerPaysTheSeller (cpu 33518015, mem 117583)
+PASS MarketTest.underpayingFails (cpu 24050900, mem 93018)
+PASS MarketTest.paymentForAnotherListingFails (cpu 27935021, mem 101832)
+PASS MarketTest.sellerDelists (cpu 15573596, mem 65977)
+PASS MarketTest.strangerCannotDelist (cpu 15952029, mem 67909)
+PASS MarketTest.buyingAfterExpiryFails (cpu 33502015, mem 117483)
+PASS MarketTest.buyingWithoutADeadlineFails (cpu 31346102, mem 111033)
+PASS MarketTest.sellerReprices (cpu 36080596, mem 124349)
+PASS MarketTest.operatorWithdrawsRewards (cpu 7879274, mem 35433)
+PASS MarketTest.othersCannotWithdraw (cpu 8257707, mem 37365)
+10 passed, 0 failed
 ```
 
 For a scenario, the CPU and memory are what the **validator** consumed for that transaction, including a rejected one. These execution units are what the script adds to your transaction's fee.
@@ -460,9 +478,9 @@ For a scenario, the CPU and memory are what the **validator** consumed for that 
 When a scenario does not get the outcome it expects, the report says why. Here, `strangerDelists` is `strangerCannotDelist` without `expectFailure`, `sellerCannotDelist` is `sellerDelists` with it, `typo` names a validator that does not exist, and `unparameterized` is `operatorWithdrawsRewards` without `Scenario.parameters`:
 
 ```text
-FAIL MarketTest.strangerDelists (cpu 15136029, mem 62809)
+FAIL MarketTest.strangerDelists (cpu 15952029, mem 67909)
     validator market rejected the transaction: Error term encountered
-FAIL MarketTest.sellerCannotDelist (cpu 14757596, mem 60877)
+FAIL MarketTest.sellerCannotDelist (cpu 15573596, mem 65977)
     validator market accepted a transaction expected to fail
 FAIL MarketTest.typo
     cannot prepare validator 'markt': no [validators.markt] in elci.toml
@@ -509,14 +527,17 @@ The complete signatures are in the [test library reference](/reference/test-libr
 
 | Function | Effect |
 | --- | --- |
-| `input ref output` | adds an input; with the spent `ref`, replaces the default spent output |
+| `input ref output` | adds an input; with the spent `ref`, replaces the default spent output, and must hold the spend's datum |
 | `referenceInput ref output` | adds a reference input |
 | `output out` | adds an output |
 | `minting name quantity` | mints (positive) or burns (negative) under the own policy |
 | `worth lovelace` | lovelace held by the default spent output (default 2000000) |
+| `toKey key lovelace` | an output to the key's address, without a staking part |
 | `toScript lovelace` | an output to the validator's own address |
+| `toStakedScript stake lovelace` | an output to the validator's own payment credential with the staking credential `stake` |
 | `toAddress address lovelace` | an output to `address` |
 | `withDatum data` | gives an output an inline datum |
+| `withDatumHash data` | gives an output the datum's hash, and the transaction the datum as a witness |
 | `withToken policy name quantity` | adds tokens to an output; `policy` is `Own` or `Policy bytes` |
 
 **Set the expectation.**
@@ -536,9 +557,8 @@ The complete signatures are in the [test library reference](/reference/test-libr
 
 ## Limits
 
-Scenarios cover single and multiple signatures, validity ranges, lovelace, tokens of the own policy and of other policies, inline datums, reference inputs and every purpose. The validator's own address has no staking part. The following need a [Java test suite](/testing/java/), where you build the context yourself:
+Scenarios cover single and multiple signatures, validity ranges, lovelace, tokens of the own policy and of other policies, inline datums, datums by hash, reference inputs and every purpose. The validator's own address has no staking part. The following need a [Java test suite](/testing/java/), where you build the context yourself:
 
-- datum hashes with a witness table;
 - reference scripts;
 - other staking credentials and additional withdrawals;
 - more than one script in a transaction.

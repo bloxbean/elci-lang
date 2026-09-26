@@ -57,7 +57,7 @@ A failure carries a message and the Data encodings of the values involved, which
 | `every` | `List Expectation -> Expectation` | every expectation in the list passes; otherwise the first failure is the result |
 | `onFail` | `String -> Expectation -> Expectation` | the expectation passes; otherwise its message is replaced, keeping its values |
 
-`equal` and `notEqual` require the same structural equality as `==`. Types without it, such as `Data`, functions and imported types without approved equality, are rejected at compile time with `ELCI2003`. `atMost`, `atLeast`, `lessThan` and `greaterThan` take any [comparable type](/reference/core-modules/#comparable-types), as in elm-test: integers, strings, bytes, ledger hashes, and lists and tuples of these.
+`equal` and `notEqual` require the same structural equality as `==`. Types without it, such as `Map`, functions and imported types without approved equality, are rejected at compile time with `ELCI2003`. `Data` has it: `Expect.equal (Data.encode expected) datum` compares structure. `atMost`, `atLeast`, `lessThan` and `greaterThan` take any [comparable type](/reference/core-modules/#comparable-types), as in elm-test: integers, strings, bytes, ledger hashes, and lists and tuples of these.
 
 ### Failure reports
 
@@ -129,6 +129,7 @@ type alias Token =
 type Destination
     = ToScript
     | ToAddress Address
+    | ToStakedScript StakingCredential
 
 
 type alias Output =
@@ -136,6 +137,7 @@ type alias Output =
     , lovelace : Int
     , tokens : List Token
     , datum : OutputDatum
+    , hashedDatum : Maybe Data
     }
 
 
@@ -145,7 +147,7 @@ type alias Input =
     }
 ```
 
-`Policy` is the policy of a token: `Own` is the validator's own script hash, `Policy bytes` any other policy id. `Destination` is where an output is paid. The ledger types `TxOutRef`, `TxCert`, `Voter`, `ProposalProcedure`, `Address`, `OutputDatum` and `PubKeyHash` come from `Julc.Ledger`. Build scenarios with the functions below rather than the `Spec` record.
+`Policy` is the policy of a token: `Own` is the validator's own script hash, `Policy bytes` any other policy id. `Destination` is where an output is paid: the validator's own address, any address, or the validator's own payment credential with a staking part. An output's `datum` is its inline datum or none; `hashedDatum` holds a datum by hash, which the runner turns into the datum's hash on the output and the datum among the transaction's witnesses. The ledger types `TxOutRef`, `TxCert`, `Voter`, `ProposalProcedure`, `Address`, `StakingCredential`, `OutputDatum` and `PubKeyHash` come from `Julc.Ledger`. Build scenarios with the functions below rather than the `Spec` record.
 
 ### Start a scenario
 
@@ -181,7 +183,7 @@ Each function takes the scenario last, so they chain with `|>`. Functions that s
 | `redeemer` | `Data -> Scenario -> Scenario` | sets the redeemer |
 | `parameters` | `List Data -> Scenario -> Scenario` | sets the deployment parameters, in the validator's declared order; all of them are required |
 | `signedBy` | `PubKeyHash -> Scenario -> Scenario` | adds a required signer |
-| `input` | `TxOutRef -> Output -> Scenario -> Scenario` | adds an input; an input at the spent reference replaces the default spent output |
+| `input` | `TxOutRef -> Output -> Scenario -> Scenario` | adds an input; an input at the spent reference replaces the default spent output, and must hold the datum the spend gives |
 | `referenceInput` | `TxOutRef -> Output -> Scenario -> Scenario` | adds a reference input |
 | `output` | `Output -> Scenario -> Scenario` | adds an output |
 | `minting` | `Bytes -> Int -> Scenario -> Scenario` | mints (positive quantity) or burns (negative) a token under the own policy |
@@ -202,8 +204,11 @@ Each function takes the scenario last, so they chain with `|>`. Functions that s
 | Function | Signature | Result |
 | --- | --- | --- |
 | `toScript` | `Int -> Output` | an output of this many lovelace to the validator's own address |
+| `toStakedScript` | `StakingCredential -> Int -> Output` | an output of this many lovelace to the validator's own payment credential with a staking part, an address other than `toScript`'s |
 | `toAddress` | `Address -> Int -> Output` | an output of this many lovelace to an address |
-| `withDatum` | `Data -> Output -> Output` | the output with an inline datum |
+| `toKey` | `PubKeyHash -> Int -> Output` | an output of this many lovelace to the key's address, without a staking part |
+| `withDatum` | `Data -> Output -> Output` | the output with an inline datum; replaces a datum set before |
+| `withDatumHash` | `Data -> Output -> Output` | the output with the datum's hash, and the datum among the transaction's witnesses, where `Tx.datumOf` finds it; replaces a datum set before |
 | `withToken` | `Policy -> Bytes -> Int -> Output -> Output` | the output with an added token: policy, name and quantity |
 
 ### Test data
@@ -222,6 +227,7 @@ Each function takes the scenario last, so they chain with `|>`. Functions that s
 | `validator <name> accepted a transaction expected to fail` | the validator succeeded after `expectFailure` |
 | `Budget exceeded: ...` | the execution went over the `withinBudget` limits |
 | `cannot prepare validator '<name>': ...` | the validator does not exist, or the scenario does not give all of its parameters; the scenario fails before it runs, even with `expectFailure` |
+| `cannot build the transaction: ...` | the ledger could not produce the scenario's transaction, such as one with a token name longer than 32 bytes, or a listed spent output whose datum differs from the one `spend` gives; the scenario fails before it runs, even with `expectFailure` |
 
 ## Property
 

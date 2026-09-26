@@ -18,7 +18,12 @@ translate source to Java and it does not maintain a second UPLC pipeline.
 `syntax` produces tokens and source AST nodes while retaining line, column and
 offset information. `modules` establishes source ownership, resolves imports and
 exposing lists, and qualifies source and Java-library names. Import cycles,
-ambiguous names and private references fail here.
+ambiguous names and private references fail here. It also loads the core library,
+Elci source bundled under `src/main/resources/elci/core/`: `Basics`, `List`,
+`Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`, `Value`, `Interval`
+and `Tx`. Their names are reserved for project modules and `[java-modules]` keys.
+The core modules are compiled with the program like any module, so a function a
+program does not reach is never lowered.
 
 `types` performs rank-1 inference, checks mandatory top-level signatures,
 identifies recursive groups, checks supported equality/append constraints and

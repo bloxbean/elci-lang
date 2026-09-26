@@ -48,7 +48,7 @@ signedBy key ctx =
     List.any (\signer -> signer == key) ctx.txInfo.signatories
 ```
 
-A module is plain source. Each script includes only the functions its handlers reach, so sharing a module costs nothing.
+A module is plain source. Each script includes only the functions its handlers reach, so sharing a module costs nothing. The core `Tx` module has the same check as `Tx.signedBy`; this project keeps its own to show a shared module.
 
 ## Write the spend handler
 

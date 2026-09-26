@@ -10,7 +10,10 @@ source-description boundary at `d6e716e2` and Elci `c7552e9`, with target
 `plutus-v3-pv11-uplc-1.1.0`. It was regenerated on 25 September 2026 against Julc
 `5a3378ba`, and updated on 26 September 2026 for the core `Value` module
 ([ADR-009](../adr/009-dict-native-value-and-map.md)), which rejects Java exports
-that return a `Value`. It is a snapshot of the current implementation.
+that return a `Value`, and for the core `Tx` and `Interval` modules
+([ADR-010](../adr/010-transaction-and-interval-helpers.md)), which replace
+`ContextsLib` and `IntervalLib` for new code. Regenerating the inventory after
+ADR-010 changed no row. It is a snapshot of the current implementation.
 
 ## What “available” means here
 
@@ -87,6 +90,20 @@ Every `Value` is canonical, so `==` is exact
 `Elci.Value`, core-only intrinsics for the CIP-153 value builtins. Use it instead
 of `ValuesLib`: Java exports that return a `Value` are rejected.
 
+`Interval` (`import Interval`) reads the ledger's time ranges, such as
+`txInfo.validRange`: `isEntirelyAfter`, `isEntirelyBefore`, `contains`, `start`,
+`end`, `after`, `before`, `between` and `everything`. The two deadline checks are
+strict and need a finite bound on their side, so a transaction without a validity
+range fails them; `start` and `end` return `Maybe Int`, with no `-1` sentinel.
+`Tx` (`import Tx`) answers questions about the transaction, taking the
+`ScriptContext` last: `signedBy`, `spends`, `findInput`, `ownRef`, `ownInput`,
+`ownPolicy`, `outputsTo`, `valuePaidTo`, `continuingOutputs`, `valueSpent`,
+`valueProduced`, `mintedOf`, `inlineDatum` and `datumOf`. `outputsTo` and
+`valuePaidTo` match the payment credential only, so whoever builds the transaction
+chooses the payee's staking part; an untagged payment check is open to double
+satisfaction. Both modules are Elci source over the ledger types,
+with no intrinsics ([ADR-010](../adr/010-transaction-and-interval-helpers.md)).
+
 `Julc.Data` provides explicit `decode`, `encode`, `fromOptional` and `toOptional`
 conversions. `Bytes` wraps byte-string builtins (`fromString`, `length`, `append`,
 `slice`, hashes); `<` and `compare` order byte strings. `Debug.trace` emits traces
@@ -129,19 +146,20 @@ that every runtime case or every Julc intrinsic is supported.
 ```toml
 [java-modules]
 "Julc.Math" = "org.julclang.stdlib.lib.MathLib"
-"Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
+"Julc.Output" = "org.julclang.stdlib.lib.OutputLib"
 ```
 
 ```elm
 import Julc.Math as Math
-import Julc.Interval as Interval
+import Julc.Output as Output
 ```
 
-Use `Math.floorDiv -7 2` or `Interval.finiteLowerBound ctx.txInfo.validRange` in an
+Use `Math.floorDiv -7 2` or `Output.outputsAt ctx.txInfo.outputs address` in an
 appropriately typed declaration. Prefer the prelude's `max`, `min`, `abs` and `^`
 over their `MathLib` counterparts; they need no mapping. Library dependencies are resolved transitively.
-`finiteLowerBound` and `finiteUpperBound` return `-1` for an infinite bound;
-account for that sentinel when using these methods.
+`IntervalLib.finiteLowerBound` and `finiteUpperBound` return `-1` for an infinite
+bound; use the core `Interval` module instead. `Interval` and `Tx` are core module
+names, so a `[java-modules]` key cannot be either.
 
 ### Compile-verified methods by library
 
@@ -205,9 +223,11 @@ account for that sentinel when using these methods.
   constructors, patterns, field access, equality, codecs and named-validator
   boundaries. They are not interchangeable with similarly shaped Elci records.
 - Java Optional is distinct from Elci Maybe. Convert a result such as
-  `ContextsLib.findOwnInput` with `Julc.Data.fromOptional`.
-- `Data` is opaque until converted with `Julc.Data.decode`. Not every Data subtype
-  has a mapping. Map/native-value representations are not interchangeable.
+  `ContextsLib.findOwnInput` with `Julc.Data.fromOptional`, or use `Tx.ownInput`,
+  which returns a `Maybe`.
+- `Data` converts with `Julc.Data.decode`, and `==` on `Data` compares structure
+  exactly (`EqualsData`). Not every Data subtype has a mapping. Map/native-value
+  representations are not interchangeable.
 - Generic Java methods are specialized per use, and `ListsLib`'s programmatic
   `map`, `filter`, `any`, `all`, `find` and `foldl` are available (see
   [Java libraries](JAVA_LIBRARIES.md#generic-methods-and-programmatic-exports)).

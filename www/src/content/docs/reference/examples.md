@@ -5,7 +5,7 @@ sidebar:
   order: 7
 ---
 
-The Elci repository has eight small example projects under `examples/`. Each one builds with the current compiler, and those with tests pass `elci test`. This page tells you what each example demonstrates and how to run it.
+The Elci repository has small example projects under `examples/`. Each one builds with the current compiler, and those with tests pass `elci test`. This page tells you what each example demonstrates and how to run it. The escrow, marketplace and order-swap examples are complete contracts: read their sources and tests as references for your own.
 
 Run the commands from the repository root, with `elci` on your `PATH` (see [Installation](/start/installation/)). `elci build` writes its artifacts to the example's own `build/` directory.
 
@@ -15,6 +15,9 @@ Run the commands from the repository root, with `elci` on your `PATH` (see [Inst
 | [signed](#signed) | spend validator | reading the fee and signatories, the nominal `PubKeyHash` type |
 | [vesting](#vesting) | spend validator with tests | a record datum, a validity range, scenarios and a property |
 | [treasury](#treasury) | two validators with tests | spend, withdraw and mint handlers, parameters, a full test suite |
+| [escrow](#escrow) | spend validator with tests | `Tx` and `Interval`, a tagged payment against double satisfaction |
+| [marketplace](#marketplace) | parameterized spend validator with tests | two tagged payments, exact fee arithmetic, a bounded parameter |
+| [order-swap](#order-swap) | spend validator with tests | partial fills, continuing outputs, whole-value checks, one script input per transaction |
 | [functional](#functional) | function project | recursive custom types, `List.map`, folds and pipelines |
 | [core-completion](#core-completion) | function project | generic records and unions, nested patterns, destructuring |
 | [elci-library](#elci-library) | function project | a reusable library written in Elci |
@@ -50,9 +53,9 @@ elci build examples/signed
 
 [examples/vesting](https://github.com/bloxbean/elci-lang/tree/main/examples/vesting)
 
-A vesting contract that locks an output until a deadline. The datum is a record, `VestingDatum { beneficiary, deadline }`, and the redeemer a one-constructor union, `Claim`. A claim succeeds when the transaction's validity range starts at or after the deadline, read with `Interval.finiteLowerBound` from Julc's `IntervalLib`, and the beneficiary signs.
+A vesting contract that locks an output until a deadline. The datum is a record, `VestingDatum { beneficiary, deadline }`, and the redeemer a one-constructor union, `Claim`. A claim succeeds when the transaction's whole validity range is strictly after the deadline, checked with `Interval.isEntirelyAfter`, and the beneficiary signs, checked with `Tx.signedBy`. A range that could run at the deadline itself, or has no start, is rejected.
 
-`tests/VestingTest.elm` holds scenarios for claims at, after and before the deadline, with and without the signature, and a property that a signed claim succeeds exactly from the deadline on.
+`tests/VestingTest.elm` holds scenarios for claims after the deadline, in a closed range, at it and before it, and without the signature, and a property that a signed claim succeeds exactly when its range starts after the deadline.
 
 ```sh
 elci check examples/vesting
@@ -61,15 +64,16 @@ elci build examples/vesting
 ```
 
 ```text
-PASS VestingTest.claimsAtTheDeadline (cpu 14681744, mem 54515)
-PASS VestingTest.claimsAfterTheDeadline (cpu 14681744, mem 54515)
-PASS VestingTest.earlyClaimsFail (cpu 11653545, mem 44742)
-PASS VestingTest.unsignedClaimsFail (cpu 13882675, mem 51354)
-PASS VestingTest.claimsSucceedExactlyFromTheDeadline (100 runs, max cpu 14681744, mem 54515)
-5 passed, 0 failed (seed 42)
+PASS VestingTest.claimsAfterTheDeadline (cpu 16763911, mem 61637)
+PASS VestingTest.claimsInAClosedRange (cpu 16763911, mem 61637)
+PASS VestingTest.claimsAtTheDeadlineFail (cpu 13950292, mem 52228)
+PASS VestingTest.earlyClaimsFail (cpu 13950292, mem 52228)
+PASS VestingTest.unsignedClaimsFail (cpu 16458714, mem 60004)
+PASS VestingTest.claimsSucceedExactlyAfterTheDeadline (100 runs, max cpu 16763911, mem 61637)
+6 passed, 0 failed (seed 42)
 ```
 
-The output above comes from `elci test examples/vesting --seed 42`. The tutorial [Build a vesting contract](/tutorials/vesting/) builds a contract like this one step by step.
+The output above comes from `elci test examples/vesting --seed 42`. The tutorial [Build a vesting contract](/tutorials/vesting/) builds the same validator step by step, with its own tests.
 
 ## treasury
 
@@ -105,6 +109,48 @@ PASS TreasuryTest.badgesNeedAPositiveQuantity (100 runs, max cpu 5468168, mem 21
 ```
 
 The output above comes from `elci test examples/treasury --seed 42`. `elci build` writes `build/validators/treasury/` and `build/validators/badge/`. The tutorial [A treasury and its badge policy](/tutorials/treasury/) walks through the design.
+
+## escrow
+
+[examples/escrow](https://github.com/bloxbean/elci-lang/tree/main/examples/escrow)
+
+A buyer locks a payment for a seller. The buyer releases it by signing a transaction that pays the seller at least the price, or takes it back with a transaction that runs entirely after the deadline. The seller's payment must carry the escrow's output reference as its inline datum, so one payment can't settle two escrows for the same seller.
+
+It shows `Tx.signedBy`, `Tx.ownRef`, `Tx.outputsTo`, `Tx.inlineDatum` and `Interval.isEntirelyAfter`. The tests cover each rule and each way to break it: a missing signature, an underpayment, a missing or wrong tag, one payment for two escrows, and a property over the deadline boundary.
+
+```sh
+elci check examples/escrow
+elci test examples/escrow
+elci build examples/escrow
+```
+
+## marketplace
+
+[examples/marketplace](https://github.com/bloxbean/elci-lang/tree/main/examples/marketplace)
+
+An NFT marketplace. A seller locks an NFT with a listing, a seller and a price in lovelace. Anyone may buy it by paying the seller the price less the marketplace's fee and paying the operator the fee, both tagged with the listing's output reference. The seller may cancel. The marketplace, an operator key and a fee in basis points, is a deployment parameter, so every scenario passes it with `Scenario.parameters`.
+
+It shows exact integer arithmetic for the fee, which rounds down; a parameter checked on-chain, since a fee outside 0 to 10000 basis points rejects every purchase; an operator selling their own NFT; and the attacks that the tags stop. A property checks, at any price and fee, that the exact split buys the NFT and one lovelace less to the seller does not.
+
+```sh
+elci check examples/marketplace
+elci test examples/marketplace
+elci build examples/marketplace
+```
+
+## order-swap
+
+[examples/order-swap](https://github.com/bloxbean/elci-lang/tree/main/examples/order-swap)
+
+A limit order. A maker locks tokens and asks a price, in another token, for each unit. A taker fills all or part of the order by paying the maker; the maker may cancel. A partial fill must return everything else the order holds to the script, under the same order datum. A full fill must pay the maker everything the order held besides the offered token.
+
+It shows `Tx.ownInput` and `Tx.continuingOutputs`, and checks the whole value that stays at the script: at least its lovelace, and exactly its tokens, so no one can pad the order with other tokens. It also shows both defences against double satisfaction: the maker's payment is tagged with the order's output reference, and a fill may spend only one input of the script, whatever its staking part, because the returned output carries the order rather than a tag. A property covers every fill size with exact and short payments.
+
+```sh
+elci check examples/order-swap
+elci test examples/order-swap
+elci build examples/order-swap
+```
 
 ## functional
 

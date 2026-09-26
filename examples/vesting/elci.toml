@@ -6,6 +6,3 @@ julc-version = "0.1.0-gb-5a3378b"
 [validators.vesting]
 boundary = "julc-strict-v1"
 spend = "Vesting.validate"
-
-[java-modules]
-"Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"

@@ -69,16 +69,17 @@ The first message is the common one, and the least helpful: a validator that ret
 
 `Debug.trace : String -> a -> a` returns its second argument unchanged and emits the message as a Plutus trace. As in Elm, every module imports `Debug`, so it needs no import.
 
-Put a trace in the branch that rejects, so it only fires when that check fails. For the marketplace from [Transaction scenarios](/testing/scenarios/), change `endsBy` in `src/Market.elm`:
+Put a trace in the branch that rejects, so it only fires when that check fails. For the marketplace from [Transaction scenarios](/testing/scenarios/), move the deadline check of `Buy` in `src/Market.elm` into a function that traces when it fails:
+
+```elm
+        Buy ->
+            sellerPaid listing ctx && endsBy listing.expires ctx
+```
 
 ```elm
 endsBy : Int -> ScriptContext -> Bool
 endsBy time ctx =
-    let
-        upper =
-            Interval.finiteUpperBound ctx.txInfo.validRange
-    in
-    if upper >= 0 && upper <= time then
+    if Interval.isEntirelyBefore time ctx.txInfo.validRange then
         True
 
     else
@@ -92,7 +93,7 @@ elci test --match buyingAfter
 ```
 
 ```text
-FAIL MarketTest.buyingAfterExpiryFails (cpu 28532991, mem 103000)
+FAIL MarketTest.buyingAfterExpiryFails (cpu 33817513, mem 119115)
     validator market rejected the transaction: Error term encountered
     trace: the validity range does not end by the listing's expiry
 0 passed, 1 failed
@@ -121,7 +122,7 @@ FAIL TraceTest.feeOfTwoThousand (cpu 2178706, mem 8698)
 ```
 
 :::caution[Remove traces before you deploy]
-Traces are part of the compiled script. They make it larger and cost budget whenever they run, and `elci build` does not strip them. The trace in `endsBy` adds 65 bytes to the `market` script: `elci check` reports 1750 FLAT bytes instead of 1685. Remove your traces before you build for deployment, and rerun your tests.
+Traces are part of the compiled script. They make it larger and cost budget whenever they run, and `elci build` does not strip them. The trace in `endsBy` adds 61 bytes to the `market` script: `elci check` reports 1672 FLAT bytes, against 1611 with `False` in its place. Remove your traces before you build for deployment, and rerun your tests.
 :::
 
 ## Execution budgets
@@ -143,18 +144,18 @@ delistingStaysCheap : Scenario
 delistingStaysCheap =
     settle Delist
         |> Scenario.signedBy seller
-        |> Scenario.withinBudget 16000000 70000
+        |> Scenario.withinBudget 17000000 70000
 ```
 
 ```text
-PASS MarketTest.delistingStaysCheap (cpu 14757596, mem 60877)
+PASS MarketTest.delistingStaysCheap (cpu 15573596, mem 65977)
 ```
 
 Set the limits a little above today's numbers. A change that makes the path noticeably more expensive then fails the test instead of slipping through. With limits of `10000000` and `50000`, the same scenario fails:
 
 ```text
-FAIL MarketTest.delistingStaysCheap (cpu 14757596, mem 60877)
-    Budget exceeded: CPU steps 14757596 exceeds maximum 10000000; Memory units 60877 exceeds maximum 50000 (consumed: ExBudget{cpu=14757596, mem=60877})
+FAIL MarketTest.delistingStaysCheap (cpu 15573596, mem 65977)
+    Budget exceeded: CPU steps 15573596 exceeds maximum 10000000; Memory units 65977 exceeds maximum 50000 (consumed: ExBudget{cpu=15573596, mem=65977})
 ```
 
 The check is julc-testkit's `BudgetAssertions.assertBudgetUnder`, the same assertion you can use in [Java tests](/testing/java/).

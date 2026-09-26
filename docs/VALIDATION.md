@@ -144,7 +144,7 @@ script bytes, results and budgets. ABI manifests differ only in `julcVersion`.
 
 - The treasury example has 9 unit and scenario tests: scenarios for both validators
   across all their roles, and `Bool` and `Expectation` unit tests. The vesting
-  example's 4 scenarios check validity ranges and signatures. Property tests, added
+  example's 5 scenarios check validity ranges and signatures. Property tests, added
   later, are listed below.
 - Failures show `Expect.equal` values, a rejected transaction, a budget ceiling
   broken through julc-testkit's `BudgetAssertions`, `Debug.trace` output and
@@ -176,7 +176,7 @@ script bytes, results and budgets. ABI manifests differ only in `julcVersion`.
 - **`IntrinsicsTest.modByTakesTheDivisorsSignAndRemainderByTheDividends`:** covers
   `modBy`.
 - **Examples:** the treasury example has 12 tests, including 3 properties. The
-  vesting example has 5, including a validity-range property.
+  vesting example has 6, including a validity-range property.
 - **Native smoke test:** the native binary runs both example suites and a failing
   property with the same counterexample as the JVM. The treasury suite, with 300
   scenario runs, completes in under a second.

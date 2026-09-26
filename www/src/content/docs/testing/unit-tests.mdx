@@ -219,7 +219,7 @@ FAIL PricingTest.feesAreCappedExplained (cpu 5046289, mem 18138)
 `Expect.every` combines several checks into one test and reports the first that fails. Its argument is a list of evaluated expectations: Elci lists hold data, not functions, so there is no elm-test style `Expect.all` that takes checks as functions.
 
 :::note
-`Expect.equal` and `Expect.notEqual` need the same structural equality as `==`. They accept numbers, bytes, strings, lists, tuples, records and custom types, and reject `Data`, functions and imported types without approved equality at compile time.
+`Expect.equal` and `Expect.notEqual` need the same structural equality as `==`. They accept numbers, bytes, strings, `Data`, lists, tuples, records and custom types, and reject `Map`, functions and imported types without approved equality at compile time.
 :::
 
 ## How tests are discovered

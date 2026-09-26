@@ -142,6 +142,8 @@ The others you import yourself:
 | `Map` | `import Map` | The ledger's key/value maps, for ledger data and keys that aren't comparable |
 | `Array` | `import Array` | Constant-time indexed arrays |
 | `Value` | `import Value exposing (Value)` | The ledger's multi-asset values: lovelace and native tokens |
+| `Interval` | `import Interval` | Time ranges such as the transaction's validity range: deadline checks |
+| `Tx` | `import Tx` | Questions about the transaction: signers, spent outputs, payments, minted tokens, datums |
 | `Bytes` | `import Bytes` | Byte-string builtins: building, slicing, integers, bits and hashes |
 | `Julc.Data` | `import Julc.Data as Data` | `encode` and `decode` to and from Plutus Data, and `Maybe` adapters |
 | `Julc.Ledger` | `import Julc.Ledger exposing (...)` | Ledger types: `ScriptContext`, `PubKeyHash`, `TxOutRef` and more |
@@ -157,9 +159,9 @@ transaction](/contracts/reading-the-transaction/) covers the ledger types.
 
 ## Julc's Java libraries
 
-Julc ships on-chain libraries written in Java, such as `MathLib`, `IntervalLib`, `OutputLib` and
-`ByteStringLib`. They fill the gaps in the core modules, such as floor division and validity intervals. To
-use one, give it a module name in `elci.toml`:
+Julc ships on-chain libraries written in Java, such as `MathLib`, `CryptoLib`, `AddressLib` and
+`ByteStringLib`. They fill the gaps in the core modules, such as floor division and signature verification.
+To use one, give it a module name in `elci.toml`:
 
 ```toml title="elci.toml"
 [java-modules]
@@ -190,6 +192,7 @@ The compiler reads the library's Java source and compiles the functions you call
 rules differ from Elci modules:
 
 - The module name is whatever you choose in `elci.toml`. `Julc.Math` is a convention, not a built-in name.
+  A core module's name, such as `Interval` or `Tx`, can't be used.
 - Expose names explicitly. `import Julc.Math exposing (..)` is rejected:
 
   ```text

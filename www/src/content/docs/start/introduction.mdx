@@ -168,13 +168,16 @@ Julc's backend, which produces the script:
   deployment parameters, and have them applied with `elci apply`.
 - **Built-in testing.** `elci test` runs unit tests, transaction scenarios against the same script that
   `elci build` writes, and property-based tests with shrinking. Every test reports its CPU and memory budget.
-- **Julc libraries and Java interop.** Map a Julc on-chain Java library (math, intervals, byte strings and
+- **Julc libraries and Java interop.** Map a Julc on-chain Java library (math, cryptography, byte strings and
   more) in `elci.toml` and import it like an Elm module. Elci compiles the library's Java source to
   on-chain code. It doesn't run that Java on your machine.
 - **Typed collections, values and bytes.** `Dict k v` is Elm's `Dict`, stored as a sorted Plutus map,
   `Map k v` holds the ledger's own maps, `Array a` gives constant-time indexed reads, `Value` handles
   multi-asset values with exact `==` on the protocol's value builtins, and `Bytes` exposes the Plutus
   byte-string builtins, including hashes and bitwise operations.
+- **Transaction helpers.** `Tx` answers the questions validators ask about a transaction: who signed, what
+  it spends and pays, which outputs stay at the script, what it mints and which datum an output carries.
+  `Interval` checks deadlines against the validity range.
 - **A native CLI.** Build `elci` as a GraalVM native executable that starts fast and needs no Java at
   runtime, or run the JVM version.
 
@@ -192,8 +195,8 @@ Be aware of these limits before you start:
 - **It is not browser Elm.** There is no `Html`, no ports, no commands or subscriptions, and no `Float`.
   A contract is a pure function that returns `Bool`.
 - **No Elm packages.** Elci has Elm's core modules (`Basics`, `List`, `Maybe`, `Result`, `Tuple`, `Dict` and
-  part of `String`), its own `Map`, `Array`, `Value`, `Bytes` and `Julc.Data` modules, and Julc's Java
-  libraries. `elm.json` and the Elm package registry are not used.
+  part of `String`), its own `Map`, `Array`, `Value`, `Interval`, `Tx`, `Bytes` and `Julc.Data` modules, and
+  Julc's Java libraries. `elm.json` and the Elm package registry are not used.
 - **Some tooling is missing.** There is no language server, and no CIP-57 blueprint generation yet. The
   build writes Julc's `validator.plutus.json` format and Elci's own `abi.json`.
 

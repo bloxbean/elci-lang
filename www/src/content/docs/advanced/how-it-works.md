@@ -61,8 +61,8 @@ or refutable patterns in function arguments, fail here with a message that names
 
 Module resolution builds the module graph. Each module `A.B` must live at `A/B.elm` under one source
 directory, every module has one owner, and import cycles are rejected. The core modules (`Basics`,
-`List`, `Maybe`, `Result`, `Tuple`, `String`, `Map` and `Array`) are ordinary Elci source, bundled with the
-compiler and compiled with your code. Every project and test module gets Elm's default imports of
+`List`, `Maybe`, `Result`, `Tuple`, `String`, `Map`, `Dict`, `Array`, `Value`, `Interval` and `Tx`) are
+ordinary Elci source, bundled with the compiler and compiled with your code. Every project and test module gets Elm's default imports of
 `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple` and `Debug`; the core modules themselves import
 what they need explicitly, as in Elm. `Bytes`, `Debug` and `Julc.Data` are compiler intrinsics, as are
 `not`, `modBy` and `remainderBy`, which `Basics` exposes. Modules listed in `[java-modules]` are resolved

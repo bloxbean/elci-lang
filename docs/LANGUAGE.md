@@ -97,9 +97,15 @@ byte-backed ledger hashes, lists, tuples, closed records and regular recursive
 unions whose reachable fields are themselves equality-capable. Both operands are
 evaluated once from left to right. Two `Dict` values are equal when they have
 the same bindings, and two `Value`s when they hold the same quantities: every
-`Value` is canonical, so `==` compares encodings with `EqualsData`. Functions,
-opaque Data, `Map` and imported values without verified equality, such as
-`TxOut`, are rejected at compile time. `<`, `<=`, `>`, `>=` and
+`Value` is canonical, so `==` compares encodings with `EqualsData`. `==` on
+`Data` compares structure with `EqualsData`
+([ADR-010](../adr/010-transaction-and-interval-helpers.md)): the standard datum
+check is `Tx.inlineDatum out == Just (Data.encode expected)`. Elci's encodings are
+deterministic per type, except that a `Map` encodes in insertion order: two maps
+with the same bindings may encode differently, so compare their sorted `toList` or
+use a `Dict`. Functions,
+`Map` and imported values without verified equality, such as `TxOut`, are
+rejected at compile time. `<`, `<=`, `>`, `>=` and
 `compare` order comparable values: `Int` numerically, `String` by UTF-8 bytes,
 `Bytes` and byte-string ledger hashes lexicographically (`lessThanByteString`),
 lists lexicographically and tuples by component. Comparisons cannot be chained
@@ -218,7 +224,7 @@ things under one name make it ambiguous where it is used (`ELCI2102`), except th
 a name listed explicitly in `exposing` takes precedence over a default import. An
 import cannot be aliased to a default module's name. The core module names
 (`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`,
-`Value`) and the reserved names `Set` and `Elci` cannot name a project module or a
+`Value`, `Interval`, `Tx`) and the reserved names `Set` and `Elci` cannot name a project module or a
 `[java-modules]` key, and neither can a name that starts with `Elci.`. The core
 library's internal `Elci.Assoc` and `Elci.Value` modules cannot be imported by
 project modules.
@@ -313,6 +319,8 @@ These modules are imported explicitly:
 | `Map` | `empty`, `singleton`, `get`, `member`, `insert`, `remove`, `update`, `size`, `isEmpty`, `keys`, `values`, `toList`, `fromList`, `foldl`, `foldr`, `filter`, `map` |
 | `Array` | `empty`, `fromList`, `toList`, `toIndexedList`, `length`, `isEmpty`, `get`, `initialize`, `repeat`, `map`, `indexedMap`, `foldl`, `foldr`, `filter`, `slice` |
 | `Value` | `zero`, `lovelace`, `singleton`, `insert`, `fromList`, `lovelaceOf`, `quantityOf`, `isZero`, `policies`, `tokens`, `toList`, `add`, `subtract`, `negate`, `scale`, `sum`, `geq`, `leq`, `withoutLovelace`, `restrictedTo`, `positive`, `negative` |
+| `Interval` | `isEntirelyAfter`, `isEntirelyBefore`, `contains`, `start`, `end`, `after`, `before`, `between`, `everything` |
+| `Tx` | `signedBy`, `spends`, `findInput`, `ownRef`, `ownInput`, `ownPolicy`, `outputsTo`, `valuePaidTo`, `continuingOutputs`, `valueSpent`, `valueProduced`, `mintedOf`, `inlineDatum`, `datumOf` |
 | `Julc.Data` | `decode`, `encode`, `fromOptional`, `toOptional` (below) |
 | `Bytes` | see the table below |
 
@@ -320,7 +328,8 @@ The types `Dict`, `Map` and `Array` are always in scope. As in Elm, you may stil
 write `import Dict exposing (Dict)` or `Dict.Dict`, and likewise for `Map` and
 `Array`. `Bytes.Bytes` and `Data.Data` (after `import Julc.Data as Data`) name the
 compiler's own types the same way. `Value` is named through its module:
-`import Value exposing (Value)`, `Value.Value`, or `Julc.Ledger exposing (Value)`.
+`import Value exposing (Value)`, `Value.Value`, or `Julc.Ledger exposing (Value)`,
+and `Interval` likewise.
 
 **`Dict k v`** is Elm's dictionary, with Elm's names, argument orders and
 results. It is a Plutus map whose keys are strictly ascending in the `comparable`
@@ -406,6 +415,31 @@ under the empty policy, and `lovelaceOf` counts only that token.
 - **Implementation:** the module is Elci source over `Elci.Value`, core-only
   intrinsics that emit the CIP-153 builtins and walk the Data map; the native
   value type never escapes them.
+
+**`Interval`** reads the ledger's `Interval`, the type of `txInfo.validRange`
+([ADR-010](../adr/010-transaction-and-interval-helpers.md)). Times are POSIX
+milliseconds. `isEntirelyAfter t range` holds when the range has a finite start
+and every time in it is after `t`; `isEntirelyBefore t range` when it has a finite
+end and every time in it is before `t`. Both are strict and honor inclusive and
+exclusive bounds; an infinite bound on their side never satisfies them. A
+`PosInf` start or `NegInf` end, which only an empty range has, fails the check
+that reads it, as in Aiken's stdlib v2; Aiken v3 lets such an empty range pass
+both checks. `contains t range` tests one time. `start` and
+`end` return the finite bounds as `Maybe Int`, with no sentinel. `after`, `before`,
+`between` and `everything` build inclusive ranges. Each check costs about 3M CPU.
+
+**`Tx`** answers questions about a `ScriptContext`, which it takes last:
+`signedBy`, `spends`, `findInput`, `ownRef` and `ownInput` (spending only),
+`ownPolicy` (minting only), `outputsTo` and `valuePaidTo` (matching the payment
+credential; whoever builds the transaction chooses the payee's staking part),
+`continuingOutputs` (outputs to
+the spent output's whole address), `valueSpent`, `valueProduced`, `mintedOf`
+(`Dict TokenName Int`, burns negative), `inlineDatum` and `datumOf` (inline, or by
+hash from `txInfo.datums`). Datums stay `Data`: decode with an annotated
+`Data.decode` or compare with `==`. The functions walk the context's lists, about
+0.7M CPU per signatory, 2.5M per input and 2.8M per output passed. An untagged
+payment check is open to double satisfaction; the reference contracts under
+`examples/` tag payments with the spent output's reference.
 
 **`Bytes`** functions are single Plutus builtins, with the byte string last so they
 compose in pipelines:

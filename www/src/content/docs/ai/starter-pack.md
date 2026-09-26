@@ -27,7 +27,9 @@ This page is optimized for AI ingestion, not for humans. For the tutorial, see
   imported by default, as in Elm, with Elm's names and argument orders, but `String` has only five
   functions and `Debug` only `trace`. `Dict` exists with Elm's API (`import Dict exposing (Dict)`); `Set`,
   `Char` and `Float` **do not exist** (section 3.3). A `Value` module (`import Value exposing (Value)`)
-  handles the ledger's multi-asset values (section 7).
+  handles the ledger's multi-asset values (section 7). `Tx` and `Interval` answer questions about the
+  transaction and its validity range (section 8); prefer them to hand-written list walks and to Julc's
+  `ContextsLib` and `IntervalLib`.
 - **Strict, not lazy.** Every `let` value and every function argument is evaluated (section 4).
 - **Configuration decides deployment.** Handlers are ordinary functions; `elci.toml` says which
   function serves which ledger purpose (section 2).
@@ -108,8 +110,8 @@ purpose = "function"
 6. `expected-abi = "path"`: `check`, `build` and `apply` fail if the ABI (`abi.json`) differs.
 7. `[java-modules]`: `"Module.Name" = "fully.qualified.Class"`. You choose the module name. `Julc.TypedMap`
    and `Julc.TypedArray` are reserved, and so are the core module names (`Basics`, `List`, `Maybe`,
-   `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`, `Set`, `Value`, `Elci`) and names starting with
-   `Elci.`.
+   `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`, `Set`, `Value`, `Interval`, `Tx`, `Elci`) and names
+   starting with `Elci.`.
 8. `[tests]`: `source-directories`, default `["tests"]`.
 9. TOML subset: one `key = value` per line; values are quoted strings without escapes or single-line
    arrays of quoted strings; comments are whole lines starting with `#` (no trailing comments); unknown
@@ -161,14 +163,14 @@ purpose = "function"
 | Char literals `'a'`, `%`, hex `0xFF`, `1_000` | `ELCI1001` |
 | `port module`, `import Html` | `ELCI1002` / `ELCI2101` |
 | Polymorphic recursion, recursive values (`a = b + 1`, `b = a + 1`) | `ELCI2002` / `ELCI2008` |
-| `==` on functions, `Data`, `Map`, `Array`, `TxOut`, `TxInInfo`, `TxInfo` | `ELCI2003` |
+| `==` on functions, `Map`, `Array`, `TxOut`, `TxInInfo`, `TxInfo` (`Data` and `Value` do have `==`) | `ELCI2003` |
 | `<`, `compare`, `List.sort` on `Bool`, records, custom types, `Maybe`, `Dict`, `Map`, `Value`, `Data`, `TxOutRef` | `ELCI2003`; use `List.sortBy` with a key; compare values with `Value.geq` |
 | `Dict` keys that are not comparable (`Dict.get` on a `Dict Credential Int`; a `Dict Bool Int` in a datum or `Data.decode`) | `ELCI2003`; use a `Map` |
 | A Java library generic at a type containing a `Dict` | `ELCI3003`; pass a `Map` or `List`, then `Dict.fromList` |
 | A Java export whose result can hold a `Value` (`ValuesLib.add`, `ValuesLib.singleton`, a Java record with a `Value` field, …); `ContextsLib` and `OutputLib` are exempt | `ELCI2105`; use the core `Value` module |
 | A Java library generic at a type holding a `Value` (`Lists.filter values f`) | `ELCI3003`; use `List` and the `Value` module |
 | `Value` in a datum, redeemer or parameter type | `ELCI2013`; store `List ( PolicyId, TokenName, Int )`, rebuild with `Value.fromList` |
-| Module named `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`, `Set`, `Value`, `Elci` or `Elci.*`; alias named after a default import (`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Debug`) | `ELCI2104` |
+| Module named `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`, `Set`, `Value`, `Interval`, `Tx`, `Elci` or `Elci.*`; alias named after a default import (`Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple`, `Debug`) | `ELCI2104` |
 | Constructors named `Just`, `Nothing`, `True`, `False`; types named `Int`, `Bool`, `String`, `Bytes`, `Data`, `List`, `Maybe`, `Dict`, `Map`, `Array`, `Float` | `ELCI2011` |
 | `f <\| x \|> g`, `f << g >> h` (opposite associativity mixed) | `ELCI1002`; add parentheses |
 | `Tuple a b`, `Unit` as type names | `ELCI2012`; write `( a, b )`, `()` |
@@ -244,9 +246,10 @@ cpu 65205046, mem 276517
    zero fails the script.
 7. **Failure:** a runtime failure (division by zero, out-of-range byte, failed decode) or a handler result
    of `False` rejects the transaction. There are no exceptions to catch.
-8. **Equality** (`==`, `/=`): Int, Bool, String, `()`, Bytes, ledger hashes of the same type, lists, tuples,
-   records, `Maybe`, `Dict` (same bindings) and custom types of these; imported types with approved
-   equality. Not `Map`. Both operands are evaluated once, left to right.
+8. **Equality** (`==`, `/=`): Int, Bool, String, `()`, Bytes, ledger hashes of the same type, `Value`
+   (exact), `Data` (exact structure), lists, tuples, records, `Maybe`, `Dict` (same bindings) and custom
+   types of these; imported types with approved equality. Not `Map`, functions, `Array`, `TxOut`,
+   `TxInInfo`, `TxInfo`. Both operands are evaluated once, left to right.
 9. **Ordering** (`<`, `<=`, `>`, `>=`, `compare`, `min`, `max`, `List.sort`): Int numerically; String by
    UTF-8 bytes (`"Zebra" < "apple"`); Bytes and ledger hashes lexicographically by unsigned byte, a
    proper prefix first (`#ff` > `#0001`); lists lexicographically; tuples by component. Every order agrees
@@ -310,7 +313,10 @@ cpu 5878521, mem 25242
 `fromOptional : JulcOptional a -> Maybe a`, `toOptional : Maybe a -> JulcOptional a`. The decoded type
 must be known where `decode` is used; annotate otherwise
 (`ELCI3001: Cannot determine the type converted by Julc.Data.decode; add a type annotation`).
-`Data` has no `==`. Tests build datums and redeemers with `Data.encode`.
+`==` on `Data` compares structure exactly, so a datum check needs no decoding:
+`Tx.inlineDatum out == Just (Data.encode expected)`. Elci's encodings are deterministic, except that a
+`Map`'s encoding follows its insertion order: `Data.encode` of two maps with the same bindings may differ,
+so compare their sorted `toList` or use a `Dict`. Tests build datums and redeemers with `Data.encode`.
 
 ## 6. Handler signatures
 
@@ -365,7 +371,7 @@ pattern then fails with `ELCI2001`). Fields are read with `.field`.
 | `addr.credential`, `addr.stakingCredential` | `Credential`, `JulcOptional StakingCredential` |
 | `range.from`, `range.to` | `IntervalBound` |
 | `bound.boundType`, `bound.isInclusive` | `IntervalBoundType`, `Bool` |
-| `pkh.hash`, `txId.hash`, `policy.hash`, `scriptHash.hash` | `Bytes` |
+| `pkh.hash`, `txId.hash`, `policy.hash`, `token.hash` (a `TokenName`; it has no `.name`), `scriptHash.hash` | `Bytes` |
 
 Sum types: `Credential = PubKeyCredential PubKeyHash | ScriptCredential ScriptHash`;
 `OutputDatum = NoOutputDatum | OutputDatumHash DatumHash | OutputDatumInline Data`;
@@ -381,26 +387,18 @@ keyOf cred =
 
         ScriptCredential sh ->
             sh.hash
-
-
-datumOf : OutputDatum -> Maybe Data
-datumOf d =
-    case d of
-        NoOutputDatum ->
-            Nothing
-
-        OutputDatumHash _ ->
-            Nothing
-
-        OutputDatumInline raw ->
-            Just raw
 ```
+
+For datums, use `Tx.inlineDatum out` or `Tx.datumOf out ctx` (section 8) rather than matching
+`OutputDatum` yourself.
 
 Rules:
 
-- `PubKeyHash`, `ScriptHash`, `PolicyId`, `TxId`, `DatumHash` are **distinct from `Bytes`**; compare like with
-  like, or use `.hash`. `Bytes` vs `PubKeyHash` is `ELCI2002: Type mismatch: expected Bytes, found PubKeyHash`.
-- Signature check: `List.member key ctx.txInfo.signatories`.
+- `PubKeyHash`, `ScriptHash`, `PolicyId`, `TokenName`, `TxId`, `DatumHash` are **distinct from `Bytes`**;
+  compare like with like, or use `.hash`. `Bytes` vs `PubKeyHash` is
+  `ELCI2002: Type mismatch: expected Bytes, found PubKeyHash`. `token.name` is
+  `ELCI2010: Unknown field 'name' of org.julclang.ledger.TokenName`; write `token.hash`.
+- Signature check: `Tx.signedBy key ctx`.
 - Ledger hashes order like bytes: `List.sort` sorts a `List PubKeyHash`. `TxOutRef` and other ledger
   records are not comparable.
 - Construct ledger values qualified: `import Julc.Ledger as Ledger` then `Ledger.PubKeyHash bytes`,
@@ -428,7 +426,7 @@ import Tuple
 import Debug
 ```
 
-`Bytes`, `Dict`, `Map`, `Array`, `Value` and `Julc.Data` need explicit imports. Using one without its import is
+`Bytes`, `Dict`, `Map`, `Array`, `Value`, `Interval`, `Tx` and `Julc.Data` need explicit imports. Using one without its import is
 `` ELCI2104: Bytes.fromString needs the Bytes module; add `import Bytes` ``. Machine-readable signatures of
 every module are in `/ai/catalog.json`.
 
@@ -647,6 +645,52 @@ positive : Value -> Value             -- in a mint: what is minted
 negative : Value -> Value             -- in a mint: what is burned, still negative
 ```
 
+**Interval** (`import Interval`; the ledger's time range, as in `tx.validRange`; POSIX milliseconds; name the
+type with `import Interval exposing (Interval)`; build ranges by hand with `Interval`, `IntervalBound`,
+`Finite`, `NegInf`, `PosInf` from `Julc.Ledger`; about 3M CPU per check):
+
+```text
+isEntirelyAfter : Int -> Interval -> Bool     -- the range has a finite start and every time in it is > t
+isEntirelyBefore : Int -> Interval -> Bool    -- the range has a finite end and every time in it is < t
+contains : Int -> Interval -> Bool            -- honors inclusive and exclusive bounds
+start : Interval -> Maybe Int                 -- Nothing for an infinite start; ignores inclusiveness
+end : Interval -> Maybe Int
+after : Int -> Interval                       -- [t, +inf)
+before : Int -> Interval                      -- (-inf, t]
+between : Int -> Int -> Interval              -- [low, high]
+everything : Interval
+```
+
+"After the deadline": `Interval.isEntirelyAfter deadline tx.validRange` (strict; a range without a finite
+start fails, and so does an empty range's `PosInf` start, as in Aiken's stdlib v2). "Before the deadline": `Interval.isEntirelyBefore deadline tx.validRange`. `Scenario.validFrom t`
+is an inclusive start, so it passes `isEntirelyAfter d` only for `t > d`; `Scenario.validBefore t` is an
+exclusive end, so it passes `isEntirelyBefore d` for `t <= d`. To accept from the deadline itself, check
+`isEntirelyAfter (deadline - 1)`.
+
+**Tx** (`import Tx`; questions about the transaction; the `ScriptContext` comes last; walks the context's
+lists, about 0.7M CPU per signatory, 2.5M per input and 2.8M per output passed):
+
+```text
+signedBy : PubKeyHash -> ScriptContext -> Bool
+spends : TxOutRef -> ScriptContext -> Bool                -- inputs only, not reference inputs
+findInput : TxOutRef -> ScriptContext -> Maybe TxInInfo
+ownRef : ScriptContext -> Maybe TxOutRef                  -- spending only; Nothing for other purposes
+ownInput : ScriptContext -> Maybe TxInInfo                -- spending only
+ownPolicy : ScriptContext -> Maybe PolicyId               -- minting only
+outputsTo : Credential -> ScriptContext -> List TxOut     -- payment credential only; the tx builder picks the staking part
+valuePaidTo : Credential -> ScriptContext -> Value        -- total of outputsTo; untagged, open to double satisfaction
+continuingOutputs : ScriptContext -> List TxOut           -- spending only: outputs to the spent output's whole address
+valueSpent : ScriptContext -> Value                       -- inputs, not reference inputs
+valueProduced : ScriptContext -> Value                    -- outputs; fee and mint are separate
+mintedOf : PolicyId -> ScriptContext -> Dict TokenName Int  -- burns are negative; empty when nothing minted
+inlineDatum : TxOut -> Maybe Data                         -- Nothing for a datum hash or no datum
+datumOf : TxOut -> ScriptContext -> Maybe Data            -- inline, or by hash from tx.datums
+```
+
+Decode a datum with an annotation: `orderOf out = Maybe.map Data.decode (Tx.inlineDatum out)` with
+`orderOf : TxOut -> Maybe Order`; a malformed datum fails the script. Check one without decoding:
+`Tx.inlineDatum out == Just (Data.encode expected)`.
+
 **Bytes** (`import Bytes`; builtins; the byte string is the last argument; compare with `==`, `<`,
 `compare`):
 
@@ -715,7 +759,7 @@ propose : String -> Int -> ProposalProcedure -> Scenario
 redeemer : Data -> Scenario -> Scenario               -- default: the Data of ()
 parameters : List Data -> Scenario -> Scenario        -- ALL parameters, in declared order
 signedBy : PubKeyHash -> Scenario -> Scenario
-input : TxOutRef -> Output -> Scenario -> Scenario
+input : TxOutRef -> Output -> Scenario -> Scenario    -- at the spent ref: replaces it; same datum as spend
 referenceInput : TxOutRef -> Output -> Scenario -> Scenario
 output : Output -> Scenario -> Scenario
 minting : Bytes -> Int -> Scenario -> Scenario        -- token name, quantity, own policy
@@ -725,9 +769,12 @@ validBefore : Int -> Scenario -> Scenario             -- exclusive
 worth : Int -> Scenario -> Scenario                   -- lovelace of the spent output
 expectFailure : Scenario -> Scenario
 withinBudget : Int -> Int -> Scenario -> Scenario     -- cpu, memory
-toScript : Int -> Output
+toScript : Int -> Output                              -- the validator's own address
+toStakedScript : StakingCredential -> Int -> Output   -- own payment credential with a staking part
 toAddress : Address -> Int -> Output
-withDatum : Data -> Output -> Output
+toKey : PubKeyHash -> Int -> Output                   -- the key's address, no staking part
+withDatum : Data -> Output -> Output                  -- inline datum
+withDatumHash : Data -> Output -> Output              -- datum by hash, with the datum as a witness
 withToken : Policy -> Bytes -> Int -> Output -> Output
 key : String -> PubKeyHash                            -- deterministic test key
 outRef : String -> Int -> TxOutRef
@@ -754,23 +801,24 @@ subject comes **first**.
 
 ```toml
 [java-modules]
-"Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
 "Julc.Math" = "org.julclang.stdlib.lib.MathLib"
+"Julc.Output" = "org.julclang.stdlib.lib.OutputLib"
 ```
 
 | Function | Type |
 | --- | --- |
-| `Interval.contains` | `Interval -> Int -> Bool` (inclusive bounds) |
-| `Interval.finiteLowerBound`, `finiteUpperBound` | `Interval -> Int`, **`-1` when infinite** |
-| `Interval.after`, `before` / `between` | `Int -> Interval` / `Int -> Int -> Interval` |
 | `Math.floorDiv`, `floorMod` | `Int -> Int -> Int` (round towards negative infinity; `//` truncates) |
 | `Math.expMod` | `Int -> Int -> Int -> Int` |
 | `Math.sign` | `Int -> Int` |
-| `Contexts.findOwnInput` (`ContextsLib`) | `ScriptContext -> JulcOptional TxInInfo` (convert with `Data.fromOptional`) |
-| `Contexts.signedBy` | `TxInfo -> Bytes -> Bool` (pass `pkh.hash`) |
-| `Output.lovelacePaidTo` (`OutputLib`) | `List TxOut -> Address -> Int` |
+| `Output.outputsAt`, `lovelacePaidTo` (`OutputLib`) | `List TxOut -> Address -> List TxOut` / `Int`: whole address, staking part included |
+| `Address.isPubKeyAddress`, `isScriptAddress` (`AddressLib`) | `Address -> Bool` |
 | `Crypto.verifyEd25519Signature` (`CryptoLib`) | `Bytes -> Bytes -> Bytes -> Bool` (key, message, signature) |
 | `ByteString.toHex`, `intToDecimalString` (`ByteStringLib`) | `Bytes -> Bytes`, `Int -> Bytes` |
+
+Use the core `Tx` and `Interval` modules instead of `ContextsLib` and `IntervalLib`. `IntervalLib`'s
+`finiteLowerBound` and `finiteUpperBound` return `-1` for an infinite bound, a sentinel that makes "no end"
+look like "ends at -1". `Interval` and `Tx` are core module names: a `[java-modules]` key can't be either,
+and a Java module should not be aliased as either.
 
 Unsupported signatures (for example `MathLib.divMod`, all of `BlsLib`) are `ELCI2105`, and so is every
 export whose result can hold a `Value` (`ValuesLib.add`, `ValuesLib.singleton`), except in `ContextsLib` and
@@ -808,7 +856,7 @@ Error format: `path:line:col: ELCIxxxx: message`; for a validator the first line
 | `ELCI1002` | `Function parameters require irrefutable patterns; use case ...`, `Comparison operators cannot be chained`, `Mixing (<\|) and (\|>) needs parentheses ...` | `case`; `&&`; parentheses |
 | `ELCI2001` | `Float division is unsupported; use // for integer quotient` | `//` |
 | `ELCI2002` | `Type mismatch: expected Int, found a`, `The operator + works on Int values, not String; use ++ to append` | fix the types or signature |
-| `ELCI2003` | `The operator == cannot compare Data values: Data is opaque; decode it and compare the values`, `The operator < needs comparable values, but Bool, in ( Int, Bool ), is not comparable. ...`, `` The operator > compares values of type `a`, but the annotation of `larger` says `a` can be any type. Rename it `comparable` ... ``, `The operator ++ appends String or List values, not Int` | compare decoded values or keys; `List.sortBy`; rename to `comparable`/`appendable` |
+| `ELCI2003` | `The operator == cannot compare Map Int Int values: it has no equality`, `The operator < needs comparable values, but Bool, in ( Int, Bool ), is not comparable. ...`, `` The operator > compares values of type `a`, but the annotation of `larger` says `a` can be any type. Rename it `comparable` ... ``, `The operator ++ appends String or List values, not Int` | compare lookups or keys; `List.sortBy`; rename to `comparable`/`appendable` |
 | `ELCI2004` | `Top-level declarations require a type signature` | add the signature |
 | `ELCI2005` | `Unknown name 'lenght'`, `Unknown name 'Math.maximum'; check that the imported module exports it` | spelling; section 3.3 |
 | `ELCI2006` | `Unreachable pattern`, `Duplicate pattern variable x` | remove the branch; rename |
@@ -823,7 +871,7 @@ Error format: `path:line:col: ELCIxxxx: message`; for a validator the first line
 | `ELCI2101` | `Missing source module: X; add X.elm under a source directory, or map a Java library to it under [java-modules]`, `Expect is part of the test library; only test modules can import it` | add module / mapping; move to `tests/` |
 | `ELCI2102` | `max is ambiguous: it could be Basics.max or Utils.max. Write the one you mean, like Basics.max, or stop exposing the other` | qualify, or expose the name explicitly |
 | `ELCI2103` | `Handler Main.mint must be exposed by its module` | expose it |
-| `ELCI2104` | ``Bytes.fromString needs the Bytes module; add `import Bytes` ``, `Elci's List module has no find. It has all, any, ...`, `Elci has no Debug.log; use Debug.trace message value, which returns value`, `Map is imported as M; write M.get`, `The module name String is taken by Elci's core library; rename this module`, `Import cycle: Main -> Pricing -> Main`, `Java modules cannot be imported with exposing (..); ...` | add the import; section 3.3; rename; break cycles |
+| `ELCI2104` | ``Bytes.fromString needs the Bytes module; add `import Bytes` ``, `Elci's List module has no find. It has all, any, ...`, `Elci has no Debug.log; use Debug.trace message value, which returns value`, `Map is imported as M; write M.get`, `The module name Tx is taken by Elci's core library; rename this module`, `Import cycle: Main -> Pricing -> Main`, `Java modules cannot be imported with exposing (..); ...` | add the import; section 3.3; rename; break cycles |
 | `ELCI2105` | `...MathLib.divMod: Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>`, `...ValuesLib.add: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module` | use another export; the core `Value` module |
 | `ELCI3001` | `Cannot determine the type converted by Julc.Data.decode; add a type annotation` | annotate (`let xs : List Int`) |
 | `ELCI3002` | specialization limit (256) | remove polymorphic recursion |
@@ -840,7 +888,7 @@ A failing scenario that was never run prints `cannot prepare validator 'badge': 
 1. **Using Elm APIs Elci lacks** (`Set`, `Debug.log`, `String.length`, `String.toInt`,
    `List.map4`, `.field`). Use section 3.3. The core functions in section 8 do exist; use them rather than
    writing your own or mapping `Julc.Math`.
-2. **Forgetting imports.** `Dict`, `Map`, `Array`, `Value`, `Bytes`, `Julc.Data` must be imported; `Basics`, `List`,
+2. **Forgetting imports.** `Dict`, `Map`, `Array`, `Value`, `Interval`, `Tx`, `Bytes`, `Julc.Data` must be imported; `Basics`, `List`,
    `Maybe`, `Result`, `String`, `Tuple` and `Debug` are implicit. `Julc.*` Java modules also need a
    `[java-modules]` mapping.
 3. **Omitting type signatures** on top-level declarations (`ELCI2004`).
@@ -851,7 +899,8 @@ A failing scenario that was never run prints `cannot prepare validator 'badge': 
 7. **Expensive top-level values** in multi-purpose scripts: every purpose pays. Use functions.
 8. **Assuming record field order** in Data: records encode fields **sorted by name**.
 9. **Assuming `Maybe` = Java `Optional`** tags: convert with `Data.fromOptional` / `Data.toOptional`.
-10. **Ignoring the `-1` sentinel** of `Interval.finiteLowerBound`/`finiteUpperBound`.
+10. **Julc's `IntervalLib` for deadlines**, whose `finiteLowerBound`/`finiteUpperBound` return `-1` for an
+    infinite bound. Use `Interval.isEntirelyAfter`/`isEntirelyBefore`, and mind that they are strict.
 11. **Storing `Array` in data**, or building big maps with `Map.fromList` (quadratic; a 100-entry map
     exceeds a transaction's memory budget). Keep lists in data, convert with `Array.fromList` once; build
     keyed data with `Dict.fromList` (O(n log n)).
@@ -879,12 +928,67 @@ A failing scenario that was never run prints `cannot prepare validator 'badge': 
     are rejected (`ELCI2105`). `==` on values is exact, so use `Value.geq` for "pays at least".
     `Value.lovelaceOf tx.mint` is 0, and a burn is a negative quantity in `tx.mint`.
     `import Julc.Ledger exposing (Value(..))` is `ELCI2104`: values come from the `Value` module.
+27. **Hand-written context walks.** `List.any (\s -> s == key) tx.signatories`, a `case` on `scriptInfo`
+    to find the own input or policy, or a filter over `tx.outputs` by credential: use `Tx.signedBy`,
+    `Tx.ownInput`, `Tx.ownPolicy` and `Tx.outputsTo`.
+28. **Untagged payment checks.** `Value.lovelaceOf (Tx.valuePaidTo (PubKeyCredential seller) ctx) >= price` lets one output
+    pay for two script inputs (double satisfaction). See section 13.
+29. **`token.name` on a `TokenName`.** Its bytes are `token.hash`; there is no `.name` field.
 
-## 13. Canonical examples
+## 13. Security checklist for validators
+
+The escrow, marketplace and order-swap example projects apply the items that concern spend validators and
+test each attack (`examples/escrow`, `examples/marketplace`, `examples/order-swap`; their sources are in
+`/ai/examples.json`).
+
+1. **Tag every payment against double satisfaction.** When two inputs of one script can each require a
+   payment to the same party, one output satisfies both checks. Require the paying output to carry the
+   spent output's reference as its inline datum:
+
+   ```elm
+   case Tx.ownRef ctx of
+       Just ref ->
+           List.any
+               (\output ->
+                   (Value.lovelaceOf output.value >= price)
+                       && (Tx.inlineDatum output == Just (Data.encode ref))
+               )
+               (Tx.outputsTo (PubKeyCredential seller) ctx)
+
+       Nothing ->
+           False
+   ```
+
+   Never accept an untagged `Tx.valuePaidTo` total. Write a scenario that pays with another input's tag
+   (`Scenario.withDatum (Data.encode (Scenario.outRef "listing" 1))`) and expects failure.
+2. **One script input per transaction when outputs are matched by address.** An output returned to the
+   script carries the script's datum, not a tag, so one returned output could stand for two inputs. Count
+   the inputs whose `resolved.address.credential` is the own input's and require exactly one.
+3. **Check the whole value that stays.** For an output back to the script, compare its whole value with
+   `Value.geq output.value expected`, where `expected` is everything that must stay (for example
+   `Value.subtract own.resolved.value taken`), not just one token: otherwise the spender keeps the lovelace
+   and the other tokens. To stop padding with junk tokens as well, require
+   `Value.withoutLovelace output.value == Value.withoutLovelace expected` and
+   `Value.lovelaceOf output.value >= Value.lovelaceOf expected`.
+4. **Use `Value.geq` or `>=` for "pays at least", never `==`,** which rejects a payment with extra lovelace or
+   tokens. Use `==` when exactness is the rule, as for `Tx.mintedOf policy ctx` in a minting policy.
+5. **Check signatures with `Tx.signedBy` for every privileged action** (cancel, refund, update, withdraw),
+   and write a scenario where a stranger signs.
+6. **Bound numbers taken from datums and parameters.** Parameters are not validated on-chain: check a fee
+   in basis points is between 0 and 10000, and amounts are positive (`amount > 0`), before using them.
+7. **Deadlines use `Interval`.** `isEntirelyAfter`/`isEntirelyBefore` fail for a transaction without a
+   validity range. They are strict; test the boundary with a property over offsets around the deadline.
+8. **Payees are matched by payment credential.** `Tx.outputsTo` ignores the staking part: whoever builds
+   the transaction chooses the payee's staking part. To protect a payee's staking rights, store their full
+   `Address` and compare `output.address`.
+9. **Minting policies check the whole mint under their policy:**
+   `Dict.toList (Tx.mintedOf policy ctx) == [ ( TokenName name, quantity ) ]` rejects extra token names.
+
+## 14. Canonical examples
 
 All three were built and run with the CLI exactly as shown.
 
-### 13.1 Spend validator with typed datum and redeemer, scenarios and a property
+### 14.1 Spend validator with typed datum and redeemer, scenarios and a property
 
 ```toml title="elci.toml"
 [project]
@@ -895,16 +999,14 @@ julc-version = "0.1.0-gb-5a3378b"
 [validators.escrow]
 boundary = "julc-strict-v1"
 spend = "Escrow.spend"
-
-[java-modules]
-"Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
 ```
 
 ```elm title="src/Escrow.elm"
 module Escrow exposing (Action(..), Lock, spend)
 
-import Julc.Interval as Interval
+import Interval
 import Julc.Ledger exposing (PubKeyHash, ScriptContext)
+import Tx
 
 
 {-| The datum stored with the locked funds.
@@ -927,23 +1029,18 @@ spend : Lock -> Action -> ScriptContext -> Bool
 spend lock action ctx =
     case action of
         Claim ->
-            signedBy lock.beneficiary ctx
-                && (Interval.finiteLowerBound ctx.txInfo.validRange >= lock.deadline)
+            Tx.signedBy lock.beneficiary ctx
+                && Interval.isEntirelyAfter lock.deadline ctx.txInfo.validRange
 
         Refund ->
-            signedBy lock.owner ctx
-
-
-signedBy : PubKeyHash -> ScriptContext -> Bool
-signedBy key ctx =
-    List.member key ctx.txInfo.signatories
+            Tx.signedBy lock.owner ctx
 ```
 
 ```elm title="tests/EscrowTest.elm"
 module EscrowTest exposing
-    ( beneficiaryClaimsAtTheDeadline
-    , claimsOpenExactlyAtTheDeadline
-    , earlyClaimFails
+    ( beneficiaryClaimsAfterTheDeadline
+    , claimAtTheDeadlineFails
+    , claimsOpenOnlyAfterTheDeadline
     , lockRoundTrips
     , ownerRefunds
     , strangerCannotRefund
@@ -980,17 +1077,19 @@ spendWith action =
         |> Scenario.redeemer (Data.encode action)
 
 
-beneficiaryClaimsAtTheDeadline : Scenario
-beneficiaryClaimsAtTheDeadline =
+beneficiaryClaimsAfterTheDeadline : Scenario
+beneficiaryClaimsAfterTheDeadline =
     spendWith Claim
-        |> Scenario.validFrom 1000
+        |> Scenario.validFrom 1001
         |> Scenario.signedBy beneficiary
 
 
-earlyClaimFails : Scenario
-earlyClaimFails =
+{-| `validFrom` is inclusive: a transaction valid from 1000 could run at the deadline.
+-}
+claimAtTheDeadlineFails : Scenario
+claimAtTheDeadlineFails =
     spendWith Claim
-        |> Scenario.validFrom 999
+        |> Scenario.validFrom 1000
         |> Scenario.signedBy beneficiary
         |> Scenario.expectFailure
 
@@ -1013,11 +1112,11 @@ lockRoundTrips =
     Expect.equal lock (Data.decode (Data.encode lock))
 
 
-{-| A signed claim succeeds exactly when its validity range starts at or after the deadline.
+{-| A signed claim succeeds exactly when its validity range starts after the deadline.
 The generated offset is relative to the deadline, so the boundary is tested early and often.
 -}
-claimsOpenExactlyAtTheDeadline : Int -> Property
-claimsOpenExactlyAtTheDeadline offset =
+claimsOpenOnlyAfterTheDeadline : Int -> Property
+claimsOpenOnlyAfterTheDeadline offset =
     let
         start =
             lock.deadline + offset
@@ -1027,7 +1126,7 @@ claimsOpenExactlyAtTheDeadline offset =
                 |> Scenario.validFrom start
                 |> Scenario.signedBy beneficiary
     in
-    if start >= lock.deadline then
+    if start > lock.deadline then
         Property.scenario claim
 
     else
@@ -1036,21 +1135,22 @@ claimsOpenExactlyAtTheDeadline offset =
 
 ```text
 $ elci check
-validator escrow (spend): checked; 551 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator escrow (spend): checked; 599 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 $ elci test --seed 42
-PASS EscrowTest.beneficiaryClaimsAtTheDeadline (cpu 15729840, mem 60150)
-PASS EscrowTest.earlyClaimFails (cpu 15713840, mem 60050)
-PASS EscrowTest.ownerRefunds (cpu 12986425, mem 51679)
-PASS EscrowTest.strangerCannotRefund (cpu 13364858, mem 53611)
+PASS EscrowTest.beneficiaryClaimsAfterTheDeadline (cpu 17930587, mem 67036)
+PASS EscrowTest.claimAtTheDeadlineFails (cpu 17914587, mem 66936)
+PASS EscrowTest.ownerRefunds (cpu 13130425, mem 52579)
+PASS EscrowTest.strangerCannotRefund (cpu 13508858, mem 54511)
 PASS EscrowTest.lockRoundTrips (cpu 8484615, mem 30707)
-PASS EscrowTest.claimsOpenExactlyAtTheDeadline (100 runs, max cpu 15729840, mem 60150)
+PASS EscrowTest.claimsOpenOnlyAfterTheDeadline (100 runs, max cpu 17930587, mem 67036)
 6 passed, 0 failed (seed 42)
 ```
 
-Changing `>=` to `>` in `Escrow.spend` makes the property fail on its first run with the counterexample
-`claimsOpenExactlyAtTheDeadline 0`.
+Changing `Interval.isEntirelyAfter lock.deadline` to `Interval.isEntirelyAfter (lock.deadline - 1)` in
+`Escrow.spend` makes the property fail on its first run with the counterexample
+`claimsOpenOnlyAfterTheDeadline 0`.
 
-### 13.2 Parameterized minting policy
+### 14.2 Parameterized minting policy
 
 ```toml title="elci.toml"
 [project]
@@ -1068,8 +1168,9 @@ mint = "Badge.mint"
 module Badge exposing (badgeName, mint)
 
 import Bytes
-import Julc.Ledger exposing (PubKeyHash, ScriptContext, ScriptInfo(..), TokenName(..))
-import Value
+import Dict
+import Julc.Ledger exposing (PubKeyHash, ScriptContext, TokenName(..))
+import Tx
 
 
 badgeName : Bytes
@@ -1078,24 +1179,25 @@ badgeName =
 
 
 {-| The admin (a deployment parameter) may mint or burn BADGE tokens. The redeemer is the
-quantity, which must match what the transaction mints under this policy.
+quantity, which must be exactly what the transaction mints under this policy.
 -}
 mint : PubKeyHash -> Int -> ScriptContext -> Bool
 mint admin quantity ctx =
-    case ctx.scriptInfo of
-        MintingScript policy ->
+    case Tx.ownPolicy ctx of
+        Just policy ->
             (quantity /= 0)
-                && List.member admin ctx.txInfo.signatories
-                && (Value.quantityOf policy (TokenName badgeName) ctx.txInfo.mint == quantity)
+                && Tx.signedBy admin ctx
+                && (Dict.toList (Tx.mintedOf policy ctx) == [ ( TokenName badgeName, quantity ) ])
 
-        _ ->
+        Nothing ->
             False
 ```
 
 ```elm title="tests/BadgeTest.elm"
-module BadgeTest exposing (adminBurns, adminMints, onlyTheDeclaredQuantity, strangerCannotMint, zeroIsRejected)
+module BadgeTest exposing (adminBurns, adminMints, onlyTheDeclaredQuantity, otherTokensAreRejected, strangerCannotMint, zeroIsRejected)
 
 import Badge
+import Bytes
 import Julc.Data as Data
 import Julc.Ledger exposing (PubKeyHash)
 import Property exposing (Property)
@@ -1140,6 +1242,15 @@ zeroIsRejected =
         |> Scenario.expectFailure
 
 
+{-| Nothing but BADGE may be minted under the policy.
+-}
+otherTokensAreRejected : Scenario
+otherTokensAreRejected =
+    mintAs admin 5 5
+        |> Scenario.minting (Bytes.fromString "OTHER") 1
+        |> Scenario.expectFailure
+
+
 {-| The admin's transaction succeeds only when the redeemer equals the minted quantity.
 -}
 onlyTheDeclaredQuantity : Int -> Int -> Property
@@ -1157,19 +1268,20 @@ onlyTheDeclaredQuantity declared actual =
 
 ```text
 $ elci check
-validator badge (mint): checked; 299 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator badge (mint): checked; 531 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
 $ elci test --seed 42
-PASS BadgeTest.adminMints (cpu 9892303, mem 33637)
-PASS BadgeTest.adminBurns (cpu 9892303, mem 33637)
-PASS BadgeTest.strangerCannotMint (cpu 7664762, mem 28891)
-PASS BadgeTest.zeroIsRejected (cpu 4720002, mem 18514)
-PASS BadgeTest.onlyTheDeclaredQuantity (100 runs, max cpu 9892303, mem 33637)
-5 passed, 0 failed (seed 42)
+PASS BadgeTest.adminMints (cpu 16338349, mem 56630)
+PASS BadgeTest.adminBurns (cpu 16338349, mem 56630)
+PASS BadgeTest.strangerCannotMint (cpu 9466389, mem 36712)
+PASS BadgeTest.zeroIsRejected (cpu 6425629, mem 25735)
+PASS BadgeTest.otherTokensAreRejected (cpu 17971962, mem 62350)
+PASS BadgeTest.onlyTheDeclaredQuantity (100 runs, max cpu 16338349, mem 56630)
+6 passed, 0 failed (seed 42)
 $ elci apply --validator badge --param 'admin={"bytes": "a2c20c77887ace1cd986193e4e75babd8993cfd56995cd5cfce609c2"}'
-validator badge: applied 1 parameter(s); hash a8a26fa4f5ceaebcb4ac132d94793672f4d17a0af9861a9b60dbf198; wrote .../badge/build/validators/badge/applied.plutus.json
+validator badge: applied 1 parameter(s); hash 8769d0504d637d83ffdc196eb33ab8146710d182338b0608f970c3cb; wrote .../badge/build/validators/badge/applied.plutus.json
 ```
 
-### 13.3 Function project for `elci eval`
+### 14.3 Function project for `elci eval`
 
 `elci init pricing --purpose function` creates the `[entrypoint]` configuration from section 2.
 
@@ -1224,17 +1336,19 @@ cpu 43542823, mem 172473
 trace: no price for kiwi
 ```
 
-## 14. Checklist before generating Elci code
+## 15. Checklist before generating Elci code
 
 1. Is every top-level declaration annotated, and every module name equal to its file path?
-2. Did I avoid every Elm API in section 3.3 and import `Dict`/`Map`/`Array`/`Value`/`Bytes`/`Julc.Data` where used?
+2. Did I avoid every Elm API in section 3.3 and import `Dict`/`Map`/`Array`/`Value`/`Interval`/`Tx`/`Bytes`/`Julc.Data` where used?
 3. Does each handler match section 6, with parameters first, and is it exposed and listed in `elci.toml`?
 4. Are datum, redeemer and parameter types Data-encodable (no functions, `Array`, `Value`, `TxOut`)?
 5. Do I compare `PubKeyHash` with `PubKeyHash` (or `.hash` with `Bytes`), never mixed?
 6. Are cheap checks first and inline, and expensive work kept out of `let` and top-level values?
 7. Is every `Julc.*` module I import mapped under `[java-modules]`, with explicit exposing only?
 8. Do my scenarios pass all parameters, and do they cover success, each failure path and a property?
-9. Did I run `elci check`, then `elci test`, and fix every error before `elci build`?
+9. Did I use `Tx` and `Interval` rather than hand-written context walks, `ContextsLib` or `IntervalLib`?
+10. Does the validator pass the security checklist (section 13), with a scenario for each attack?
+11. Did I run `elci check`, then `elci test`, and fix every error before `elci build`?
 
 More depth: [language reference](/reference/language/), [core modules](/reference/core-modules/),
 [test library](/reference/test-library/), [diagnostics](/reference/diagnostics/),

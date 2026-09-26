@@ -240,9 +240,9 @@ elci test [project-directory] [--match <substring>] [--seed <n>] [--fuzz <runs>]
 
 ```text
 $ elci test --match deadline --seed 42
-PASS VestingTest.claimsAtTheDeadline (cpu 14681744, mem 54515)
-PASS VestingTest.claimsAfterTheDeadline (cpu 14681744, mem 54515)
-PASS VestingTest.claimsSucceedExactlyFromTheDeadline (100 runs, max cpu 14681744, mem 54515)
+PASS VestingTest.claimsAfterTheDeadline (cpu 16763911, mem 61637)
+PASS VestingTest.claimsAtTheDeadlineFail (cpu 13950292, mem 52228)
+PASS VestingTest.claimsSucceedExactlyAfterTheDeadline (100 runs, max cpu 16763911, mem 61637)
 3 passed, 0 failed (seed 42)
 ```
 

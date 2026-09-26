@@ -14,12 +14,16 @@ Map an Elm-style module name to its Java library class:
 
 ```toml
 [java-modules]
-"Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
+"Julc.Math" = "org.julclang.stdlib.lib.MathLib"
 ```
 
 ```elm
-import Julc.Interval as Interval
+import Julc.Math as Math
 ```
+
+The core `Tx` and `Interval` modules cover what `ContextsLib` and `IntervalLib`
+were used for, without a mapping ([ADR-010](../adr/010-transaction-and-interval-helpers.md)).
+Their names, like the other core module names, cannot be `[java-modules]` keys.
 
 Bundled sources are read from `META-INF/plutus-sources/` in the compiler's
 classpath. This also works in the native executable.
