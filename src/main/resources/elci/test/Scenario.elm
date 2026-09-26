@@ -24,6 +24,7 @@ module Scenario exposing
     , spend
     , spendWithoutDatum
     , toAddress
+    , toKey
     , toScript
     , unit
     , validBefore
@@ -306,6 +307,13 @@ toScript lovelace =
 toAddress : Address -> Int -> Output
 toAddress address lovelace =
     { destination = ToAddress address, lovelace = lovelace, tokens = [], datum = NoOutputDatum }
+
+
+{-| An output paid to a key's address, without a staking part.
+-}
+toKey : PubKeyHash -> Int -> Output
+toKey owner lovelace =
+    toAddress (Ledger.Address (Ledger.PubKeyCredential owner) (Data.toOptional Nothing)) lovelace
 
 
 withDatum : Data -> Output -> Output

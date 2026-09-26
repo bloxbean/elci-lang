@@ -1,0 +1,8 @@
+[project]
+source-directories = ["src"]
+target = "plutus-v3-pv11-uplc-1.1.0"
+julc-version = "0.1.0-gb-5a3378b"
+
+[validators.escrow]
+boundary = "julc-strict-v1"
+spend = "Escrow.spend"

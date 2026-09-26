@@ -10,13 +10,13 @@ import java.util.*;
 public final class Modules {
     /** Core modules written in Elci and bundled with the compiler. */
     public static final List<String> CORE_MODULES =
-            List.of("Basics", "List", "Maybe", "Result", "String", "Tuple", "Map", "Dict", "Array", "Value");
+            List.of("Basics", "List", "Maybe", "Result", "String", "Tuple", "Map", "Dict", "Array", "Value", "Interval", "Tx");
     /** Core modules whose type is built in, and may still be named as in Elm: {@code Map.Map}, {@code exposing (Map)}. */
     private static final Map<String, String> BUILTIN_TYPES = Map.of("Map", "Map", "Dict", "Dict", "Array", "Array",
-            "List", "List", "Maybe", "Maybe", "String", "String", "Value", "Value");
-    /** The identity a built-in type name resolves to: the core `Value` is the ledger's (ADR-009). */
+            "List", "List", "Maybe", "Maybe", "String", "String", "Value", "Value", "Interval", "Interval");
+    /** The identity a built-in type name resolves to: the core `Value` and `Interval` are the ledger's. */
     private static String builtinTarget(String type) {
-        return type.equals("Value") ? "org.julclang.ledger.Value" : type;
+        return type.equals("Value") || type.equals("Interval") ? "org.julclang.ledger." + type : type;
     }
     /**
      * Elm's default imports (ADR-008), added to every project and test module. Their names have

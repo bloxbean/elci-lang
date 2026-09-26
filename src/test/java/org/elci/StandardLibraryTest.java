@@ -1251,6 +1251,182 @@ class StandardLibraryTest {
     }
 
     @Test
+    void txAnswersQuestionsAboutTheTransaction() throws Exception {
+        Files.writeString(project.resolve("elci.toml"), """
+                [project]
+                source-directories = ["src"]
+                target = "plutus-v3-pv11-uplc-1.1.0"
+                julc-version = "0.1.0-gb-5a3378b"
+
+                [validators.probe]
+                boundary = "julc-strict-v1"
+                spend = "Probe.spend"
+                mint = "Probe.mint"
+                """);
+        Files.createDirectories(project.resolve("src"));
+        Files.createDirectories(project.resolve("tests"));
+        Files.writeString(project.resolve("src/Probe.elm"), """
+                module Probe exposing (Check(..), mint, spend)
+
+                import Bytes
+                import Dict
+                import Interval
+                import Julc.Data as Data
+                import Julc.Ledger exposing (Credential(..), PubKeyHash, ScriptContext, TokenName(..))
+                import Tx
+                import Value
+
+
+                type Check
+                    = Signed PubKeyHash
+                    | PaidAtLeast PubKeyHash Int
+                    | Continues Int
+                    | SpendsOwn
+                    | Balanced
+                    | StartsAfter Int
+                    | InlineDatumIs Int
+
+
+                spend : () -> Check -> ScriptContext -> Bool
+                spend _ check ctx =
+                    case check of
+                        Signed key ->
+                            Tx.signedBy key ctx
+
+                        PaidAtLeast key amount ->
+                            Value.lovelaceOf (Tx.valuePaidTo (PubKeyCredential key) ctx) >= amount
+
+                        Continues count ->
+                            List.length (Tx.continuingOutputs ctx) == count
+
+                        SpendsOwn ->
+                            case Tx.ownRef ctx of
+                                Just ref ->
+                                    Tx.spends ref ctx
+                                        && Maybe.map (\\input -> input.outRef) (Tx.findInput ref ctx) == Just ref
+                                        && Maybe.map (\\input -> input.outRef) (Tx.ownInput ctx) == Just ref
+
+                                Nothing ->
+                                    False
+
+                        Balanced ->
+                            Value.lovelaceOf (Tx.valueSpent ctx) == Value.lovelaceOf (Tx.valueProduced ctx) + ctx.txInfo.fee
+
+                        StartsAfter time ->
+                            Interval.isEntirelyAfter time ctx.txInfo.validRange
+
+                        InlineDatumIs n ->
+                            List.any (\\output -> Tx.inlineDatum output == Just (Data.encode n) && Tx.datumOf output ctx == Just (Data.encode n))
+                                ctx.txInfo.outputs
+
+
+                mint : () -> ScriptContext -> Bool
+                mint _ ctx =
+                    case Tx.ownPolicy ctx of
+                        Just policy ->
+                            Dict.get (TokenName (Bytes.fromString "T")) (Tx.mintedOf policy ctx) == Just 2
+
+                        Nothing ->
+                            False
+                """);
+        Files.writeString(project.resolve("tests/ProbeTest.elm"), """
+                module ProbeTest exposing (balanced, continues, datums, minted, paid, signed, spendsOwn, startsAfter, underpaid, unsigned, wrongMint)
+
+                import Bytes
+                import Julc.Data as Data
+                import Probe exposing (Check(..))
+                import Scenario exposing (Policy(..), Scenario)
+
+
+                check : Check -> Scenario
+                check c =
+                    Scenario.spend "probe" (Scenario.outRef "probe" 0) Scenario.unit
+                        |> Scenario.redeemer (Data.encode c)
+
+
+                signed : Scenario
+                signed =
+                    check (Signed (Scenario.key "a")) |> Scenario.signedBy (Scenario.key "a")
+
+
+                unsigned : Scenario
+                unsigned =
+                    check (Signed (Scenario.key "a")) |> Scenario.signedBy (Scenario.key "b") |> Scenario.expectFailure
+
+
+                paid : Scenario
+                paid =
+                    check (PaidAtLeast (Scenario.key "a") 7)
+                        |> Scenario.output (Scenario.toKey (Scenario.key "a") 3)
+                        |> Scenario.output (Scenario.toKey (Scenario.key "a") 4)
+                        |> Scenario.output (Scenario.toKey (Scenario.key "b") 100)
+
+
+                underpaid : Scenario
+                underpaid =
+                    check (PaidAtLeast (Scenario.key "a") 8)
+                        |> Scenario.output (Scenario.toKey (Scenario.key "a") 7)
+                        |> Scenario.expectFailure
+
+
+                continues : Scenario
+                continues =
+                    check (Continues 2)
+                        |> Scenario.output (Scenario.toScript 5)
+                        |> Scenario.output (Scenario.toScript 6)
+                        |> Scenario.output (Scenario.toKey (Scenario.key "a") 7)
+
+
+                spendsOwn : Scenario
+                spendsOwn =
+                    check SpendsOwn
+
+
+                balanced : Scenario
+                balanced =
+                    check Balanced
+                        |> Scenario.worth 10000000
+                        |> Scenario.fee 200000
+                        |> Scenario.output (Scenario.toKey (Scenario.key "a") 9800000)
+
+
+                startsAfter : Scenario
+                startsAfter =
+                    check (StartsAfter 99) |> Scenario.validFrom 100
+
+
+                datums : Scenario
+                datums =
+                    check (InlineDatumIs 42)
+                        |> Scenario.output (Scenario.toKey (Scenario.key "a") 1 |> Scenario.withDatum (Data.encode 42))
+
+
+                minted : Scenario
+                minted =
+                    Scenario.mint "probe"
+                        |> Scenario.redeemer Scenario.unit
+                        |> Scenario.minting (Bytes.fromString "T") 2
+
+
+                wrongMint : Scenario
+                wrongMint =
+                    Scenario.mint "probe"
+                        |> Scenario.redeemer Scenario.unit
+                        |> Scenario.minting (Bytes.fromString "T") 1
+                        |> Scenario.expectFailure
+                """);
+        var result = NamedValidatorCliTest.run("test", project.toString());
+        assertEquals(0, result.status(), result.out() + result.err());
+        assertTrue(result.out().contains("11 passed, 0 failed"), result.out());
+    }
+
+    @Test
+    void dataComparesStructurally() {
+        assertEquals("[True, False, True]", eval("List Bool",
+                "[ Data.encode ( 1, \"a\" ) == Data.encode ( 1, \"a\" ), Data.encode 1 == Data.encode 2, Just (Data.encode [ 1 ]) == Just (Data.encode [ 1 ]) ]"));
+    }
+
+    @Test
     void lawsHoldForGeneratedValues() throws Exception {
         var fixture = Path.of("src/test/resources/stdlib-laws");
         try (var files = Files.walk(fixture)) {
@@ -1262,7 +1438,7 @@ class StandardLibraryTest {
         }
         var result = NamedValidatorCliTest.run("test", project.toString(), "--seed", "2026");
         assertEquals(0, result.status(), result.out() + result.err());
-        assertTrue(result.out().contains("48 passed, 0 failed (seed 2026)"), result.out());
+        assertTrue(result.out().contains("50 passed, 0 failed (seed 2026)"), result.out());
     }
 
     /** Budget snapshots: cost changes to the standard library must be deliberate. */

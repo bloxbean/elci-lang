@@ -339,7 +339,6 @@ public final class Inference {
         if (offending == null) return;
         String name = offending instanceof Con c ? c.name() : "";
         String reason = name.equals("->") ? "functions have no equality"
-                : name.equals("Data") ? "Data is opaque; decode it and compare the values"
                 : importedRepresentations.containsKey(name) ? "its library does not approve equality"
                 : "it has no equality";
         throw new Diagnostic(
@@ -399,7 +398,9 @@ public final class Inference {
         if (!(type instanceof Con c)) return null;
         if (Set.of("Int", "Bool", "String", "Unit").contains(c.name()) || byteEquality(c.name()))
             return null;
-        if (c.name().equals("->") || c.name().equals("Data") || c.name().equals("ScriptContext"))
+        // Data compares structurally: an output's inline datum against an expected encoding.
+        if (c.name().equals("Data")) return null;
+        if (c.name().equals("->") || c.name().equals("ScriptContext"))
             return type;
         if (c.name().equals("List") || c.name().equals("Tuple") || c.name().equals("Dict")
                 || c.name().startsWith("Record:")) {
