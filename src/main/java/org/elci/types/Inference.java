@@ -129,6 +129,8 @@ public final class Inference {
     private record FieldConstraint(Ty record, String name, Ty value, Token token) {}
 
     private final List<FieldConstraint> recordConstraints = new ArrayList<>();
+    /** The errors found so far, reported together at the end of {@link #check} (ADR-012). */
+    private final List<Diagnostic> errors = new ArrayList<>();
 
     public void aliases(Map<String, Alias> aliases) {
         this.aliases = Map.copyOf(aliases);
@@ -193,37 +195,54 @@ public final class Inference {
     }
 
     public void check(List<Decl> ds, Map<String, Ty> imports) {
-        for (var alias : aliases.values()) {
-            var free = new HashSet<String>();
-            sourceVariables(alias.target(), free);
-            if (!alias.parameters().containsAll(free))
-                throw new Diagnostic(
-                        "ELCI2012",
-                        alias.token(),
-                        "Type alias uses undeclared type variables: " + free);
-            expand(
-                    new Type(
-                            alias.name(),
-                            alias.parameters().stream().map(n -> new Type(n, List.of())).toList()),
-                    new HashSet<>());
-            if (alias.target().name().startsWith("Record:"))
-                aliasConstructors.put(alias.name(), alias);
-        }
-        for (var d : ds)
-            if (d.annotation() != null)
-                validateType(expand(d.annotation(), new HashSet<>()), d.token());
+        // Type definitions first: every error in them is reported, and checking stops there, since
+        // declarations use them.
+        for (var alias : aliases.values())
+            try {
+                var free = new HashSet<String>();
+                sourceVariables(alias.target(), free);
+                if (!alias.parameters().containsAll(free))
+                    throw new Diagnostic(
+                            "ELCI2012",
+                            alias.token(),
+                            "Type alias uses undeclared type variables: " + free);
+                expand(
+                        new Type(
+                                alias.name(),
+                                alias.parameters().stream().map(n -> new Type(n, List.of())).toList()),
+                        new HashSet<>());
+                if (alias.target().name().startsWith("Record:"))
+                    aliasConstructors.put(alias.name(), alias);
+            } catch (Diagnostic e) {
+                errors.add(e);
+            }
         for (var u : unions.values())
             for (var v : u.variants())
-                for (var field : v.fields()) {
-                    validateType(expand(field, new HashSet<>()), u.token());
-                    var vars = new HashSet<String>();
-                    sourceVariables(field, vars);
-                    if (!u.parameters().containsAll(vars))
-                        throw new Diagnostic(
-                                "ELCI2012",
-                                u.token(),
-                                "Constructor uses undeclared type variables: " + vars);
-                }
+                for (var field : v.fields())
+                    try {
+                        validateType(expand(field, new HashSet<>()), u.token());
+                        var vars = new HashSet<String>();
+                        sourceVariables(field, vars);
+                        if (!u.parameters().containsAll(vars))
+                            throw new Diagnostic(
+                                    "ELCI2012",
+                                    u.token(),
+                                    "Constructor uses undeclared type variables: " + vars);
+                    } catch (Diagnostic e) {
+                        errors.add(e);
+                    }
+        throwErrors();
+        // A declaration whose annotation is invalid is reported, and not checked.
+        var checked = new ArrayList<Decl>();
+        var invalid = new ArrayList<Decl>();
+        for (var d : ds)
+            try {
+                if (d.annotation() != null) validateType(expand(d.annotation(), new HashSet<>()), d.token());
+                checked.add(d);
+            } catch (Diagnostic e) {
+                errors.add(e);
+                invalid.add(d);
+            }
         imports.forEach((name, type) -> globals.put(name, new Scheme(variables(type), type)));
         for (var alias : aliasConstructors.values()) {
             var vars = new HashMap<String, Ty>();
@@ -264,19 +283,24 @@ public final class Inference {
                             u.token(),
                             "Constructor name conflicts with import " + v.name());
             }
-        inferDeclarations(ds, globals, true);
+        for (var d : invalid) {
+            var any = new Var();
+            globals.put(d.name(), new Scheme(Set.of(any), any));
+        }
+        inferDeclarations(checked, globals, true);
         solveFields();
         if (!recordConstraints.isEmpty())
-            throw new Diagnostic(
+            errors.add(new Diagnostic(
                     "ELCI2010",
                     recordConstraints.getFirst().token(),
                     "Field access requires a known closed record; add a concrete record"
-                            + " annotation");
+                            + " annotation"));
         // Requirements left here are at concrete uses. A variable still unknown is ambiguous: nothing
         // determines it, so no value of it exists (the element type of `[] == []`).
-        append.forEach(constraint -> checkAppend(constraint, true));
-        comparable.forEach(this::checkComparable);
-        equality.forEach(this::checkEquality);
+        for (var constraint : append) record(() -> checkAppend(constraint, true));
+        for (var constraint : comparable) record(() -> checkComparable(constraint));
+        for (var constraint : equality) record(() -> checkEquality(constraint));
+        throwErrors();
         // Decided once, here: a variable no scheme quantifies is ambiguous (ADR-008). Lowering
         // represents it as Data and never defaults any other variable.
         var ambiguous = new Con(Types.AMBIGUOUS, List.of());
@@ -284,6 +308,20 @@ public final class Inference {
             for (Ty type : types)
                 for (Var v : variables(type))
                     if (!generalizedVariables.contains(v)) v.link = ambiguous;
+    }
+
+    private void record(Runnable check) {
+        try {
+            check.run();
+        } catch (Diagnostic e) {
+            errors.add(e);
+        }
+    }
+
+    /** Report the errors found so far, the first carrying the others. */
+    private void throwErrors() {
+        var found = Diagnostic.of(errors);
+        if (found != null) throw found;
     }
 
     /**
@@ -486,182 +524,211 @@ public final class Inference {
         ds.forEach(d -> pending.put(d.name(), d));
         // Dependency SCCs preserve monomorphic recursion and generalize only completed groups.
         for (var group : groups(ds)) {
-            var monotypes = new LinkedHashMap<String, Ty>();
-            for (var d : group) {
-                Ty t = new Var();
-                monotypes.put(d.name(), t);
-                env.put(d.name(), new Scheme(Set.of(), t));
-            }
-            // Every member's annotation is known before any body is checked, so a mistake is
-            // reported in the body that makes it, as in Elm.
-            for (var d : group)
-                if (d.annotation() != null) {
-                    rejectNumber(d);
-                    unify(monotypes.get(d.name()), annotated(d.annotation(), new HashMap<>()), d.token());
-                }
-            var declarationEquality = new IdentityHashMap<Decl, List<Map.Entry<Ty, Token>>>();
-            var declarationAppend = new IdentityHashMap<Decl, List<Map.Entry<Ty, Token>>>();
-            var declarationComparable = new IdentityHashMap<Decl, List<Map.Entry<Ty, Token>>>();
-            for (var d : group) {
-                int equalityStart = equality.size();
-                int appendStart = append.size();
-                int comparableStart = comparable.size();
-                var local = new LinkedHashMap<>(env);
-                var params = new ArrayList<Ty>();
-                Ty parameterShape = monotypes.get(d.name());
-                String declared = d.name().substring(d.name().lastIndexOf('.') + 1);
-                for (String p : d.parameters()) {
-                    Ty t = new Var(), next = new Var();
-                    if (d.annotation() != null && prune(parameterShape) instanceof Con c && !c.name().equals("->"))
-                        throw new Diagnostic("ELCI2002", d.token(), "The annotation of `" + declared + "` gives it "
-                                + arguments(params.size()) + ", but its definition has " + d.parameters().size()
-                                + (d.parameters().size() == 1 ? " parameter" : " parameters"));
-                    unify(parameterShape, fn(t, next), d.token());
-                    parameterShape = next;
-                    params.add(t);
-                    if (!p.equals("_")) local.put(p, new Scheme(Set.of(), t));
-                }
-                Ty body = infer(d.body(), local);
-                if (d.annotation() != null)
-                    expect(parameterShape, body, d.token(), (found, needed) -> "The annotation of `" + declared + "` says "
-                            + (params.isEmpty() ? "it is `" + needed + "`, but its definition is `"
-                                    : "it returns `" + needed + "`, but its body is `") + found + "`");
-                for (int i = params.size() - 1; i >= 0; i--) body = fn(params.get(i), body);
-                unify(monotypes.get(d.name()), body, d.token());
-                declarations.put(d, body);
-                declarationEquality.put(
-                        d, new ArrayList<>(equality.subList(equalityStart, equality.size())));
-                declarationAppend.put(
-                        d, new ArrayList<>(append.subList(appendStart, append.size())));
-                declarationComparable.put(
-                        d, new ArrayList<>(comparable.subList(comparableStart, comparable.size())));
-            }
-            solveFields();
-            if (top && !recordConstraints.isEmpty())
-                throw new Diagnostic(
-                        "ELCI2010",
-                        recordConstraints.getFirst().token(),
-                        "Field access needs a concrete closed record type; an unconstrained generic"
-                                + " signature is insufficient");
-            // Members of a recursive group share type variables, so a requirement one member's
-            // body imposes can constrain every member's type.
-            var groupEquality = new ArrayList<Map.Entry<Ty, Token>>();
-            var groupAppend = new ArrayList<Map.Entry<Ty, Token>>();
-            var groupComparable = new ArrayList<Map.Entry<Ty, Token>>();
-            for (var d : group) {
-                groupEquality.addAll(declarationEquality.getOrDefault(d, List.of()));
-                groupAppend.addAll(declarationAppend.getOrDefault(d, List.of()));
-                groupComparable.addAll(declarationComparable.getOrDefault(d, List.of()));
-            }
-            var rigidCopies = new IdentityHashMap<Decl, Map<Var, Ty>>();
-            for (var d : group) {
-                var t = monotypes.get(d.name());
-                if (top && d.annotation() == null)
-                    throw new Diagnostic(
-                            "ELCI2004",
-                            d.token(),
-                            "Top-level declarations require a type signature");
-                if (d.annotation() != null) {
-                    // Skolems prevent accepting 'a -> a' for an Int-only implementation.
-                    var rigid = new HashMap<String, Ty>();
-                    collectRigid(d.annotation(), rigid);
-                    var copies = new HashMap<Var, Ty>();
-                    general(copy(t, copies), annotated(d.annotation(), rigid), d);
-                    rigidCopies.put(d, copies);
-                    var named = new HashMap<String, Ty>();
-                    unify(t, annotated(d.annotation(), named), d.token());
-                    // As in Elm, a variable named `comparable…`, `appendable…` or `compappend…`
-                    // requires such values of callers.
-                    named.forEach((name, variable) -> {
-                        var requirement = Map.entry(variable, d.token());
-                        if (comparableName(name)) {
-                            comparable.add(requirement);
-                            groupComparable.add(requirement);
-                        }
-                        if (appendableName(name)) {
-                            append.add(requirement);
-                            groupAppend.add(requirement);
-                        }
-                    });
-                }
-            }
-            // Every member's named requirements are known now, so the naming rule doesn't depend on
-            // declaration order. The inferred variables are linked to the annotation's by now.
-            for (var entry : rigidCopies.entrySet()) {
-                var copies = new HashMap<Var, Ty>();
-                entry.getValue().forEach((v, r) -> {
-                    if (prune(v) instanceof Var linked) copies.put(linked, r);
-                });
-                requireConstrainedNames(entry.getKey(), groupComparable, copies, true);
-                requireConstrainedNames(entry.getKey(), groupAppend, copies, false);
-            }
-            solveFields();
-            var environmentVars = new HashSet<Var>();
-            for (var constraint : recordConstraints) {
-                environmentVars.addAll(variables(constraint.record()));
-                environmentVars.addAll(variables(constraint.value()));
-            }
-            for (var e : env.entrySet())
-                if (!monotypes.containsKey(e.getKey())) {
-                    var vs = variables(e.getValue().body());
-                    vs.removeAll(e.getValue().quantified());
-                    environmentVars.addAll(vs);
-                }
-            var generalizedEquality =
-                    Collections.newSetFromMap(new IdentityHashMap<Map.Entry<Ty, Token>, Boolean>());
-            var generalizedAppend =
-                    Collections.newSetFromMap(new IdentityHashMap<Map.Entry<Ty, Token>, Boolean>());
-            var generalizedComparable =
-                    Collections.newSetFromMap(new IdentityHashMap<Map.Entry<Ty, Token>, Boolean>());
-            for (var d : group) {
-                var t = monotypes.get(d.name());
-                var vs = variables(t);
-                vs.removeAll(environmentVars);
-                boolean eligible =
-                        top
-                                || group.size() == 1
-                                        && nonRecursive(d)
-                                        && independent(d, ds)
-                                        && nonExpansive(d);
-                var quantified = eligible ? vs : Set.<Var>of();
-                generalizedVariables.addAll(quantified);
-                var equalityRequirements = new ArrayList<Ty>();
-                // A requirement no instantiation can meet is reported at its definition, as in Elm.
-                for (var requirement : groupEquality)
-                    if (!Collections.disjoint(variables(requirement.getKey()), quantified)) {
-                        checkEquality(requirement);
-                        equalityRequirements.add(requirement.getKey());
-                        generalizedEquality.add(requirement);
-                    }
-                var appendRequirements = new ArrayList<Ty>();
-                for (var requirement : groupAppend)
-                    if (!Collections.disjoint(variables(requirement.getKey()), quantified)) {
-                        checkAppend(requirement, false);
-                        appendRequirements.add(requirement.getKey());
-                        generalizedAppend.add(requirement);
-                    }
-                var comparableRequirements = new ArrayList<Ty>();
-                for (var requirement : groupComparable)
-                    if (!Collections.disjoint(variables(requirement.getKey()), quantified)) {
-                        checkComparable(requirement);
-                        comparableRequirements.add(requirement.getKey());
-                        generalizedComparable.add(requirement);
-                    }
-                var scheme = new Scheme(quantified, t, equalityRequirements, appendRequirements, comparableRequirements);
-                env.put(d.name(), scheme);
-                declarationSchemes.put(d, scheme);
-            }
-            if (group.size() > 1)
+            int equalityMark = equality.size(), appendMark = append.size(), comparableMark = comparable.size();
+            try {
+                var monotypes = new LinkedHashMap<String, Ty>();
                 for (var d : group) {
-                    var foreign = Collections.newSetFromMap(new IdentityHashMap<Var, Boolean>());
-                    for (var other : group) if (other != d) foreign.addAll(declarationSchemes.get(other).quantified());
-                    foreign.removeAll(declarationSchemes.get(d).quantified());
-                    if (!foreign.isEmpty()) foreignVariables.put(d, foreign);
+                    Ty t = new Var();
+                    monotypes.put(d.name(), t);
+                    env.put(d.name(), new Scheme(Set.of(), t));
                 }
-            equality.removeIf(generalizedEquality::contains);
-            append.removeIf(generalizedAppend::contains);
-            comparable.removeIf(generalizedComparable::contains);
+                // Every member's annotation is known before any body is checked, so a mistake is
+                // reported in the body that makes it, as in Elm.
+                for (var d : group)
+                    if (d.annotation() != null) {
+                        rejectNumber(d);
+                        unify(monotypes.get(d.name()), annotated(d.annotation(), new HashMap<>()), d.token());
+                    }
+                var declarationEquality = new IdentityHashMap<Decl, List<Map.Entry<Ty, Token>>>();
+                var declarationAppend = new IdentityHashMap<Decl, List<Map.Entry<Ty, Token>>>();
+                var declarationComparable = new IdentityHashMap<Decl, List<Map.Entry<Ty, Token>>>();
+                for (var d : group) {
+                    int equalityStart = equality.size();
+                    int appendStart = append.size();
+                    int comparableStart = comparable.size();
+                    var local = new LinkedHashMap<>(env);
+                    var params = new ArrayList<Ty>();
+                    Ty parameterShape = monotypes.get(d.name());
+                    String declared = d.name().substring(d.name().lastIndexOf('.') + 1);
+                    for (String p : d.parameters()) {
+                        Ty t = new Var(), next = new Var();
+                        if (d.annotation() != null && prune(parameterShape) instanceof Con c && !c.name().equals("->"))
+                            throw new Diagnostic("ELCI2002", d.token(), "The annotation of `" + declared + "` gives it "
+                                    + arguments(params.size()) + ", but its definition has " + d.parameters().size()
+                                    + (d.parameters().size() == 1 ? " parameter" : " parameters"));
+                        unify(parameterShape, fn(t, next), d.token());
+                        parameterShape = next;
+                        params.add(t);
+                        if (!p.equals("_")) local.put(p, new Scheme(Set.of(), t));
+                    }
+                    Ty body = infer(d.body(), local);
+                    if (d.annotation() != null)
+                        expect(parameterShape, body, d.token(), (found, needed) -> "The annotation of `" + declared + "` says "
+                                + (params.isEmpty() ? "it is `" + needed + "`, but its definition is `"
+                                        : "it returns `" + needed + "`, but its body is `") + found + "`");
+                    for (int i = params.size() - 1; i >= 0; i--) body = fn(params.get(i), body);
+                    unify(monotypes.get(d.name()), body, d.token());
+                    declarations.put(d, body);
+                    declarationEquality.put(
+                            d, new ArrayList<>(equality.subList(equalityStart, equality.size())));
+                    declarationAppend.put(
+                            d, new ArrayList<>(append.subList(appendStart, append.size())));
+                    declarationComparable.put(
+                            d, new ArrayList<>(comparable.subList(comparableStart, comparable.size())));
+                }
+                solveFields();
+                if (top && !recordConstraints.isEmpty())
+                    throw new Diagnostic(
+                            "ELCI2010",
+                            recordConstraints.getFirst().token(),
+                            "Field access needs a concrete closed record type; an unconstrained generic"
+                                    + " signature is insufficient");
+                // Members of a recursive group share type variables, so a requirement one member's
+                // body imposes can constrain every member's type.
+                var groupEquality = new ArrayList<Map.Entry<Ty, Token>>();
+                var groupAppend = new ArrayList<Map.Entry<Ty, Token>>();
+                var groupComparable = new ArrayList<Map.Entry<Ty, Token>>();
+                for (var d : group) {
+                    groupEquality.addAll(declarationEquality.getOrDefault(d, List.of()));
+                    groupAppend.addAll(declarationAppend.getOrDefault(d, List.of()));
+                    groupComparable.addAll(declarationComparable.getOrDefault(d, List.of()));
+                }
+                var rigidCopies = new IdentityHashMap<Decl, Map<Var, Ty>>();
+                for (var d : group) {
+                    var t = monotypes.get(d.name());
+                    if (top && d.annotation() == null)
+                        throw new Diagnostic(
+                                "ELCI2004",
+                                d.token(),
+                                "Top-level declarations require a type signature");
+                    if (d.annotation() != null) {
+                        // Skolems prevent accepting 'a -> a' for an Int-only implementation.
+                        var rigid = new HashMap<String, Ty>();
+                        collectRigid(d.annotation(), rigid);
+                        var copies = new HashMap<Var, Ty>();
+                        general(copy(t, copies), annotated(d.annotation(), rigid), d);
+                        rigidCopies.put(d, copies);
+                        var named = new HashMap<String, Ty>();
+                        unify(t, annotated(d.annotation(), named), d.token());
+                        // As in Elm, a variable named `comparable…`, `appendable…` or `compappend…`
+                        // requires such values of callers.
+                        named.forEach((name, variable) -> {
+                            var requirement = Map.entry(variable, d.token());
+                            if (comparableName(name)) {
+                                comparable.add(requirement);
+                                groupComparable.add(requirement);
+                            }
+                            if (appendableName(name)) {
+                                append.add(requirement);
+                                groupAppend.add(requirement);
+                            }
+                        });
+                    }
+                }
+                // Every member's named requirements are known now, so the naming rule doesn't depend on
+                // declaration order. The inferred variables are linked to the annotation's by now.
+                for (var entry : rigidCopies.entrySet()) {
+                    var copies = new HashMap<Var, Ty>();
+                    entry.getValue().forEach((v, r) -> {
+                        if (prune(v) instanceof Var linked) copies.put(linked, r);
+                    });
+                    requireConstrainedNames(entry.getKey(), groupComparable, copies, true);
+                    requireConstrainedNames(entry.getKey(), groupAppend, copies, false);
+                }
+                solveFields();
+                var environmentVars = new HashSet<Var>();
+                for (var constraint : recordConstraints) {
+                    environmentVars.addAll(variables(constraint.record()));
+                    environmentVars.addAll(variables(constraint.value()));
+                }
+                for (var e : env.entrySet())
+                    if (!monotypes.containsKey(e.getKey())) {
+                        var vs = variables(e.getValue().body());
+                        vs.removeAll(e.getValue().quantified());
+                        environmentVars.addAll(vs);
+                    }
+                var generalizedEquality =
+                        Collections.newSetFromMap(new IdentityHashMap<Map.Entry<Ty, Token>, Boolean>());
+                var generalizedAppend =
+                        Collections.newSetFromMap(new IdentityHashMap<Map.Entry<Ty, Token>, Boolean>());
+                var generalizedComparable =
+                        Collections.newSetFromMap(new IdentityHashMap<Map.Entry<Ty, Token>, Boolean>());
+                for (var d : group) {
+                    var t = monotypes.get(d.name());
+                    var vs = variables(t);
+                    vs.removeAll(environmentVars);
+                    boolean eligible =
+                            top
+                                    || group.size() == 1
+                                            && nonRecursive(d)
+                                            && independent(d, ds)
+                                            && nonExpansive(d);
+                    var quantified = eligible ? vs : Set.<Var>of();
+                    generalizedVariables.addAll(quantified);
+                    var equalityRequirements = new ArrayList<Ty>();
+                    // A requirement no instantiation can meet is reported at its definition, as in Elm.
+                    for (var requirement : groupEquality)
+                        if (!Collections.disjoint(variables(requirement.getKey()), quantified)) {
+                            checkEquality(requirement);
+                            equalityRequirements.add(requirement.getKey());
+                            generalizedEquality.add(requirement);
+                        }
+                    var appendRequirements = new ArrayList<Ty>();
+                    for (var requirement : groupAppend)
+                        if (!Collections.disjoint(variables(requirement.getKey()), quantified)) {
+                            checkAppend(requirement, false);
+                            appendRequirements.add(requirement.getKey());
+                            generalizedAppend.add(requirement);
+                        }
+                    var comparableRequirements = new ArrayList<Ty>();
+                    for (var requirement : groupComparable)
+                        if (!Collections.disjoint(variables(requirement.getKey()), quantified)) {
+                            checkComparable(requirement);
+                            comparableRequirements.add(requirement.getKey());
+                            generalizedComparable.add(requirement);
+                        }
+                    var scheme = new Scheme(quantified, t, equalityRequirements, appendRequirements, comparableRequirements);
+                    env.put(d.name(), scheme);
+                    declarationSchemes.put(d, scheme);
+                }
+                if (group.size() > 1)
+                    for (var d : group) {
+                        var foreign = Collections.newSetFromMap(new IdentityHashMap<Var, Boolean>());
+                        for (var other : group) if (other != d) foreign.addAll(declarationSchemes.get(other).quantified());
+                        foreign.removeAll(declarationSchemes.get(d).quantified());
+                        if (!foreign.isEmpty()) foreignVariables.put(d, foreign);
+                    }
+                equality.removeIf(generalizedEquality::contains);
+                append.removeIf(generalizedAppend::contains);
+                comparable.removeIf(generalizedComparable::contains);
+            } catch (Diagnostic e) {
+                // A top-level group that fails is recorded, and its names take their annotated
+                // types, so the rest of the module is checked without cascading errors (ADR-012).
+                if (!top) throw e;
+                errors.add(e);
+                equality.subList(equalityMark, equality.size()).clear();
+                append.subList(appendMark, append.size()).clear();
+                comparable.subList(comparableMark, comparable.size()).clear();
+                recordConstraints.clear();
+                for (var d : group) env.put(d.name(), failed(d));
+            }
         }
+    }
+
+    /**
+     * The scheme of a declaration that failed to check: its annotation, generalized, which callers
+     * check against; or any type, when it has no usable annotation.
+     */
+    private Scheme failed(Decl d) {
+        if (d.annotation() != null)
+            try {
+                Ty t = annotated(d.annotation(), new HashMap<>());
+                return new Scheme(variables(t), t);
+            } catch (Diagnostic ignored) {
+                // An annotation that doesn't check is reported on its own.
+            }
+        var any = new Var();
+        return new Scheme(Set.of(any), any);
     }
 
     private boolean nonExpansive(Decl d) {

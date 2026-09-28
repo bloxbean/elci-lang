@@ -80,10 +80,29 @@ public final class Main {
                 Files.writeString(output.resolve("abi.json"),manifest);
             }
             System.out.println(result.module()+"."+result.function()+": checked; "+flat.length+" FLAT bytes; "+result.target().profileId());return 0;
-        } catch(Diagnostic e) {System.err.println(json?e.json(files,source):e.explain(files,source));return 1;}
+        } catch(Diagnostic e) {report(e,files,source,json,null);return 1;}
         // The diagnostic's own line comes first, as for every diagnostic; the validator group follows.
-        catch(ValidatorDiagnostic e) {System.err.println(json?e.diagnostic.json(e.files,e.fallback,e.where):e.diagnostic.explain(e.files,e.fallback)+"\n\nIn "+e.where);return 1;}
+        catch(ValidatorDiagnostic e) {report(e.diagnostic,e.files,e.fallback,json,e.where);return 1;}
         catch(Exception e){System.err.println(json?failure(e.getMessage()):"elci: "+e.getMessage());return 1;}
+    }
+
+    /**
+     * Print a run's diagnostics in source order, at most {@link Diagnostic#LIMIT}: each with its
+     * excerpt and hints, then the validator group they arose in, then a count when there are
+     * several. With {@code --report=json}, one JSON object per line (ADR-012).
+     */
+    private static void report(Diagnostic diagnostic,java.util.function.Function<String,String> files,String fallback,boolean json,String context) {
+        var all=diagnostic.all();
+        int shown=Math.min(all.size(),Diagnostic.LIMIT);
+        for(int i=0;i<shown;i++) {
+            if(json){System.err.println(all.get(i).json(files,fallback,context));continue;}
+            if(i>0)System.err.println();
+            System.err.println(all.get(i).explain(files,fallback));
+        }
+        if(json)return;
+        if(context!=null)System.err.println("\nIn "+context);
+        if(all.size()>shown)System.err.println("\n... and "+(all.size()-shown)+" more");
+        if(all.size()>1)System.err.println("\n"+all.size()+" errors");
     }
 
     /** A diagnostic in one named validator group, with where to render it. */
@@ -162,7 +181,7 @@ public final class Main {
         var runner=new org.elci.test.TestRunner(project,settings);
         java.util.List<org.elci.test.TestRunner.Outcome> outcomes;
         try {outcomes=runner.run(match);}
-        catch(Diagnostic e){System.err.println(json?e.json(files,"<tests>"):e.explain(files,"<tests>"));return 1;}
+        catch(Diagnostic e){report(e,files,"<tests>",json,null);return 1;}
         int failed=0;
         boolean properties=false;
         for(var outcome:outcomes) {

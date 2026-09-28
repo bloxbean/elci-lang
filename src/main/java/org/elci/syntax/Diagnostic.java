@@ -4,8 +4,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 /**
  * A source-located, stable-code compiler failure. Its first line, {@code path:line:col: CODE:
@@ -13,28 +15,66 @@ import java.util.function.Function;
  * (ADR-011).
  */
 public final class Diagnostic extends RuntimeException {
+    /** The most diagnostics one run reports (ADR-012). */
+    public static final int LIMIT = 20;
+
     private final String code;
     private final Token token;
     private final List<String> hints;
+    /** The run's later diagnostics, in source order, when a phase found several (ADR-012). */
+    private final List<Diagnostic> others;
 
     public Diagnostic(String code, Token token, String message) {
         this(code, token, message, List.of());
     }
 
     public Diagnostic(String code, Token token, String message, List<String> hints) {
+        this(code, token, message, hints, List.of());
+    }
+
+    private Diagnostic(String code, Token token, String message, List<String> hints, List<Diagnostic> others) {
         super(message); this.code = code; this.token = token; this.hints = List.copyOf(hints);
+        this.others = List.copyOf(others);
     }
 
     public String code() { return code; }
     public Token token() { return token; }
     public List<String> hints() { return hints; }
 
+    /** This diagnostic and the run's others, in source order. */
+    public List<Diagnostic> all() {
+        var all = new ArrayList<Diagnostic>();
+        all.add(new Diagnostic(code, token, getMessage(), hints));
+        all.addAll(others);
+        return all;
+    }
+
+    /**
+     * The diagnostics a phase found, as one: the first in source order, carrying the others. So a
+     * caller that catches a {@code Diagnostic} sees the first error; the CLI prints them all.
+     * Null when there are none.
+     */
+    public static Diagnostic of(List<Diagnostic> found) {
+        if (found.isEmpty()) return null;
+        var sorted = new ArrayList<Diagnostic>();
+        found.forEach(d -> sorted.addAll(d.all()));
+        sorted.sort(Comparator.comparing((Diagnostic d) -> d.token.source() == null ? "" : d.token.source())
+                .thenComparingInt(d -> d.token.line()).thenComparingInt(d -> d.token.column()));
+        var first = sorted.getFirst();
+        return new Diagnostic(first.code, first.token, first.getMessage(), first.hints, sorted.subList(1, sorted.size()));
+    }
+
+    /** Every diagnostic of the run changed alike. */
+    public Diagnostic map(UnaryOperator<Diagnostic> change) {
+        return of(all().stream().map(change).toList());
+    }
+
     /** This diagnostic with more hints. */
     public Diagnostic withHints(List<String> more) {
         if (more.isEmpty()) return this;
         var all = new ArrayList<>(hints);
         more.forEach(h -> { if (!all.contains(h)) all.add(h); });
-        return new Diagnostic(code, token, getMessage(), all);
+        return new Diagnostic(code, token, getMessage(), all, others);
     }
 
     public String render(String source) {

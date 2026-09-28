@@ -69,6 +69,9 @@ public final class Parser {
             }
     }
 
+    /** Syntax errors of top-level declarations, reported together once the module is parsed. */
+    private final List<Diagnostic> errors = new ArrayList<>();
+
     public Ast.Module parse() {
         expect("module");
         String module = qualified(true);
@@ -85,6 +88,8 @@ public final class Parser {
         }
         var ds = declarations(1, "<eof>");
         expect("<eof>");
+        var found = Diagnostic.of(errors);
+        if (found != null) throw found;
         return new Ast.Module(
                 module,
                 exports,
@@ -120,129 +125,168 @@ public final class Parser {
         var result = new ArrayList<Decl>();
         var seen = new HashSet<String>();
         while (!is(end) && peek().kind() != Token.Kind.EOF) {
-            if (peek().column() != indent)
-                throw error("Declarations must align at column " + indent);
-            if (take("type")) {
-                if (take("alias")) {
-                    Token at = upper();
-                    String alias = at.text();
-                    var parameters = new ArrayList<String>();
-                    while (!is("=")) parameters.add(lower().text());
-                    expect("=");
-                    Type target = type(indent);
-                    if (parameters.size() != new HashSet<>(parameters).size())
-                        throw new Diagnostic("ELCI1002", at, "Duplicate type alias parameter");
-                    if (unions.stream().anyMatch(u -> u.name().equals(alias))
-                            || aliases.putIfAbsent(
-                                            alias,
-                                            new Alias(
-                                                    alias,
-                                                    List.copyOf(parameters),
-                                                    target,
-                                                    recordOrders.getOrDefault(target, List.of()),
-                                                    at))
-                                    != null) throw error("Duplicate type alias " + alias);
-                } else {
-                    Token at = upper();
-                    String n = at.text();
-                    var parameters = new ArrayList<String>();
-                    while (!is("=")) parameters.add(lower().text());
-                    expect("=");
-                    var variants = new ArrayList<Variant>();
-                    do {
-                        String constructor = upper().text();
-                        var fields = new ArrayList<Type>();
-                        while (!is("|") && !boundary(indent)) {
-                            if (!is("(") && !is("{") && peek().kind() != Token.Kind.NAME) break;
-                            fields.add(typeAtom(indent));
-                        }
-                        variants.add(new Variant(constructor, List.copyOf(fields)));
-                    } while (take("|"));
-                    if (unions.stream().anyMatch(u -> u.name().equals(n)) || aliases.containsKey(n))
-                        throw error("Duplicate type " + n);
-                    unions.add(new Union(n, parameters, variants, at));
-                }
+            if (indent != 1) {
+                declaration(indent, end, result, seen);
                 continue;
             }
-            if (!isNameStart()) {
-                if (indent == 1) throw error("Top-level declarations require a name");
-                Pattern pattern = parameterPattern();
-                if (!irrefutable(pattern))
-                    throw new Diagnostic(
-                            "ELCI1002",
-                            pattern.token(),
-                            "Local destructuring requires an irrefutable tuple or record pattern");
-                expect("=");
-                Expr value = expression(0, indent);
-                String temporary = "$elci$destructure$" + (synthetic++);
-                result.add(new Decl(temporary, List.of(), null, value, pattern.token()));
-                var names = new LinkedHashSet<String>();
-                patternNames(pattern, names);
-                for (String bound : names) {
-                    if (!seen.add(bound))
-                        throw new Diagnostic(
-                                "ELCI1002", pattern.token(), "Duplicate declaration " + bound);
-                    result.add(
-                            new Decl(
-                                    bound,
-                                    List.of(),
-                                    null,
-                                    new Case(
-                                            new Name(temporary, pattern.token()),
-                                            List.of(
-                                                    new Branch(
-                                                            pattern,
-                                                            new Name(bound, pattern.token()))),
-                                            pattern.token()),
-                                    pattern.token()));
-                }
-                continue;
+            // A top-level declaration that fails is recorded, and parsing resumes at the next
+            // one, so a module reports all its syntax errors (ADR-012).
+            Token first = peek();
+            try {
+                declaration(indent, end, result, seen);
+            } catch (Diagnostic e) {
+                errors.add(e);
+                skipDeclaration(first);
             }
-            Token t = lower();
-            String n = t.text();
-            Type annotation = null;
-            if (take(":")) {
-                annotation = type(indent);
-                Token definition = lower();
-                if (definition.column() != indent || !definition.text().equals(n))
-                    throw error("A signature must precede its matching definition");
-            }
-            var params = new ArrayList<String>();
-            var parameterPatterns = new ArrayList<Pattern>();
-            while (!is("=")) {
-                Pattern pattern = parameterPattern();
-                if (!irrefutable(pattern))
-                    throw new Diagnostic(
-                            "ELCI1002",
-                            pattern.token(),
-                            "Function parameters require irrefutable patterns; use case for"
-                                    + " refutable matching");
-                String param =
-                        simpleBinder(pattern) ? pattern.name() : "$elci$parameter$" + (synthetic++);
-                params.add(param);
-                parameterPatterns.add(pattern);
-            }
-            expect("=");
-            var body = expression(0, indent);
-            var boundNames = new HashSet<String>();
-            for (var p : parameterPatterns) {
-                for (String bound : patternNameList(p))
-                    if (!boundNames.add(bound))
-                        throw new Diagnostic("ELCI1002", p.token(), "Duplicate parameter " + bound);
-            }
-            for (int i = parameterPatterns.size() - 1; i >= 0; i--)
-                if (!simpleBinder(parameterPatterns.get(i)))
-                    body =
-                            new Case(
-                                    new Name(params.get(i), parameterPatterns.get(i).token()),
-                                    List.of(new Branch(parameterPatterns.get(i), body)),
-                                    parameterPatterns.get(i).token());
-            if (!seen.add(n)) throw new Diagnostic("ELCI1002", t, "Duplicate declaration " + n);
-            result.add(new Decl(n, List.copyOf(params), annotation, body, t));
-            if (!is(end) && peek().kind() != Token.Kind.EOF && peek().column() != indent)
-                throw error("Unexpected token after declaration");
         }
         return List.copyOf(result);
+    }
+
+    /**
+     * Skip to the next top-level declaration: the next token in column 1, past the failed one. A
+     * failed value's annotation and its definition are skipped together.
+     */
+    private void skipDeclaration(Token first) {
+        String name = first.kind() == Token.Kind.NAME && Character.isLowerCase(first.text().charAt(0))
+                && !RESERVED.contains(first.text()) ? first.text() : null;
+        // A failure at the end of the file may have read past it.
+        pos = Math.min(pos, tokens.size() - 1);
+        if (pos < tokens.size() - 1 && peek() == first) next();
+        while (peek().kind() != Token.Kind.EOF) {
+            Token t = peek();
+            if (t.column() == 1 && t.offset() > first.offset() && !(t.text().equals(name) && !followedByColon()))
+                return;
+            next();
+        }
+    }
+
+    private boolean followedByColon() {
+        return pos + 1 < tokens.size() && tokens.get(pos + 1).text().equals(":");
+    }
+
+    /** One declaration at {@code indent}, added to {@code result}. */
+    private void declaration(int indent, String end, List<Decl> result, Set<String> seen) {
+        if (peek().column() != indent)
+            throw error("Declarations must align at column " + indent);
+        if (take("type")) {
+            if (take("alias")) {
+                Token at = upper();
+                String alias = at.text();
+                var parameters = new ArrayList<String>();
+                while (!is("=")) parameters.add(lower().text());
+                expect("=");
+                Type target = type(indent);
+                if (parameters.size() != new HashSet<>(parameters).size())
+                    throw new Diagnostic("ELCI1002", at, "Duplicate type alias parameter");
+                if (unions.stream().anyMatch(u -> u.name().equals(alias))
+                        || aliases.putIfAbsent(
+                                        alias,
+                                        new Alias(
+                                                alias,
+                                                List.copyOf(parameters),
+                                                target,
+                                                recordOrders.getOrDefault(target, List.of()),
+                                                at))
+                                != null) throw error("Duplicate type alias " + alias);
+            } else {
+                Token at = upper();
+                String n = at.text();
+                var parameters = new ArrayList<String>();
+                while (!is("=")) parameters.add(lower().text());
+                expect("=");
+                var variants = new ArrayList<Variant>();
+                do {
+                    String constructor = upper().text();
+                    var fields = new ArrayList<Type>();
+                    while (!is("|") && !boundary(indent)) {
+                        if (!is("(") && !is("{") && peek().kind() != Token.Kind.NAME) break;
+                        fields.add(typeAtom(indent));
+                    }
+                    variants.add(new Variant(constructor, List.copyOf(fields)));
+                } while (take("|"));
+                if (unions.stream().anyMatch(u -> u.name().equals(n)) || aliases.containsKey(n))
+                    throw error("Duplicate type " + n);
+                unions.add(new Union(n, parameters, variants, at));
+            }
+            return;
+        }
+        if (!isNameStart()) {
+            if (indent == 1) throw error("Top-level declarations require a name");
+            Pattern pattern = parameterPattern();
+            if (!irrefutable(pattern))
+                throw new Diagnostic(
+                        "ELCI1002",
+                        pattern.token(),
+                        "Local destructuring requires an irrefutable tuple or record pattern");
+            expect("=");
+            Expr value = expression(0, indent);
+            String temporary = "$elci$destructure$" + (synthetic++);
+            result.add(new Decl(temporary, List.of(), null, value, pattern.token()));
+            var names = new LinkedHashSet<String>();
+            patternNames(pattern, names);
+            for (String bound : names) {
+                if (!seen.add(bound))
+                    throw new Diagnostic(
+                            "ELCI1002", pattern.token(), "Duplicate declaration " + bound);
+                result.add(
+                        new Decl(
+                                bound,
+                                List.of(),
+                                null,
+                                new Case(
+                                        new Name(temporary, pattern.token()),
+                                        List.of(
+                                                new Branch(
+                                                        pattern,
+                                                        new Name(bound, pattern.token()))),
+                                        pattern.token()),
+                                pattern.token()));
+            }
+            return;
+        }
+        Token t = lower();
+        String n = t.text();
+        Type annotation = null;
+        if (take(":")) {
+            annotation = type(indent);
+            Token definition = lower();
+            if (definition.column() != indent || !definition.text().equals(n))
+                throw error("A signature must precede its matching definition");
+        }
+        var params = new ArrayList<String>();
+        var parameterPatterns = new ArrayList<Pattern>();
+        while (!is("=")) {
+            Pattern pattern = parameterPattern();
+            if (!irrefutable(pattern))
+                throw new Diagnostic(
+                        "ELCI1002",
+                        pattern.token(),
+                        "Function parameters require irrefutable patterns; use case for"
+                                + " refutable matching");
+            String param =
+                    simpleBinder(pattern) ? pattern.name() : "$elci$parameter$" + (synthetic++);
+            params.add(param);
+            parameterPatterns.add(pattern);
+        }
+        expect("=");
+        var body = expression(0, indent);
+        var boundNames = new HashSet<String>();
+        for (var p : parameterPatterns) {
+            for (String bound : patternNameList(p))
+                if (!boundNames.add(bound))
+                    throw new Diagnostic("ELCI1002", p.token(), "Duplicate parameter " + bound);
+        }
+        for (int i = parameterPatterns.size() - 1; i >= 0; i--)
+            if (!simpleBinder(parameterPatterns.get(i)))
+                body =
+                        new Case(
+                                new Name(params.get(i), parameterPatterns.get(i).token()),
+                                List.of(new Branch(parameterPatterns.get(i), body)),
+                                parameterPatterns.get(i).token());
+        if (!seen.add(n)) throw new Diagnostic("ELCI1002", t, "Duplicate declaration " + n);
+        result.add(new Decl(n, List.copyOf(params), annotation, body, t));
+        if (!is(end) && peek().kind() != Token.Kind.EOF && peek().column() != indent)
+            throw error("Unexpected token after declaration");
     }
 
     private Type type(int floor) {
