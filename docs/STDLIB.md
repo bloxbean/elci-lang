@@ -1,12 +1,19 @@
 # Elci standard library guide
 
-Elci has a small bundled library written in Elci and can import supported Julc
-on-chain Java libraries. It does not provide the complete Elm core/browser
-package ecosystem.
+Elci bundles a core library written in Elci, following Elm 0.19's core modules
+([ADR-008](../adr/008-native-standard-library-foundation.md)), and can import
+supported Julc on-chain Java libraries to fill its gaps. It does not provide the
+complete Elm core or the browser package ecosystem.
 
-This inventory was checked on 20 September 2026 using Julc's source-description
-boundary at `d6e716e2` and Elci `c7552e9`, with target
-`plutus-v3-pv11-uplc-1.1.0`. It is a snapshot of the current implementation.
+This inventory was first checked on 20 September 2026 using Julc's
+source-description boundary at `d6e716e2` and Elci `c7552e9`, with target
+`plutus-v3-pv11-uplc-1.1.0`. It was regenerated on 25 September 2026 against Julc
+`5a3378ba`, and updated on 26 September 2026 for the core `Value` module
+([ADR-009](../adr/009-dict-native-value-and-map.md)), which rejects Java exports
+that return a `Value`, and for the core `Tx` and `Interval` modules
+([ADR-010](../adr/010-transaction-and-interval-helpers.md)), which replace
+`ContextsLib` and `IntervalLib` for new code. Regenerating the inventory after
+ADR-010 changed no row. It is a snapshot of the current implementation.
 
 ## What “available” means here
 
@@ -17,21 +24,43 @@ through Elci. Existing Elci evaluation fixtures cover Math, Interval and Context
 Julc has its own stdlib tests. Ledger decoding, imported-type capabilities and
 function preconditions still apply.
 
-The scan found **127 compile-verified exports**, **41 unsupported signatures**,
-and **one entire library blocked at import**. The blocked library's methods are
-not counted in either export total. Programmatic PIR exports absent from the
-Java-source catalogue are also outside these counts.
+The scan found **145 compile-verified exports**, **41 unsupported signatures**,
+**6 exports rejected because they return a `Value`** and **12 generic templates**
+(`TypedMapLib` and `TypedArrayLib`, instantiated at each use). No library is
+blocked at import. `ByteStringLib`, previously blocked by an overload, now
+contributes 24 exports. The six programmatic `ListsLib` exports (`map`, `filter`,
+`any`, `all`, `find`, `foldl`) are generic schemes outside this Java-source catalogue.
 
 ## Bundled Elci library
 
-`List` is available as a qualified module without configuration:
+The core modules live in `src/main/resources/elci/core/` and are compiled with each
+program; functions a program does not use are never lowered. As in Elm, every
+project and test module implicitly has:
 
-| Functions | Purpose |
+```elm
+import Basics exposing (..)
+import List
+import Maybe exposing (Maybe(..))
+import Result exposing (Result(..))
+import String
+import Tuple
+import Debug
+```
+
+| Module | Functions |
 | --- | --- |
-| `map`, `filter`, `concatMap` | Transform or select list elements |
-| `foldl`, `foldr` | Accumulate values; callbacks receive element then accumulator |
-| `all`, `any` | Predicate checks |
-| `length`, `reverse`, `append` | Basic list operations |
+| `Basics` | `negate`, `abs`, `min`, `max`, `clamp`, `compare` (`Order = LT \| EQ \| GT`), `identity`, `always`, `xor`, and the intrinsics `not`, `modBy`, `remainderBy`; the `^` operator |
+| `List` | `singleton`, `repeat`, `range`, `map`, `indexedMap`, `filter`, `filterMap`, `foldl`, `foldr`, `concat`, `concatMap`, `intersperse`, `map2`, `map3`, `length`, `reverse`, `member`, `all`, `any`, `maximum`, `minimum`, `sum`, `product`, `append`, `isEmpty`, `head`, `tail`, `take`, `drop`, `partition`, `unzip`, `sort`, `sortBy`, `sortWith` |
+| `Maybe` | `withDefault`, `map`, `map2`, `map3`, `andThen` (`Maybe`, `Just`, `Nothing` are built in) |
+| `Result` | `type Result error value = Ok value \| Err error`; `map`, `map2`, `map3`, `andThen`, `withDefault`, `toMaybe`, `fromMaybe`, `mapError` |
+| `Tuple` | `pair`, `first`, `second`, `mapFirst`, `mapSecond`, `mapBoth` |
+| `String` | `fromInt`, `isEmpty`, `append`, `concat`, `join` |
+
+Names, argument orders and edge cases follow Elm. `min`, `max`, `compare`,
+`List.sort`, `List.maximum` and `List.minimum` work on comparable types: `Int`,
+`String` (UTF-8 byte order), `Bytes`, the ledger's byte-string hashes, and lists
+and tuples of these. `Ok` is Data constructor 0 and `Err` constructor 1, the
+reverse of PlutusTx's `Either`.
 
 These functions are generic Elci functions, unlike the concrete `List Data`
 signatures of many Java `ListsLib` methods. For example:
@@ -40,10 +69,51 @@ signatures of many Java `ListsLib` methods. For example:
 List.map (\value -> value + 1) [ 1, 2, 3 ]
 ```
 
-`not` and `remainderBy` are compiler-provided functions. `Maybe` with `Just` and
-`Nothing` is a built-in type; a complete Elm-style `Maybe` module is not bundled.
-`Julc.Ledger` exposes ledger types and supported fields rather than an ordinary
-Java function library.
+`Dict` (`import Dict exposing (Dict)`) is Elm's dictionary, with Elm's whole API:
+comparable keys, kept strictly ascending in a Plutus map
+([ADR-009](../adr/009-dict-native-value-and-map.md)). `Map` (`import Map`) is the
+ledger's association map, for ledger data and keys that are not comparable.
+`Array` (`import Array`) provides constant-time indexed arrays in the style of Elm's
+`Array`. All three are described in the
+[language guide](LANGUAGE.md#compiler-provided-modules). They are Elci source over
+Julc's `TypedMapLib` and `TypedArrayLib`, which need no `[java-modules]` entry, and
+over `Elci.Assoc`, compiler intrinsics for association lists that only core
+modules may import.
+
+`Value` (`import Value exposing (Value)`) is the ledger's multi-asset value, with
+`zero`, `lovelace`, `singleton`, `insert`, `fromList`, `lovelaceOf`, `quantityOf`,
+`isZero`, `policies`, `tokens`, `toList`, `add`, `subtract`, `negate`, `scale`,
+`sum`, `geq`, `leq`, `withoutLovelace`, `restrictedTo`, `positive` and `negative`.
+Every `Value` is canonical, so `==` is exact
+([ADR-009](../adr/009-dict-native-value-and-map.md); see the
+[language guide](LANGUAGE.md#compiler-provided-modules)). It is Elci source over
+`Elci.Value`, core-only intrinsics for the CIP-153 value builtins. Use it instead
+of `ValuesLib`: Java exports that return a `Value` are rejected.
+
+`Interval` (`import Interval`) reads the ledger's time ranges, such as
+`txInfo.validRange`: `isEntirelyAfter`, `isEntirelyBefore`, `contains`, `start`,
+`end`, `after`, `before`, `between` and `everything`. The two deadline checks are
+strict and need a finite bound on their side, so a transaction without a validity
+range fails them; `start` and `end` return `Maybe Int`, with no `-1` sentinel.
+`Tx` (`import Tx`) answers questions about the transaction, taking the
+`ScriptContext` last: `signedBy`, `spends`, `findInput`, `ownRef`, `ownInput`,
+`ownPolicy`, `outputsTo`, `valuePaidTo`, `continuingOutputs`, `valueSpent`,
+`valueProduced`, `mintedOf`, `inlineDatum` and `datumOf`. `outputsTo` and
+`valuePaidTo` match the payment credential only, so whoever builds the transaction
+chooses the payee's staking part; an untagged payment check is open to double
+satisfaction. Both modules are Elci source over the ledger types,
+with no intrinsics ([ADR-010](../adr/010-transaction-and-interval-helpers.md)).
+
+`Julc.Data` provides explicit `decode`, `encode`, `fromOptional` and `toOptional`
+conversions. `Bytes` wraps byte-string builtins (`fromString`, `length`, `append`,
+`slice`, hashes); `<` and `compare` order byte strings. `Debug.trace` emits traces
+(see the [language guide](LANGUAGE.md#compiler-provided-modules)). Test modules
+additionally see the `Expect`, `Scenario` and `Property` test library
+([Testing](TESTING.md)). `Julc.Ledger` exposes ledger types and supported fields
+rather than an ordinary Java function library.
+
+Still missing compared with Elm's core: `Set` (use a `Dict k Bool`), `Char`, most
+of `String`, `map4`/`map5`, and every `Float` function.
 
 ## Julc library availability
 
@@ -55,7 +125,7 @@ Each Java class below is under `org.julclang.stdlib.lib`. Module aliases such as
 | `AddressLib` | 4 | No rejected source exports in this scan |
 | `BitwiseLib` | 9 | `writeBits`: `PlutusData.ListData` mapping |
 | `BlsLib` | 0 | All 19 exports require unsupported BLS/native-list types |
-| `ByteStringLib` | 0 | Entire import blocked by overloaded `integerToByteString` |
+| `ByteStringLib` | 24 | No rejected source exports; its identical `integerToByteString` overloads are exported once |
 | `ContextsLib` | 23 | `listIndex`: `PlutusData.ListData` mapping |
 | `CryptoLib` | 9 | No rejected source exports in this scan |
 | `IntervalLib` | 9 | No rejected source exports in this scan |
@@ -64,7 +134,9 @@ Each Java class below is under `org.julclang.stdlib.lib`. Module aliases such as
 | `MathLib` | 8 | `divMod`, `quotRem`: Java `Tuple2` mapping |
 | `NativeValueLib` | 0 | All 7 exports require unsupported `JulcValue` |
 | `OutputLib` | 14 | No rejected source exports in this scan |
-| `ValuesLib` | 24 | 11 exports use unmapped Data subtypes or `AssetEntry` |
+| `ValuesLib` | 18 | 11 exports use unmapped Data subtypes or `AssetEntry`; 6 return a `Value`, which Elci rejects (use the core `Value` module) |
+| `TypedMapLib` | 9 generic | Templates over typed maps; used by the core `Map` module |
+| `TypedArrayLib` | 3 generic | `fromList`, `get`, `length` over PV11 arrays; used by the core `Array` module |
 
 “Zero rejected source exports” is scoped to this compilation scan, not a claim
 that every runtime case or every Julc intrinsic is supported.
@@ -74,18 +146,20 @@ that every runtime case or every Julc intrinsic is supported.
 ```toml
 [java-modules]
 "Julc.Math" = "org.julclang.stdlib.lib.MathLib"
-"Julc.Interval" = "org.julclang.stdlib.lib.IntervalLib"
+"Julc.Output" = "org.julclang.stdlib.lib.OutputLib"
 ```
 
 ```elm
 import Julc.Math as Math
-import Julc.Interval as Interval
+import Julc.Output as Output
 ```
 
-Use `Math.max 5 9` or `Interval.finiteLowerBound ctx.txInfo.validRange` in an
-appropriately typed declaration. Library dependencies are resolved transitively.
-`finiteLowerBound` and `finiteUpperBound` return `-1` for an infinite bound;
-account for that sentinel when using these methods.
+Use `Math.floorDiv -7 2` or `Output.outputsAt ctx.txInfo.outputs address` in an
+appropriately typed declaration. Prefer the prelude's `max`, `min`, `abs` and `^`
+over their `MathLib` counterparts; they need no mapping. Library dependencies are resolved transitively.
+`IntervalLib.finiteLowerBound` and `finiteUpperBound` return `-1` for an infinite
+bound; use the core `Interval` module instead. `Interval` and `Tx` are core module
+names, so a `[java-modules]` key cannot be either.
 
 ### Compile-verified methods by library
 
@@ -107,7 +181,7 @@ account for that sentinel when using these methods.
 
 **OutputLib**: `countOutputsAt`, `findInputWithToken`, `findOutputWithToken`, `getInlineDatum`, `lovelacePaidTo`, `outputsAt`, `outputsWithToken`, `paidAtLeast`, `resolveDatum`, `txOutAddress`, `txOutDatum`, `txOutValue`, `uniqueOutputAt`, `valueHasToken`.
 
-**ValuesLib**: `_containsPolicy`, `_countTokensWithQty`, `_findTokenName`, `add`, `adjustOuterForAdd`, `assetOf`, `checkPolicyGeq`, `containsPolicy`, `countTokensWithQty`, `eq`, `extraOuterEntries`, `findTokenName`, `flatten`, `flattenStep`, `geq`, `geqMultiAsset`, `isZero`, `leq`, `lovelaceOf`, `negate`, `refBytes`, `singleton`, `subtract`, `uniqueTokenName`.
+**ValuesLib**: `_containsPolicy`, `_countTokensWithQty`, `_findTokenName`, `assetOf`, `checkPolicyGeq`, `containsPolicy`, `countTokensWithQty`, `eq`, `findTokenName`, `flatten`, `flattenStep`, `geq`, `geqMultiAsset`, `isZero`, `leq`, `lovelaceOf`, `refBytes`, `uniqueTokenName`.
 
 ### Unsupported source signatures
 
@@ -139,24 +213,27 @@ account for that sentinel when using these methods.
 - `_assetOf`, `_singleton`: Unsupported on-chain source type: PlutusData.BytesData.
 - `_countInnerTokensWithQty`, `_findInnerTokenName`, `adjustInnerForAdd`, `extraInnerEntries`, `findTokenAmount`, `flattenPolicy`, `isTokenMapZero`, `negateTokenMap`: Unsupported on-chain source type: PlutusData.MapData.
 - `flattenTyped`: Unsupported on-chain source type: AssetEntry.
+- `add`, `adjustOuterForAdd`, `extraOuterEntries`, `negate`, `singleton`, `subtract`: rejected by Elci (`ELCI2105`): they return a `Value`, which Java libraries do not keep in the ledger's canonical order; use the core `Value` module.
 
 
 ## Representation and usability limits
 
 - Nominal hashes and newtypes stay distinct from raw bytes or integers.
-- Imported records can use supported field access and exported Java factories;
-  they are not interchangeable with similarly shaped Elci records.
-- Imported sums can pass through Java functions, but cannot yet be constructed or
-  pattern-matched directly in Elci.
-- Java Optional is distinct from Elci Maybe. Compilation of a function returning
-  Optional does not supply a full Elci API for inspecting it.
-- `Data` is opaque, and not every Data subtype has a mapping. Some compile-verified
-  helpers require inputs the current Elci API cannot conveniently construct.
-- Imported records do not automatically become valid datum/redeemer types or gain
-  equality. Map/native-value representations are not interchangeable.
-- Polymorphic Java specialization and programmatic higher-order export metadata
-  remain unsupported. Missing capabilities must be added generically, rather than
-  by hardcoding library method names in Elci.
+- Imported records and sums use exactly the operations their provider approves:
+  constructors, patterns, field access, equality, codecs and named-validator
+  boundaries. They are not interchangeable with similarly shaped Elci records.
+- Java Optional is distinct from Elci Maybe. Convert a result such as
+  `ContextsLib.findOwnInput` with `Julc.Data.fromOptional`, or use `Tx.ownInput`,
+  which returns a `Maybe`.
+- `Data` converts with `Julc.Data.decode`, and `==` on `Data` compares structure
+  exactly (`EqualsData`). Not every Data subtype has a mapping. Map/native-value
+  representations are not interchangeable.
+- Generic Java methods are specialized per use, and `ListsLib`'s programmatic
+  `map`, `filter`, `any`, `all`, `find` and `foldl` are available (see
+  [Java libraries](JAVA_LIBRARIES.md#generic-methods-and-programmatic-exports)).
+  The only generic bundled Java libraries are `TypedMapLib` and `TypedArrayLib`,
+  which back the core `Map` and `Array` modules. Missing capabilities must be
+  added generically, rather than by hardcoding library method names in Elci.
 
 See [Java libraries](JAVA_LIBRARIES.md) for custom source JARs and the provider
 boundary. The [exact inventory](stdlib-compatibility.tsv) records every described
@@ -210,7 +287,9 @@ needs no entrypoint of its own. Modules may contain generic functions, aliases,
 custom types and other imports within the supported Elci language profile.
 Use `exposing (TypeName(..))` to export a custom type and its constructors.
 Module paths must match names, imports must be acyclic, and duplicate module
-ownership is rejected. `List` is reserved for the bundled core module.
+ownership is rejected. The core module names (`Basics`, `List`, `Maybe`, `Result`,
+`String`, `Tuple`, `Map`, `Dict`, `Array`, `Value`) and `Set`, `Elci` and names
+starting with `Elci.` are reserved.
 
 Run the [complete example](../examples/elci-library/README.md):
 

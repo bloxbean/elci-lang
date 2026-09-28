@@ -8,6 +8,7 @@ import java.util.*;
 /** Recursive descent with token-column layout boundaries and Pratt operators. */
 public final class Parser {
     private final List<Token> tokens;
+    private final String source;
     private int pos;
     private final List<Union> unions = new ArrayList<>();
     private final Map<String, Integer> typeArities = new HashMap<>(Map.of("List", 1, "Maybe", 1));
@@ -30,6 +31,7 @@ public final class Parser {
                     Map.entry("++", 5),
                     Map.entry("+", 6),
                     Map.entry("-", 6),
+                    Map.entry("^", 8),
                     Map.entry(">>", 9),
                     Map.entry("<<", 9),
                     Map.entry("*", 7),
@@ -49,9 +51,16 @@ public final class Parser {
                     "port");
 
     public Parser(String source) {
-        tokens = new Lexer(source).lex();
+        this(source, null);
+    }
+
+    /** @param module the module the source defines, recorded on tokens for diagnostics */
+    public Parser(String source, String module) {
+        this.source = source;
+        tokens = new Lexer(source, module).lex();
         for (int i = 0; i < tokens.size() - 2; i++)
-            if (tokens.get(i).text().equals("type") && !tokens.get(i + 1).text().equals("alias")) {
+            if (tokens.get(i).kind() == Token.Kind.NAME && tokens.get(i).text().equals("type")
+                    && !tokens.get(i + 1).text().equals("alias")) {
                 int j = i + 2;
                 while (j < tokens.size()
                         && tokens.get(j).kind() == Token.Kind.NAME
@@ -290,6 +299,9 @@ public final class Parser {
         var t = name();
         String n = t.text();
         if (Character.isUpperCase(n.charAt(0))) while (take(".")) n += "." + upper().text();
+        if (n.equals("Tuple") || n.equals("Unit"))
+            throw new Diagnostic("ELCI2012", t, n.equals("Tuple")
+                    ? "Write tuple types as ( a, b ) or ( a, b, c )" : "Write the unit type as ()");
         if (n.equals("Float"))
             throw new Diagnostic("ELCI2001", t, "Float is unsupported; use scaled Int");
         var args = new ArrayList<Type>();
@@ -297,32 +309,48 @@ public final class Parser {
         return new Type(n, List.copyOf(args));
     }
 
+    /** Right-associative operators; the rest (other than comparisons) associate to the left. */
+    private static final Set<String> RIGHT_ASSOCIATIVE = Set.of("::", "++", "<|", "&&", "||", ">>", "^");
+
     private Expr expression(int min, int floor) {
+        return expression(min, floor, null);
+    }
+
+    /** @param rightOf the right-associative operator whose right operand this is, or null */
+    private Expr expression(int min, int floor, String rightOf) {
         Expr left = prefix(floor);
         while (!boundary(floor)) {
-            if (is(".") && peek().offset() == previous().offset() + previous().text().length()) {
+            if (is(".") && peek().offset() == end(previous())) {
                 Token dot = next();
                 left = new Field(left, lower().text(), dot);
                 continue;
             }
-            String op = peek().text();
+            if (negation() && 10 >= min) {
+                // Elm 0.19: `f -1` passes a negative argument; `a - 1` and `a-1` subtract.
+                Token minus = next();
+                left = new Apply(left, new Binary("-", new Literal(BigInteger.ZERO, minus), expression(11, floor), minus), minus);
+                continue;
+            }
+            String op = peek().kind() == Token.Kind.SYMBOL ? peek().text() : "";
             Integer precedence = PRECEDENCE.get(op);
             if (precedence != null && precedence >= min) {
+                if (rightOf != null && precedence.equals(PRECEDENCE.get(rightOf)) && !RIGHT_ASSOCIATIVE.contains(op))
+                    throw mixing(rightOf, op);
                 Token token = next();
                 if (op.equals("/"))
                     throw new Diagnostic(
                             "ELCI2001",
                             token,
                             "Float division is unsupported; use // for integer quotient");
-                Expr right =
-                        expression(
-                                precedence
-                                        + (Set.of("::", "++", "<|", "&&", "||", "<<").contains(op)
-                                                ? 0
-                                                : 1),
-                                floor);
+                boolean rightAssociative = RIGHT_ASSOCIATIVE.contains(op);
+                Expr right = rightAssociative ? expression(precedence, floor, op) : expression(precedence + 1, floor);
                 left = new Binary(op, left, right, token);
-                if (precedence == 4 && PRECEDENCE.getOrDefault(peek().text(), -1) == 4)
+                String next = peek().kind() == Token.Kind.SYMBOL ? peek().text() : "";
+                if (!rightAssociative && precedence != 4 && precedence.equals(PRECEDENCE.get(next))
+                        && RIGHT_ASSOCIATIVE.contains(next))
+                    throw mixing(op, next);
+                if (precedence == 4 && peek().kind() == Token.Kind.SYMBOL
+                        && PRECEDENCE.getOrDefault(peek().text(), -1) == 4)
                     throw error(
                             "Comparison operators cannot be chained; use && or explicit"
                                     + " parentheses");
@@ -334,8 +362,16 @@ public final class Parser {
         return left;
     }
 
+    /** Elm's rule: operators of one precedence that associate in opposite directions don't mix. */
+    private Diagnostic mixing(String first, String second) {
+        return error("Mixing (" + first + ") and (" + second + ") needs parentheses: they associate in opposite"
+                + " directions, as in Elm");
+    }
+
     private Expr prefix(int floor) {
         Token t = next();
+        // A string's text is its content, never a keyword or symbol: "-", "(" and "of" are strings.
+        if (t.kind() == Token.Kind.STRING) return new Literal(t.text(), t);
         if (t.text().equals("if")) {
             Expr cond = expression(0, floor);
             expect("then");
@@ -395,11 +431,21 @@ public final class Parser {
         if (t.text().equals("-"))
             return new Binary("-", new Literal(BigInteger.ZERO, t), expression(9, floor), t);
         if (t.kind() == Token.Kind.INT) return new Literal(new BigInteger(t.text()), t);
-        if (t.kind() == Token.Kind.STRING) return new Literal(t.text(), t);
         if (t.text().equals("True") || t.text().equals("False"))
             return new Literal(t.text().equals("True"), t);
         if (t.text().equals("(")) {
             if (take(")")) return new Literal(null, t);
+            if (peek().kind() == Token.Kind.SYMBOL && PRECEDENCE.containsKey(peek().text())
+                    && tokens.get(pos + 1).kind() == Token.Kind.SYMBOL && tokens.get(pos + 1).text().equals(")")) {
+                // An operator as a function, as in Elm: (+) is \a b -> a + b.
+                Token op = next();
+                expect(")");
+                if (op.text().equals("/"))
+                    throw new Diagnostic("ELCI2001", op, "Float division is unsupported; use (//) for integer quotient");
+                String left = "$elci$left$" + (synthetic++), right = "$elci$right$" + (synthetic++);
+                return new Lambda(List.of(left, right),
+                        new Binary(op.text(), new Name(left, op), new Name(right, op), op), t);
+            }
             Expr e = expression(0, -1);
             if (take(",")) {
                 var es = new ArrayList<Expr>();
@@ -443,10 +489,30 @@ public final class Parser {
             expect("]");
             return new Items(es, false, t);
         }
+        if (t.text().equals(".") && t.kind() == Token.Kind.SYMBOL && peek().kind() == Token.Kind.NAME
+                && Character.isLowerCase(peek().text().charAt(0)) && peek().offset() == t.offset() + 1) {
+            // An accessor function, as in Elm: .amount is \r -> r.amount.
+            Token field = next();
+            String record = "$elci$record$" + (synthetic++);
+            return new Lambda(List.of(record), new Field(new Name(record, t), field.text(), t), t);
+        }
         if (t.kind() == Token.Kind.NAME && !RESERVED.contains(t.text())) {
             String n = t.text();
-            if (Character.isUpperCase(n.charAt(0))) while (take(".")) n += "." + name().text();
-            return new Name(n, t);
+            // A qualified name is written without spaces and ends at its first lowercase segment, a
+            // value: Config.settings.amount reads the field amount of Config.settings.
+            if (Character.isUpperCase(n.charAt(0))) {
+                Token last = t;
+                while (is(".") && peek().offset() == last.offset() + last.text().length()
+                        && Character.isUpperCase(n.charAt(n.lastIndexOf('.') + 1))
+                        && tokens.get(pos + 1).kind() == Token.Kind.NAME && tokens.get(pos + 1).offset() == peek().offset() + 1) {
+                    next();
+                    last = name();
+                    n += "." + last.text();
+                }
+            }
+            // The token spells the whole qualified name, as written, for diagnostics.
+            return new Name(n, n.equals(t.text()) ? t
+                    : new Token(n, t.kind(), t.offset(), t.line(), t.column(), t.source()));
         }
         throw new Diagnostic("ELCI1002", t, "Expected expression, found '" + t.text() + "'");
     }
@@ -469,7 +535,7 @@ public final class Parser {
         Pattern p = patternAtom();
         if (constructor(p)) {
             var args = new ArrayList<Pattern>();
-            while (patternAtomStart() && !Set.of("as").contains(peek().text()))
+            while (patternAtomStart() && !is("as"))
                 args.add(patternAtom());
             if (!args.isEmpty()) p = new Pattern(p.name(), args, p.token());
         }
@@ -478,6 +544,9 @@ public final class Parser {
 
     private Pattern patternAtom() {
         Token t = next();
+        // A string pattern is named by its quoted text, so it never reads as `_`, a variable or a
+        // constructor.
+        if (t.kind() == Token.Kind.STRING) return new Pattern("\"" + t.text() + "\"", List.of(), t);
         if (t.text().equals("[")) {
             var parts = new ArrayList<Pattern>();
             if (!is("]"))
@@ -501,7 +570,7 @@ public final class Parser {
                 } while (take(","));
                 expect(")");
                 if (parts.size() > 3) throw error("Tuple patterns have two or three elements");
-                return new Pattern("Tuple", parts, t);
+                return new Pattern("$tuple", parts, t);
             }
             expect(")");
             return first;
@@ -518,15 +587,18 @@ public final class Parser {
         }
         if (t.text().equals("-") && peek().kind() == Token.Kind.INT) {
             Token value = next();
-            return new Pattern("-" + value.text(), List.of(), t);
+            // One spelling per number, so 01 and 1 are the same pattern.
+            return new Pattern(new BigInteger(value.text()).negate().toString(), List.of(), t);
         }
         if (t.kind() == Token.Kind.NAME
                 || t.kind() == Token.Kind.INT
                 || t.kind() == Token.Kind.STRING) {
-            String name = t.text();
+            String name = t.kind() == Token.Kind.INT ? new BigInteger(t.text()).toString() : t.text();
             if (t.kind() == Token.Kind.NAME && Character.isUpperCase(name.charAt(0)))
                 while (take(".")) name += "." + upper().text();
-            return new Pattern(name, List.of(), t);
+            // The token spells the whole qualified name, as written, for diagnostics.
+            return new Pattern(name, List.of(), name.equals(t.text()) || t.kind() != Token.Kind.NAME ? t
+                    : new Token(name, t.kind(), t.offset(), t.line(), t.column(), t.source()));
         }
         throw new Diagnostic("ELCI1002", t, "Unsupported pattern");
     }
@@ -559,7 +631,7 @@ public final class Parser {
     private static boolean irrefutable(Pattern p) {
         return simpleBinder(p)
                 || p.name().equals("$unit")
-                || p.name().equals("Tuple") && p.arguments().stream().allMatch(Parser::irrefutable)
+                || p.name().equals("$tuple") && p.arguments().stream().allMatch(Parser::irrefutable)
                 || p.name().equals("$record")
                 || p.name().equals("$as") && irrefutable(p.arguments().getFirst());
     }
@@ -588,6 +660,19 @@ public final class Parser {
                 || (peek().column() <= floor && peek().line() > previous().line());
     }
 
+    /**
+     * Whether the next {@code -} negates the operand that follows it: as in Elm 0.19, the minus
+     * follows whitespace or an opening bracket and touches its operand.
+     */
+    private boolean negation() {
+        var t = peek();
+        if (t.kind() != Token.Kind.SYMBOL || !t.text().equals("-") || t.offset() + 1 >= source.length()) return false;
+        char after = source.charAt(t.offset() + 1);
+        if (Character.isWhitespace(after) || after == '-') return false;
+        return t.offset() == 0 || Character.isWhitespace(source.charAt(t.offset() - 1))
+                || "([{,".indexOf(source.charAt(t.offset() - 1)) >= 0;
+    }
+
     private boolean atomStart() {
         var t = peek();
         return (t.kind() == Token.Kind.NAME
@@ -597,7 +682,25 @@ public final class Parser {
                 || t.kind() == Token.Kind.STRING
                 || is("(")
                 || is("[")
-                || is("{");
+                || is("{")
+                || accessor();
+    }
+
+    /** Where a token ends in the source; a string's text is decoded, so its closing quote is found. */
+    private int end(Token t) {
+        if (t.kind() != Token.Kind.STRING) return t.offset() + t.text().length();
+        int i = t.offset() + 1;
+        while (i < source.length() && source.charAt(i) != '"') i += source.charAt(i) == '\\' ? 2 : 1;
+        return i + 1;
+    }
+
+    /** {@code .field}, an accessor function: a dot not attached to what precedes it, then a field. */
+    private boolean accessor() {
+        if (!is(".") || pos + 1 >= tokens.size()) return false;
+        Token dot = peek(), field = tokens.get(pos + 1);
+        boolean attached = pos > 0 && end(tokens.get(pos - 1)) == dot.offset();
+        return !attached && field.kind() == Token.Kind.NAME && field.offset() == dot.offset() + 1
+                && Character.isLowerCase(field.text().charAt(0));
     }
 
     private String qualified(boolean capital) {
@@ -639,8 +742,9 @@ public final class Parser {
         return tokens.get(pos++);
     }
 
+    /** Whether the next token is the keyword, name or symbol {@code s}; a string literal never is. */
     private boolean is(String s) {
-        return peek().text().equals(s);
+        return peek().kind() != Token.Kind.STRING && peek().text().equals(s);
     }
 
     private boolean take(String s) {

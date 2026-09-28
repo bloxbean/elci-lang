@@ -1,0 +1,267 @@
+---
+title: Build and deploy
+description: What elci build writes, how abi.json and expected-abi guard your data layout, where script hashes come from, and how to load an artifact in Java with Cardano Client Lib.
+sidebar:
+  order: 5
+---
+
+import { FileTree } from '@astrojs/starlight/components';
+
+This page walks through the files `elci build` produces, how to protect your on-chain data layout from accidental changes, and how off-chain code loads the compiled script. The examples use the vesting contract from the [vesting tutorial](/tutorials/vesting/).
+
+## Building
+
+```sh
+elci build .
+```
+
+```text
+validator vesting (spend): checked; 533 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+```
+
+Each validator gets its own directory:
+
+<FileTree>
+- build/
+  - validators/
+    - elci-outputs.json the files Elci owns, per validator
+    - vesting/
+      - validator.flat the script, FLAT-encoded UPLC
+      - validator.plutus a Plutus V3 text envelope
+      - validator.plutus.json the Julc artifact for off-chain code
+      - abi.json the data layout of parameters, datums and redeemers
+</FileTree>
+
+| File | Contents | Use it for |
+| --- | --- | --- |
+| `validator.flat` | The raw UPLC program in FLAT encoding | Tools that read FLAT directly |
+| `validator.plutus` | A text envelope: `type`, `description` and `cborHex`, with the script bytes CBOR-wrapped twice | Tools that read Plutus script envelopes |
+| `validator.plutus.json` | Julc's validator artifact: `cborHex`, `hash`, `params`, `purpose`, `sizeBytes` | Loading the script with Cardano Client Lib |
+| `abi.json` | Handlers, datum, redeemer and parameter schemas, constructor tags and field order | Building data off-chain; detecting layout changes |
+
+Neither `validator.plutus.json` nor `abi.json` is a CIP-57 blueprint; Elci doesn't generate blueprints yet.
+
+### How a build writes files
+
+- **All or nothing.** Every selected validator is compiled, and checked against its `expected-abi`, before any file is written. If one fails, nothing is published and the previous outputs stay as they were.
+- **Selection.** `elci build . --validator vesting` builds only the named validators (repeat the option for more) and leaves the others' outputs alone.
+- **Cleanup.** A full build removes the outputs of validators you have deleted from `elci.toml`. It only removes files listed in `elci-outputs.json`, so anything else you put in those directories is kept.
+- **Applied scripts.** An `applied.plutus.json` written by `elci apply` is removed by the next build of its validator, because it was applied to the previous script.
+
+## The Julc artifact
+
+`validator.plutus.json` is the file off-chain code loads (`cborHex` shortened):
+
+```json title="build/validators/vesting/validator.plutus.json"
+{
+  "type": "PlutusScriptV3",
+  "purpose": "spending",
+  "description": "vesting",
+  "cborHex": "590218590215010100323232323232323232322323232323...",
+  "hash": "cdf09c382832689b016adac7ef1470488e9ff58b8a474b9086c7a0c3",
+  "params": "",
+  "sizeBytes": 533
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `type` | Always `PlutusScriptV3` |
+| `purpose` | `spending`, `minting`, `withdraw`, `certifying`, `voting` or `proposing` for one handler; `multi` for several |
+| `description` | The validator's name |
+| `cborHex` | The script, CBOR-wrapped twice as Cardano Client Lib expects |
+| `hash` | The script hash; empty while parameters are still to be applied |
+| `params` | The parameters still to be applied, as `name:type`, comma-separated; records show as `Record` |
+| `sizeBytes` | The size of the FLAT script |
+
+## The ABI
+
+`abi.json` describes everything off-chain code needs to talk to the script. Its top level:
+
+```sh
+jq '{formatVersion, validator, purpose, target, julcVersion, compiler, boundary, ledgerArguments, parameters, definitions}' build/validators/vesting/abi.json
+```
+
+```json
+{
+  "formatVersion": 2,
+  "validator": "vesting",
+  "purpose": "spend",
+  "target": "plutus-v3-pv11-uplc-1.1.0",
+  "julcVersion": "0.1.0-gb-5a3378b",
+  "compiler": "elci-0.1.0-dev",
+  "boundary": "julc-strict-v1",
+  "ledgerArguments": 1,
+  "parameters": [],
+  "definitions": {}
+}
+```
+
+`handlers` lists one entry per handler, with its function, its purpose and the ledger's tag for that purpose, plus the datum profile and the datum and redeemer schemas. `parameters` holds the parameter schemas in application order, and `definitions` holds shared definitions such as recursive types. Each schema gives the kind of data, the constructor tags and the field order. The vesting datum:
+
+```sh
+jq '.handlers[0] | {datum, redeemer}' build/validators/vesting/abi.json
+```
+
+```json
+{
+  "datum": {
+    "profile": "required",
+    "schema": {
+      "fields": [
+        {
+          "name": "beneficiary",
+          "schema": {
+            "encoding": "B",
+            "kind": "bytes"
+          }
+        },
+        {
+          "name": "deadline",
+          "schema": {
+            "encoding": "I",
+            "kind": "integer"
+          }
+        }
+      ],
+      "identity": "elci.Record:beneficiary,deadline [org.julclang.ledger.PubKeyHash, Int]",
+      "kind": "record",
+      "tag": 0
+    },
+    "sourceType": "Record:beneficiary,deadline [org.julclang.ledger.PubKeyHash, Int]"
+  },
+  "redeemer": {
+    "schema": {
+      "constructors": [
+        {
+          "fields": [],
+          "name": "Vesting.Claim",
+          "tag": 0
+        }
+      ],
+      "identity": "elci.Vesting.VestingAction",
+      "kind": "union"
+    },
+    "sourceType": "Vesting.VestingAction"
+  }
+}
+```
+
+Keep the ABI with the application code that builds datums and redeemers. The encoding rules behind it are on [Datums and redeemers](/contracts/datums-and-redeemers/).
+
+## Guarding the ABI with `expected-abi`
+
+Once outputs exist on-chain, their datums must keep decoding. A harmless-looking refactor, such as reordering constructors, can silently change the layout. To catch that, commit a copy of the ABI outside `build/` and point the validator at it:
+
+```sh
+mkdir -p abi
+cp build/validators/vesting/abi.json abi/vesting.json
+```
+
+```toml title="elci.toml" ins={4}
+[validators.vesting]
+boundary = "julc-strict-v1"
+spend = "Vesting.validate"
+expected-abi = "abi/vesting.json"
+```
+
+The path is relative to the project directory. From now on, `elci check`, `elci build` and `elci apply` compare the current ABI with the committed one before writing anything. Changes that keep the layout pass. Reordering the fields of the datum's declaration, for example, still builds:
+
+```elm
+type alias VestingDatum =
+    { deadline : Int
+    , beneficiary : PubKeyHash
+    }
+```
+
+```text
+validator vesting (spend): checked; 533 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+```
+
+Renaming `deadline` to `unlockAt` does not:
+
+```text
+elci: ELCI4001: .../vesting/elci.toml:6: [validators.vesting]: ABI drift from abi/vesting.json; compare constructor tags, field order, handler roles and parameters
+```
+
+The field names are part of the ABI, because off-chain code uses them. Constructor order, field names and types, handler roles and parameters are all compared. Nothing is written when the check fails, so the old artifacts stay in `build/`.
+
+When the change is intended, remove the `expected-abi` line, build, review the difference, then copy the new ABI over the committed one and restore the line:
+
+```sh
+diff <(jq . abi/vesting.json) <(jq . build/validators/vesting/abi.json)
+```
+
+```text
+20c20
+<               "name": "deadline",
+---
+>               "name": "unlockAt",
+27c27
+<           "identity": "elci.Record:beneficiary,deadline [org.julclang.ledger.PubKeyHash, Int]",
+---
+>           "identity": "elci.Record:beneficiary,unlockAt [org.julclang.ledger.PubKeyHash, Int]",
+31c31
+<         "sourceType": "Record:beneficiary,deadline [org.julclang.ledger.PubKeyHash, Int]"
+---
+>         "sourceType": "Record:beneficiary,unlockAt [org.julclang.ledger.PubKeyHash, Int]"
+```
+
+## Script hashes
+
+The script hash identifies a deployed script:
+
+- For a **spending** validator, the script address is built from it.
+- For a **minting** policy, it is the policy id.
+- For **withdraw** and **certify**, it is the stake credential.
+
+A validator without parameters has its hash in `validator.plutus.json`. A parameterized validator has an empty `hash` until you apply its parameters with `elci apply`, which prints the hash and writes it into `applied.plutus.json` (see [Parameterized validators](/contracts/parameters/)). Any change to the source, the handlers, the parameters or the compiler version can change the hash, so record which build you deployed.
+
+## Loading the script in Java
+
+Cardano Client Lib can load the artifact directly with Julc's adapter, `org.julclang:julc-cardano-client-lib`. This example reads `validator.plutus.json` (or an `applied.plutus.json`), checks the hash and derives the script's address on the preprod test network:
+
+```java title="LoadScript.java (example)"
+import com.bloxbean.cardano.client.address.AddressProvider;
+import com.bloxbean.cardano.client.common.model.Networks;
+import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HexFormat;
+import org.julclang.clientlib.ValidatorOutput;
+
+public class LoadScript {
+    public static void main(String[] args) throws Exception {
+        var output = ValidatorOutput.fromJson(
+                Files.readString(Path.of(args[0])));
+        var script = PlutusV3Script.builder().cborHex(output.cborHex()).build();
+
+        String hash = HexFormat.of().formatHex(script.getScriptHash());
+        if (!hash.equals(output.hash())) {
+            throw new IllegalStateException("Script hash mismatch");
+        }
+        var address = AddressProvider.getEntAddress(script, Networks.preprod());
+        System.out.println("hash    " + hash);
+        System.out.println("address " + address.toBech32());
+    }
+}
+```
+
+Run with Cardano Client Lib 0.7.2 and the Julc adapter on the classpath, it prints:
+
+```text
+hash    cdf09c382832689b016adac7ef1470488e9ff58b8a474b9086c7a0c3
+address addr_test1wrxlp8pc9qex3xcpdtdv0mc5wpyga8l43w9ywjussmr6psceanc6r
+```
+
+The `PlutusV3Script` is an ordinary Cardano Client Lib script: attach it to transactions, together with datums and redeemers you build as `PlutusData` following `abi.json`. Parameterized scripts need their parameters first, either with `elci apply` or in Java, as shown on [Parameterized validators](/contracts/parameters/). To test Elci scripts from JUnit, see [Testing from Java](/testing/java/).
+
+## Before you deploy
+
+Elci is a development preview, and its output has not been audited. Deploy to a test network first, and treat any mainnet use as experimental. Before deploying a script:
+
+- Run `elci test`, with scenarios for every purpose and every way a transaction should be rejected.
+- Check the budgets your scenarios report. The ledger limits every transaction's CPU and memory, and the fee grows with both.
+- Commit the ABI and set `expected-abi`, so that later changes can't silently break existing datums.
+- Apply parameters with `elci apply`, which checks their shape, and double-check their meaning against `abi.json`.
+- Record the script hash you deployed.

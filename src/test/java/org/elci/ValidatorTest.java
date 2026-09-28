@@ -35,7 +35,7 @@ class ValidatorTest {
     }
     @Test void thresholdDifferentialAndMalformedBoundaries() throws Exception {
         String source=Files.readString(Path.of("examples/threshold/src/Example/Threshold.elm"));
-        var elci=new ElciCompiler().compile(source,"validate",FrontendProgram.Purpose.SPEND);
+        var elci=Scripts.spend(source,"validate");
         var java=new JulcCompiler(StdlibRegistry.defaultRegistry()).compile(JAVA);
         var vm=JulcVm.create();
         for(long[] pair:new long[][]{{5,6},{5,4},{-5,0},{0,0},{1,1},{-1,-1},{1000,999}}) {
@@ -49,10 +49,10 @@ class ValidatorTest {
             assertFalse(vm.evaluateWithArgs(elci.program(),elci.target().ledgerTarget(),List.of(context(bad,PlutusData.integer(10))),null,EvalOptions.DEFAULT) instanceof EvalResult.Success);
             assertFalse(vm.evaluateWithArgs(elci.program(),elci.target().ledgerTarget(),List.of(context(PlutusData.integer(0),bad)),null,EvalOptions.DEFAULT) instanceof EvalResult.Success);
         }
-        assertArrayEquals(UplcFlatEncoder.encodeProgram(elci.program()),UplcFlatEncoder.encodeProgram(new ElciCompiler().compile(source,"validate",FrontendProgram.Purpose.SPEND).program()));
+        assertArrayEquals(UplcFlatEncoder.encodeProgram(elci.program()),UplcFlatEncoder.encodeProgram(Scripts.spend(source,"validate").program()));
     }
     @Test void missingDatumFails() throws Exception {
-        var result=new ElciCompiler().compile(Files.readString(Path.of("examples/threshold/src/Example/Threshold.elm")),"validate",FrontendProgram.Purpose.SPEND);
+        var result=Scripts.spend(Files.readString(Path.of("examples/threshold/src/Example/Threshold.elm")),"validate");
         var context=ScriptContextBuilder.spending(new TxOutRef(new TxId(new byte[32]),BigInteger.ZERO)).redeemer(PlutusData.integer(10)).build().toPlutusData();
         assertFalse(JulcVm.create().evaluateWithArgs(result.program(),result.target().ledgerTarget(),List.of(context),null,EvalOptions.DEFAULT) instanceof EvalResult.Success);
     }

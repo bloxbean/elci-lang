@@ -12,21 +12,48 @@ import static org.junit.jupiter.api.Assertions.*;
 class InitTest {
     @TempDir Path directory;
 
-    @Test void createsBuildableSpendingProjectByDefault() throws Exception {
+    @Test void createsANamedSpendingValidatorByDefault() throws Exception {
         var project = directory.resolve("vesting");
         assertEquals(0, Main.run("init", project.toString()));
-        assertTrue(Files.readString(project.resolve("elci.toml")).contains("purpose = \"spend\""));
+        String config = Files.readString(project.resolve("elci.toml"));
+        assertTrue(config.contains("[validators.main]") && config.contains("spend = \"Main.spend\""), config);
         assertEquals(0, Main.run("check", project.toString()));
         assertEquals("build/\n", Files.readString(project.resolve(".gitignore")));
     }
 
-    @Test void createsBuildableMintingAndFunctionTemplates() throws Exception {
-        var mint = directory.resolve("token");
+    @Test void createsAFunctionProjectForEval() throws Exception {
         var function = directory.resolve("calculator");
-        assertEquals(0, Main.run("init", "--purpose", "mint", mint.toString()));
-        assertEquals(0, Main.run("check", mint.toString()));
         assertEquals(0, Main.run("init", function.toString(), "--purpose", "function"));
+        assertTrue(Files.readString(function.resolve("elci.toml")).contains("purpose = \"function\""));
         assertEquals(0, Main.run("eval", function.toString()));
+    }
+
+    @Test void createsNamedValidatorProjectsForEveryPurpose() throws Exception {
+        for (String purpose : new String[] {"spend", "mint", "withdraw", "certify", "vote", "propose"}) {
+            var project = directory.resolve("named-" + purpose);
+            assertEquals(0, Main.run("init", project.toString(), "--validator", "main", "--purpose", purpose));
+            String config = Files.readString(project.resolve("elci.toml"));
+            assertTrue(config.contains("[validators.main]"), config);
+            assertTrue(config.contains(purpose + " = \"Main." + purpose + "\""), config);
+            assertFalse(Files.readString(project.resolve("src/Main.elm")).contains("True"), "no accept-all placeholder");
+            assertEquals(0, Main.run("build", project.toString()), purpose);
+            assertTrue(Files.exists(project.resolve("build/validators/main/validator.plutus.json")));
+            // The generated scenarios run and pass for every purpose.
+            var tests = NamedValidatorCliTest.run("test", project.toString());
+            assertEquals(0, tests.status(), purpose + ": " + tests.out() + tests.err());
+            assertTrue(tests.out().contains("2 passed, 0 failed"), tests.out());
+        }
+        assertEquals(0, Main.run("init", directory.resolve("default-named").toString(), "--validator", "vault"));
+        assertTrue(Files.readString(directory.resolve("default-named/elci.toml")).contains("spend = \"Main.spend\""));
+    }
+
+    @Test void everyHandlerPurposeDefaultsToValidatorMain() throws Exception {
+        var project = directory.resolve("withdraw");
+        assertEquals(0, Main.run("init", project.toString(), "--purpose", "withdraw"));
+        assertTrue(Files.readString(project.resolve("elci.toml")).contains("[validators.main]"));
+        assertEquals(1, Main.run("init", directory.resolve("fn").toString(), "--validator", "v", "--purpose", "function"));
+        assertEquals(1, Main.run("init", directory.resolve("bad-name").toString(), "--validator", "../x"));
+        assertFalse(Files.exists(directory.resolve("bad-name")));
     }
 
     @Test void refusesInvalidPurposeAndExistingContent() throws Exception {
@@ -35,7 +62,7 @@ class InitTest {
         Files.writeString(project.resolve("keep.txt"), "keep");
         assertEquals(1, Main.run("init", project.toString()));
         assertEquals("keep", Files.readString(project.resolve("keep.txt")));
-        assertEquals(1, Main.run("init", directory.resolve("bad").toString(), "--purpose", "vote"));
+        assertEquals(1, Main.run("init", directory.resolve("bad").toString(), "--purpose", "invalid"));
         assertFalse(Files.exists(directory.resolve("bad")));
         assertEquals(1, Main.run("init", directory.resolve("duplicate").toString(), "--purpose", "mint", "--purpose", "spend"));
         assertFalse(Files.exists(directory.resolve("duplicate")));

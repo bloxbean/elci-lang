@@ -1,0 +1,444 @@
+---
+title: Your first validator
+description: Create a validator with elci init, read every generated file, check, test and build it, then change it to require a second signature.
+sidebar:
+  order: 3
+---
+
+import { Steps, FileTree, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+In this tutorial you create a small validator, read every file that `elci init` generates, and check, test
+and build it. Then you change it to require a second signature and update its tests. You need `elci` on your
+`PATH` (see [Installation](/start/installation/)).
+
+## What a validator does
+
+On Cardano, funds can be locked at a script address. Whenever a transaction tries to spend them, the
+ledger runs the script, called a **validator**, and the spend only happens if the validator approves. A
+spending validator receives four things:
+
+- **Parameters** that you fix when you deploy the script, such as the owner's key.
+- The **datum**: data stored with the locked output when it was created.
+- The **redeemer**: data that the spending transaction supplies.
+- The **script context**: the whole transaction being validated, including who signed it.
+
+It returns `True` to approve the transaction. Returning `False`, or failing during evaluation, rejects it.
+Validators can also control minting, reward withdrawals and governance actions; this tutorial sticks to
+spending.
+
+## Create the project
+
+```sh
+elci init my-contract
+cd my-contract
+```
+
+```text
+Created Elci project at .../my-contract with initial spend handler in validator main.
+Run: elci check .../my-contract
+```
+
+`elci init` creates this layout:
+
+<FileTree>
+- my-contract/
+  - elci.toml project configuration
+  - README.md
+  - .gitignore ignores build/
+  - src/
+    - Main.elm the validator
+  - tests/
+    - MainTest.elm two transaction scenarios
+</FileTree>
+
+## The configuration
+
+```toml title="elci.toml"
+[project]
+source-directories = ["src"]
+target = "plutus-v3-pv11-uplc-1.1.0"
+julc-version = "0.1.0-gb-5a3378b"
+
+# One deployed script. Add handler keys (spend, mint, withdraw, certify, vote,
+# propose) to let this script serve more purposes; add more [validators.<name>]
+# tables for independent scripts.
+[validators.main]
+boundary = "julc-strict-v1"
+parameters = ["owner"]
+spend = "Main.spend"
+```
+
+- `[project]` says where your modules live, which on-chain target to compile for (Plutus V3), and which Julc
+  version the compiler must match.
+- `[validators.main]` declares one script called `main`. Its `spend` handler is the function `spend` in module
+  `Main`, and it takes one deployment parameter called `owner`.
+- `boundary = "julc-strict-v1"` selects strict decoding of the data the script receives. It is currently the
+  only boundary policy.
+
+The source code doesn't say how it is deployed. The configuration does, so the same function could be
+reused in another validator.
+
+## The validator
+
+```elm title="src/Main.elm"
+module Main exposing (spend)
+
+import Julc.Ledger exposing (PubKeyHash, ScriptContext)
+
+
+{-| Accept only transactions signed by the owner, a deployment parameter.
+-}
+spend : PubKeyHash -> () -> () -> ScriptContext -> Bool
+spend owner _ _ ctx =
+    List.any (\signer -> signer == owner) ctx.txInfo.signatories
+```
+
+Line by line:
+
+- `module Main exposing (spend)` names the module (it must match the file path `src/Main.elm`) and makes
+  `spend` visible to the configuration and to tests.
+- `import Julc.Ledger exposing (PubKeyHash, ScriptContext)` brings in two Cardano ledger types.
+- The signature lists the arguments in the order the handler receives them:
+
+  | Argument | Type | Meaning |
+  | --- | --- | --- |
+  | `owner` | `PubKeyHash` | The `owner` parameter: the hash of the owner's public key |
+  | `_` | `()` | The datum. `()` (unit) means "no information" |
+  | `_` | `()` | The redeemer, also unit |
+  | `ctx` | `ScriptContext` | The transaction being validated |
+
+- The body reads `ctx.txInfo.signatories`, the key hashes that signed the transaction, and uses `List.any`
+  to check whether one of them is the owner. `\signer -> signer == owner` is an anonymous function (a lambda).
+  The core `Tx` module has the same check as `Tx.signedBy owner ctx`, after `import Tx`.
+
+The `_` pattern ignores an argument. The datum and redeemer are still decoded strictly before `spend` runs,
+so they must be unit data.
+
+## Check it
+
+`elci check` compiles every validator all the way through the backend, without writing any files:
+
+```sh
+elci check .
+```
+
+```text
+validator main (spend): checked; 300 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+```
+
+The line names the validator and its purposes, then gives the size of the compiled script in bytes and
+the target. Script size matters on Cardano, because the transaction that uses a script pays for its bytes.
+
+## The tests
+
+```elm title="tests/MainTest.elm"
+module MainTest exposing (othersAreRejected, ownerSigns)
+
+import Julc.Data as Data
+import Julc.Ledger as Ledger exposing (PubKeyHash)
+import Scenario exposing (Scenario)
+
+
+owner : PubKeyHash
+owner =
+    Scenario.key "owner"
+
+
+transaction : Scenario
+transaction =
+    Scenario.spend "main" (Scenario.outRef "main" 0) Scenario.unit
+        |> Scenario.parameters [ Data.encode owner ]
+
+
+ownerSigns : Scenario
+ownerSigns =
+    transaction
+        |> Scenario.signedBy owner
+
+
+othersAreRejected : Scenario
+othersAreRejected =
+    transaction
+        |> Scenario.signedBy (Scenario.key "someone else")
+        |> Scenario.expectFailure
+```
+
+A `Scenario` describes one transaction against a validator of your project:
+
+- `Scenario.key "owner"` derives a deterministic test key hash from a name.
+- `Scenario.spend "main" (Scenario.outRef "main" 0) Scenario.unit` spends an output locked at validator
+  `main`'s address, with a unit datum.
+- `Scenario.parameters [ Data.encode owner ]` supplies the deployment parameters, in the order declared in
+  `elci.toml`. `Data.encode` turns an Elci value into on-chain data.
+- `Scenario.signedBy` adds a signer, and `Scenario.expectFailure` says the validator must reject the
+  transaction.
+
+Only the exposed declarations of type `Scenario` are tests. `owner` and `transaction` are helpers.
+
+## Run the tests
+
+```sh
+elci test .
+```
+
+```text
+PASS MainTest.ownerSigns (cpu 7675163, mem 29990)
+PASS MainTest.othersAreRejected (cpu 8053596, mem 31922)
+2 passed, 0 failed
+```
+
+Each scenario compiles the validator exactly as `elci build` does, applies the parameters, builds a complete
+ledger context for the transaction and runs the script. `cpu` and `mem` are the execution budget the script
+used. The ledger charges fees for these units and limits how many a transaction may use.
+
+## Build it
+
+```sh
+elci build .
+```
+
+```text
+validator main (spend): checked; 300 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+```
+
+The build writes one directory per validator:
+
+<FileTree>
+- build/
+  - validators/
+    - elci-outputs.json the files Elci owns
+    - main/
+      - abi.json how your types are encoded
+      - validator.flat the script in FLAT encoding
+      - validator.plutus a Plutus V3 text envelope
+      - validator.plutus.json the Julc artifact for Cardano Client Lib
+</FileTree>
+
+`validator.plutus.json` is the file your off-chain code loads (the `cborHex` value is shortened here):
+
+```json title="build/validators/main/validator.plutus.json"
+{
+  "type": "PlutusScriptV3",
+  "purpose": "spending",
+  "description": "main",
+  "cborHex": "59012f59012c010100323232322322323232323293370e...",
+  "hash": "",
+  "params": "owner:PubKeyHash",
+  "sizeBytes": 300
+}
+```
+
+The `hash` is empty because the script still needs its `owner` parameter. The hash of a script changes
+when you apply parameters to it.
+
+## Make it your own
+
+Now change the validator so that spending needs two signatures: the owner's and a guardian's.
+
+<Steps>
+
+1. **Change the handler.** Add a `guardian` parameter, and move the signature check into a helper function
+   so you can use it twice:
+
+   ```elm title="src/Main.elm" ins={6,8-10,13-15}
+   module Main exposing (spend)
+
+   import Julc.Ledger exposing (PubKeyHash, ScriptContext)
+
+
+   {-| Accept only transactions signed by both the owner and the guardian.
+   -}
+   spend : PubKeyHash -> PubKeyHash -> () -> () -> ScriptContext -> Bool
+   spend owner guardian _ _ ctx =
+       signedBy owner ctx && signedBy guardian ctx
+
+
+   signedBy : PubKeyHash -> ScriptContext -> Bool
+   signedBy key ctx =
+       List.any (\signer -> signer == key) ctx.txInfo.signatories
+   ```
+
+   `signedBy` isn't exposed, so it stays private to the module.
+
+2. **Check it.** The compiler notices that the handler no longer matches its configuration:
+
+   ```sh
+   elci check .
+   ```
+
+   ```text
+   elci: .../my-contract/elci.toml:9: [validators.main]
+   .../my-contract/src/Main.elm:8:1: ELCI2014: Handler Main.spend does not have the spend signature owner -> datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (1 parameter); its type is PubKeyHash -> PubKeyHash -> () -> () -> ScriptContext -> Bool; it has `()` where the configuration needs `ScriptContext`
+
+   8| spend : PubKeyHash -> PubKeyHash -> () -> () -> ScriptContext -> Bool
+      ^^^^^
+   ```
+
+   The table still declares one parameter, so the handler must take one parameter, then the datum, the
+   redeemer and the context. `spend` now takes two parameters, so its arguments no longer line up.
+   `ELCI2014` always means that a handler and its `elci.toml` table disagree.
+
+3. **Declare the new parameter.** Parameters are listed in the order the handler receives them:
+
+   ```toml title="elci.toml" ins={3}
+   [validators.main]
+   boundary = "julc-strict-v1"
+   parameters = ["owner", "guardian"]
+   spend = "Main.spend"
+   ```
+
+   ```sh
+   elci check .
+   ```
+
+   ```text
+   validator main (spend): checked; 323 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+   ```
+
+4. **Run the old tests.** They still supply only one parameter:
+
+   ```sh
+   elci test .
+   ```
+
+   ```text
+   FAIL MainTest.ownerSigns
+       cannot prepare validator 'main': it takes 2 parameters [owner, guardian], but the scenario gives 1; set them with Scenario.parameters
+   FAIL MainTest.othersAreRejected
+       cannot prepare validator 'main': it takes 2 parameters [owner, guardian], but the scenario gives 1; set them with Scenario.parameters
+   0 passed, 2 failed
+   ```
+
+   Both scenarios fail before the script even runs, and that includes `othersAreRejected`, which expects the
+   validator to reject its transaction. Without this check it could pass for the wrong reason: the script
+   would fail on the missing parameter, not on the missing signature. A scenario with `expectFailure` only
+   proves something when the transaction is otherwise valid, so pair each one with a similar scenario that
+   must succeed.
+
+5. **Update the tests.** Supply both parameters, and cover each way the transaction can be signed:
+
+   ```elm title="tests/MainTest.elm"
+   module MainTest exposing (bothSign, guardianAloneIsRejected, othersAreRejected, ownerAloneIsRejected)
+
+   import Julc.Data as Data
+   import Julc.Ledger as Ledger exposing (PubKeyHash)
+   import Scenario exposing (Scenario)
+
+
+   owner : PubKeyHash
+   owner =
+       Scenario.key "owner"
+
+
+   guardian : PubKeyHash
+   guardian =
+       Scenario.key "guardian"
+
+
+   transaction : Scenario
+   transaction =
+       Scenario.spend "main" (Scenario.outRef "main" 0) Scenario.unit
+           |> Scenario.parameters [ Data.encode owner, Data.encode guardian ]
+
+
+   bothSign : Scenario
+   bothSign =
+       transaction
+           |> Scenario.signedBy owner
+           |> Scenario.signedBy guardian
+
+
+   ownerAloneIsRejected : Scenario
+   ownerAloneIsRejected =
+       transaction
+           |> Scenario.signedBy owner
+           |> Scenario.expectFailure
+
+
+   guardianAloneIsRejected : Scenario
+   guardianAloneIsRejected =
+       transaction
+           |> Scenario.signedBy guardian
+           |> Scenario.expectFailure
+
+
+   othersAreRejected : Scenario
+   othersAreRejected =
+       transaction
+           |> Scenario.signedBy (Scenario.key "someone else")
+           |> Scenario.expectFailure
+   ```
+
+6. **Run the tests again.**
+
+   ```sh
+   elci test .
+   ```
+
+   ```text
+   PASS MainTest.bothSign (cpu 11441262, mem 45132)
+   PASS MainTest.ownerAloneIsRejected (cpu 11088065, mem 43199)
+   PASS MainTest.guardianAloneIsRejected (cpu 8425738, mem 34154)
+   PASS MainTest.othersAreRejected (cpu 8425738, mem 34154)
+   4 passed, 0 failed
+   ```
+
+   To run only some tests, pass part of their name with `--match`:
+
+   ```sh
+   elci test . --match alone
+   ```
+
+   ```text
+   PASS MainTest.ownerAloneIsRejected (cpu 11088065, mem 43199)
+   PASS MainTest.guardianAloneIsRejected (cpu 8425738, mem 34154)
+   2 passed, 0 failed
+   ```
+
+7. **Build the new script.**
+
+   ```sh
+   elci build .
+   ```
+
+   ```text
+   validator main (spend): checked; 323 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+   ```
+
+   `validator.plutus.json` now lists both parameters: `"params": "owner:PubKeyHash,guardian:PubKeyHash"`.
+
+</Steps>
+
+## Apply the parameters
+
+Before you deploy, you apply the real parameter values. `elci apply` takes each value as Plutus Data in
+cardano-cli's JSON format. A `PubKeyHash` is 28 bytes, written as hex. These two keys are placeholders:
+
+```sh
+elci apply . --validator main \
+  --param 'owner={"bytes": "01000000000000000000000000000000000000000000000000000000"}' \
+  --param 'guardian={"bytes": "02000000000000000000000000000000000000000000000000000000"}'
+```
+
+```text
+validator main: applied 2 parameters; hash 7cf11fa222b171e7a3102db8f51aac3f4815ee8256ed47bde39cc6a6; wrote .../my-contract/build/validators/main/applied.plutus.json
+```
+
+`apply` first checks each value against the parameter's type. The applied script has its own hash, which
+determines its address on-chain. [Parameterized validators](/contracts/parameters/) explains the format.
+
+## What you learned
+
+- `elci.toml` decides how functions are deployed: `[validators.<name>]`, handler keys and `parameters`.
+- A spend handler receives parameters, datum, redeemer and context, and returns `Bool`.
+- `elci check` catches mistakes, including a handler that doesn't match its configuration.
+- `elci test` runs transaction scenarios against the exact script that `elci build` writes.
+
+## Next steps
+
+<CardGrid>
+  <LinkCard title="Anatomy of a project" description="Every file and directory in an Elci project." href="/start/project-tour/" />
+  <LinkCard title="Learn the language" description="Values, functions and types, with runnable examples." href="/learn/basics/" />
+  <LinkCard title="Validators and purposes" description="Handlers for spending, minting, withdrawing and governance." href="/contracts/validators/" />
+  <LinkCard title="Transaction scenarios" description="Everything a scenario can describe." href="/testing/scenarios/" />
+</CardGrid>

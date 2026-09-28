@@ -1,6 +1,7 @@
 # ADR-004: Named validators and multi-purpose handlers
 
-Status: **Accepted design direction; not implemented** — next iteration.
+Status: **Implemented** (25 September 2026) on Julc revision 2; see
+[Implementation evidence](#implementation-evidence).
 Tracking issue: [#1](https://github.com/bloxbean/elci-lang/issues/1)
 Backend prerequisite: [Julc #180](https://github.com/bloxbean/julc/issues/180).
 Integration roadmap: [ADR-005](005-remaining-frontend-and-backend-integration.md).
@@ -29,7 +30,7 @@ contract keywords or a separate frontend dispatcher.
 
 ## Decision: named validators
 
-Proposed configuration (currently rejected by the CLI):
+Configuration:
 
 ```toml
 [validators.vault]
@@ -99,7 +100,7 @@ naming private consumers.
 
 ## CLI and artifacts
 
-Proposed commands:
+Commands:
 
 ```sh
 elci check ./project
@@ -137,11 +138,18 @@ The Julc artifact is not renamed or represented as a CIP-57 blueprint.
 
 ## Compatibility and invariants
 
+> **Superseded (25 September 2026):** [ADR-007](007-named-validators-only.md)
+> removes `[entrypoint]` validators during the development preview. The
+> `[entrypoint]` compatibility bullets below no longer apply; `[entrypoint]` now
+> names a function for `elci eval`.
+
 - Keep `[entrypoint]` working, including `purpose = "function"`, existing artifact
   paths and single-entrypoint ABI drift checks.
 - Reject mixing `[entrypoint]` and `[validators.*]` in one configuration.
-- Preserve existing script bytes/hashes when using the legacy configuration;
-  use the same single-purpose wrapping path for equivalent one-handler groups.
+- Preserve existing script bytes/hashes when using the legacy configuration.
+  Named groups, including one-handler groups, always dispatch on the purpose
+  (Julc's multi-validator wrapper, so unconfigured purposes fail). A one-handler
+  group therefore hashes differently from the equivalent `[entrypoint]` script.
 - Multiple handlers share a script; separate validator groups never share a
   deployment identity implicitly.
 - Do not change evaluation order, eager-value behavior, serialization, constructor
@@ -199,3 +207,65 @@ Finalize the neutral descriptor API and ABI format revision in the implementatio
 milestone. Specify output-manifest ownership and atomic publication mechanics.
 Optional spending datums, deployment parameters, additional script languages and
 multi-handler transaction testing commands require separate decisions.
+
+## Implementation evidence
+
+Implemented on Julc `17da92bb` (the ADR-059 revision-2 stack: `ValidatorProgram`,
+parameters and datum profiles). Julc's generic companion is
+[ADR-059](https://github.com/bloxbean/julc/blob/17da92bb427a51112e2296937f70bef55e3795e5/adr/059-generic-backend-revision-2.md).
+
+- **Descriptor:** each group compiles to one `ValidatorProgram`.
+  - Handlers reference shared, specialized program-level definitions.
+  - Library exports are one linked import group per validator.
+  - Julc verifies the producer PIR and always dispatches through
+    `wrapMultiValidator`.
+- **Resolution:** handler modules are resolved together with every declaration
+  module-qualified. Missing, private and non-concrete handlers are rejected, and
+  so are wrong role signatures (`ELCI2014`).
+- **Beyond this ADR:** parameters and optional/absent datums (ADR-005 E5) are
+  configured with `parameters` and `spend-datum`. An optional datum reaches the
+  source as Elci's `Maybe` through a verified re-tagging adapter.
+- **Pre-existing defects fixed:**
+  - A qualified reference could reach a private or unimported declaration of the
+    flattened module graph. It is now `ELCI2104`.
+  - An unqualified name in an imported module could reach the root module's
+    private declarations. It is now `ELCI2005`.
+- **Review hardening:** an independent review of this work led to these changes:
+  - imported constructors resolve deterministically, and shared qualified names are
+    ambiguous (`ELCI2102`);
+  - `Julc.Data` rejects any type containing `ScriptContext`;
+  - value exports of libraries are evaluated at their use;
+  - `params` entries contain no commas;
+  - an unreplaceable output path stops publication before anything is written;
+  - outputs get default file permissions;
+  - an applied script at the default path is always owned;
+  - `apply` checks `expected-abi`;
+  - PROJECT approval is enforced in both modes.
+- **Publication:** CLI outputs are validated for all selected groups before
+  anything is written. Each file is replaced with an atomic move, and
+  `build/validators/elci-outputs.json` records owned files for cleanup.
+
+Tests (JVM):
+
+- **`NamedValidatorTest`:** spend+withdraw dispatch, unconfigured purposes,
+  inactive-schema isolation, missing/malformed datums and handler-order
+  independence.
+- **`NamedValidatorRolesTest`:**
+  - all six purposes, in one group and as single-purpose groups, each rejecting
+    every other purpose;
+  - Java `@MultiValidator` parity on the 81-case purpose × redeemer × datum
+    matrix, with 4 accepting cases;
+  - parameter order and hashes, optional and absent datums;
+  - role, visibility, concreteness, boundary and parameter-agreement rejections.
+- **`NamedValidatorCliTest`:**
+  - per-group artifacts with Cardano Client Lib hash agreement and ABI revision 2;
+  - determinism across configuration order;
+  - `--validator` selection;
+  - drift and type failures publishing nothing;
+  - owned-output cleanup;
+  - configuration errors.
+- **`TreasuryExampleTest` and `InitTest`:** the example round-trips through
+  published artifacts and parameter application, and `init --validator` builds
+  for every purpose.
+
+All seven legacy examples keep byte-identical artifacts.

@@ -13,6 +13,16 @@ application; the supplied Julc worktree owns all backend changes.
 - [ADR-003: generic library interoperability](../adr/003-generic-library-interop.md)
   proposes I1–I4: provider schemes, a real generic Java export, a programmatic PIR
   export and verified nominal/container adapters.
+- [ADR-004: named validators](../adr/004-named-validators-and-multi-purpose-handlers.md)
+  is implemented on Julc's revision-2 `ValidatorProgram`, with deployment
+  parameters and datum profiles from ADR-005 E5.
+- [ADR-005](../adr/005-remaining-frontend-and-backend-integration.md) tracks the
+  remaining integration work and its progress.
+- [ADR-007: named validators only](../adr/007-named-validators-only.md) removes
+  `[entrypoint]` spending and minting validators; `[entrypoint]` is a function.
+- [ADR-006: source-level tests](../adr/006-source-level-tests.md) adds `elci test`,
+  the `Expect` and `Scenario` test library, `Debug.trace` and the JVM facade over
+  julc-testkit.
 
 ADR-003 remains proposed integration work. ADR-002's conservative value
 restriction does not promise unrestricted let-polymorphism. General recursion is
@@ -42,7 +52,7 @@ behavior only.
   Parser code is original; no upstream compiler code is copied.
 * Target: Julc's `plutus-v3-pv11-uplc-1.1.0`.
 * JVM baseline: Java 25. Shared API initially experimental and version-pinned.
-* Configuration: `elci.toml`, `[project]`, `[entrypoint]`, `[java-modules]`.
+* Configuration: `elci.toml`, `[project]`, `[validators.<name>]` or an `[entrypoint]` function, `[java-modules]`, `[tests]`.
 * Native image must include bundled on-chain Java sources and ledger resources.
 * Julc LetRec supports finite function-only mutual recursion through a stable
   recursive Bekić decomposition; eager recursive values remain invalid.

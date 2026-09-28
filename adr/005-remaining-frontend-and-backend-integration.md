@@ -1,6 +1,6 @@
 # ADR-005: Remaining frontend work and shared backend integration
 
-Status: **Accepted planning direction; implementation not started by this ADR**.
+Status: **Accepted planning direction; implementation in progress** (see Progress).
 Date: 24 September 2026
 Elci baseline: `e0b4be0`.
 Verified Julc main baseline: `c95ee610fd334fc1650a3d99ae9254fbf2afdad4`.
@@ -187,6 +187,25 @@ library/runtime integration and is not part of these frontend abstraction issues
 Row polymorphism, polymorphic recursion, Float and browser effects retain their
 existing excluded/deferred status. This roadmap does not promise all future
 language features through a frozen backend contract.
+
+## Progress
+
+| Track | State | Evidence |
+| --- | --- | --- |
+| E0 | Done: pinned to Julc `97e168c6` (`0.1.0-gb-97e168c`): the revision-2 stack (Julc PRs #187–#192) plus #195, producer-owned type arguments | [Validation](../docs/VALIDATION.md#julc-revision-2-baseline-evidence-adr-005-e0) |
+| E1 | Done: named validators, handler roles, `--validator`, per-group artifacts and ABI revision 2 | [ADR-004 evidence](004-named-validators-and-multi-purpose-handlers.md#implementation-evidence) |
+| E2 | Done: provider schemes imported as generic functions, fresh instantiation, `DATA_ENCODABLE` checked before materialization (`ELCI3003`), real generic Java templates specialized per use | `GenericImportTest` |
+| E3 | Done: Julc's programmatic `ListsLib` exports through the same import, typing and lowering path, composed with `LibraryProviders.compose`; Elci types described to providers | `GenericImportTest` |
+| E4 | Done: approved constructors/patterns/field access/equality/boundaries for ledger and Java types, `Julc.Data` codecs and optional adapters | `ImportedTypeTest`, [ADR-003](003-generic-library-interop.md#revision-2-integration-25-september-2026) |
+| E6 | Done: revision and role capabilities checked before type checking, request-kind capabilities before each materialization (`ELCI4003`); backend rejections located at the Elci declaration (`ELCI4002`); diagnostics rendered at their own module's file | `BackendCompatibilityTest`, `NamedValidatorCliTest` |
+| E5 | Done: `parameters` and `spend-datum = required/optional/absent` configuration, ABI revision 2, and `elci apply` with off-chain strict parameter checks | [ADR-004 evidence](004-named-validators-and-multi-purpose-handlers.md#implementation-evidence), `ApplyCommandTest` |
+
+Follow-ups:
+
+- The source-level contract test runner deferred above is designed and
+  implemented in [ADR-006](006-source-level-tests.md).
+- [ADR-007](007-named-validators-only.md) drops `[entrypoint]` validators, and with
+  them the legacy byte-stability constraint.
 
 ## Alternatives and open decisions
 

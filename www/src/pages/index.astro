@@ -1,0 +1,707 @@
+---
+import { Code } from 'astro:components';
+import '../styles/landing.css';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const link = (path: string) => `${base}${path}`;
+
+// Every sample below is taken from a project that compiles and passes `elci test`.
+const heroCode = `module Main exposing (spend)
+
+import Julc.Ledger exposing (PubKeyHash, ScriptContext)
+
+
+{-| Accept only transactions signed by the owner.
+-}
+spend : PubKeyHash -> () -> () -> ScriptContext -> Bool
+spend owner _ _ ctx =
+    List.any
+        (\\signer -> signer == owner)
+        ctx.txInfo.signatories`;
+
+const terminal = [
+  { kind: 'cmd', text: 'elci test my-contract' },
+  { kind: 'pass', text: 'PASS MainTest.ownerSigns (cpu 7675163, mem 29990)' },
+  { kind: 'pass', text: 'PASS MainTest.othersAreRejected (cpu 8053596, mem 31922)' },
+  { kind: 'out', text: '2 passed, 0 failed' },
+  { kind: 'cmd', text: 'elci build my-contract' },
+  { kind: 'ok', text: 'validator main (spend): checked; 300 FLAT bytes; plutus-v3-pv11-uplc-1.1.0' },
+];
+
+const reasons = [
+  {
+    icon: 'leaf',
+    title: 'Familiar and functional',
+    text: 'Elm syntax, pure functions, currying and pipelines. If you have written Elm, Haskell or F#, you can read an Elci contract on day one.',
+  },
+  {
+    icon: 'shield',
+    title: 'Types that catch mistakes',
+    text: 'Hindley–Milner inference, exhaustive pattern matching and rejected unreachable branches. Errors quote your code, name what differs and suggest a fix.',
+  },
+  {
+    icon: 'lock',
+    title: 'Strict data boundaries',
+    text: 'Datums, redeemers and parameters are decoded strictly from their types. Malformed data fails before your logic runs.',
+  },
+  {
+    icon: 'layers',
+    title: 'One script, every purpose',
+    text: 'Named validators combine spend, mint, withdraw, certify, vote and propose handlers, with deployment parameters and ABI drift checks.',
+  },
+  {
+    icon: 'beaker',
+    title: 'Testing built in',
+    text: 'Unit tests, transaction scenarios on the deployed script, and property tests that shrink failures, all written in Elci.',
+  },
+  {
+    icon: 'bolt',
+    title: 'Standing on Julc',
+    text: "Julc's PIR verifier, optimizer and UPLC pipeline, its standard library, typed Map, Array and Bytes, and a fast native CLI.",
+  },
+];
+
+const showcase = [
+  {
+    id: 'validator',
+    label: 'Validator',
+    file: 'src/Vesting.elm',
+    lang: 'elm',
+    caption:
+      'A typed datum and redeemer, the validity range and the signatories. The datum and redeemer are strictly decoded from their types before validate runs.',
+    code: `module Vesting exposing (VestingAction(..), VestingDatum, validate)
+
+import Interval
+import Julc.Ledger exposing (PubKeyHash, ScriptContext)
+import Tx
+
+
+type alias VestingDatum =
+    { beneficiary : PubKeyHash
+    , deadline : Int
+    }
+
+
+type VestingAction
+    = Claim
+
+
+validate : VestingDatum -> VestingAction -> ScriptContext -> Bool
+validate datum action ctx =
+    case action of
+        Claim ->
+            Interval.isEntirelyAfter datum.deadline ctx.txInfo.validRange
+                && Tx.signedBy datum.beneficiary ctx`,
+  },
+  {
+    id: 'scenarios',
+    label: 'Scenario tests',
+    file: 'tests/VestingTest.elm',
+    lang: 'elm',
+    caption:
+      'A scenario is a transaction described as data. elci test compiles the validator exactly as elci build does and runs the deployed script in a complete ledger context.',
+    code: `claimFrom : Int -> Scenario
+claimFrom time =
+    Scenario.spend "vesting" (Scenario.outRef "vesting" 0) (Data.encode datum)
+        |> Scenario.redeemer (Data.encode Claim)
+        |> Scenario.validFrom time
+
+
+claimsAfterTheDeadline : Scenario
+claimsAfterTheDeadline =
+    claimFrom 1001
+        |> Scenario.signedBy beneficiary
+
+
+claimsAtTheDeadlineFail : Scenario
+claimsAtTheDeadlineFail =
+    claimFrom 1000
+        |> Scenario.signedBy beneficiary
+        |> Scenario.expectFailure`,
+  },
+  {
+    id: 'properties',
+    label: 'Property tests',
+    file: 'tests/VestingTest.elm',
+    lang: 'elm',
+    caption:
+      'A function returning a Property runs 100 times with generated arguments. A failure is shrunk to a small counterexample and reported with a reproducible seed.',
+    code: `{-| Whenever a signed claim's validity range starts, it succeeds exactly when that is
+after the deadline.
+-}
+claimsSucceedExactlyAfterTheDeadline : Int -> Property
+claimsSucceedExactlyAfterTheDeadline time =
+    let
+        signed =
+            claimFrom time
+                |> Scenario.signedBy beneficiary
+    in
+    if time > datum.deadline then
+        Property.scenario signed
+
+    else
+        Property.scenario (Scenario.expectFailure signed)`,
+  },
+  {
+    id: 'multi',
+    label: 'Multi-purpose',
+    file: 'elci.toml',
+    lang: 'toml',
+    caption:
+      'Configuration, not syntax, decides deployment. One validator can spend and withdraw with shared parameters, and another is a separate minting policy.',
+    code: `[project]
+source-directories = ["src"]
+target = "plutus-v3-pv11-uplc-1.1.0"
+julc-version = "0.1.0-gb-5a3378b"
+
+# One script: the treasury address spends payouts and withdraws its staking rewards.
+[validators.treasury]
+boundary = "julc-strict-v1"
+parameters = ["admin"]
+spend = "Treasury.spend"
+withdraw = "Treasury.withdraw"
+
+# A separate script and policy id.
+[validators.badge]
+boundary = "julc-strict-v1"
+parameters = ["admin"]
+mint = "Badge.mint"`,
+  },
+  {
+    id: 'java',
+    label: 'Java libraries',
+    file: 'src/Example/Offer.elm',
+    lang: 'elm',
+    caption:
+      "Map a Julc on-chain Java library in elci.toml and import it like an Elm module. Elci compiles the library's real Java source into your script.",
+    code: `module Example.Offer exposing (validate)
+
+import Julc.Ledger exposing (ScriptContext)
+import Julc.Math as Math
+
+
+validate : Int -> Int -> ScriptContext -> Bool
+validate minimumAda offeredLovelace _ =
+    Math.floorDiv offeredLovelace 1000000 >= minimumAda`,
+  },
+];
+
+const pipeline = [
+  { title: '.elm source', text: 'Modules, types and handlers' },
+  { title: 'Parse & resolve', text: 'Modules, imports, Java exports' },
+  { title: 'Infer & check', text: 'HM types, exhaustive patterns' },
+  { title: 'Typed PIR', text: 'Specialized, strict lowering' },
+  { title: 'Julc backend', text: 'Verify, link, optimize' },
+  { title: 'Plutus V3', text: 'UPLC script + ABI' },
+];
+
+const path = [
+  { step: '01', title: 'Install', text: 'Build the CLI on Java 25, or compile the native binary.', href: '/start/installation/' },
+  { step: '02', title: 'Your first validator', text: 'Create, test and build a signed spending validator.', href: '/start/first-validator/' },
+  { step: '03', title: 'Learn the language', text: 'Functions, records, custom types, collections and modules.', href: '/learn/basics/' },
+  { step: '04', title: 'Write contracts', text: 'Purposes, the ledger context, datums, redeemers and parameters.', href: '/contracts/validators/' },
+  { step: '05', title: 'Test with confidence', text: 'Unit tests, transaction scenarios and property tests.', href: '/testing/unit-tests/' },
+  { step: '06', title: 'Go further', text: 'Tutorials, Java libraries, costs and how Elci compiles.', href: '/tutorials/vesting/' },
+];
+
+// The docs origin for copyable agent prompts: the configured site, or a visible placeholder.
+const docsOrigin = (Astro.site?.href ?? 'https://<your-elci-docs-host>/').replace(/\/$/, '');
+const agentPrompt = `You are writing Cardano smart contracts in Elci, an Elm-syntax language that compiles to Plutus V3.
+Before writing any code, read ${docsOrigin}/ai/starter-pack.md and follow it strictly.
+After every change, run \`elci check .\` and \`elci test .\` and fix every ELCI error before continuing.`;
+
+const quickstart = `elci init my-contract
+elci test my-contract
+elci build my-contract`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Elci is an Elm-syntax functional language for Cardano smart contracts. Typed, testable validators compiled to Plutus V3 through Julc."
+    />
+    <meta name="theme-color" content="#fafaf9" />
+    <link rel="icon" href={link('/favicon.svg')} type="image/svg+xml" />
+    <meta property="og:title" content="Elci — Cardano smart contracts, written like Elm" />
+    <meta
+      property="og:description"
+      content="Pure, typed, testable validators in Elm syntax, compiled to Plutus V3 through Julc."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content={link('/social.svg')} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <title>Elci — Cardano smart contracts, written like Elm</title>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <div class="backdrop" aria-hidden="true">
+      <div class="aurora aurora-a"></div>
+      <div class="aurora aurora-b"></div>
+      <div class="aurora aurora-c"></div>
+      <div class="grid"></div>
+      <div class="glyphs">
+        <span style="--x: 8%; --d: 0s; --s: 19s">|&gt;</span>
+        <span style="--x: 22%; --d: -6s; --s: 23s">λ</span>
+        <span style="--x: 37%; --d: -11s; --s: 21s">::</span>
+        <span style="--x: 55%; --d: -3s; --s: 25s">-&gt;</span>
+        <span style="--x: 68%; --d: -14s; --s: 20s">case</span>
+        <span style="--x: 81%; --d: -8s; --s: 24s">&lt;|</span>
+        <span style="--x: 92%; --d: -17s; --s: 22s">Just</span>
+      </div>
+    </div>
+
+    <header class="nav" data-nav>
+      <div class="nav-inner">
+        <a class="brand" href={link('/')} aria-label="Elci home">
+          <img src={link('/favicon.svg')} alt="" width="30" height="30" />
+          <span>Elci</span>
+        </a>
+        <nav class="nav-links" aria-label="Primary">
+          <a href={link('/start/introduction/')}>Why Elci</a>
+          <a href={link('/learn/basics/')}>Learn</a>
+          <a href={link('/contracts/validators/')}>Contracts</a>
+          <a href={link('/testing/unit-tests/')}>Testing</a>
+          <a href={link('/reference/cli/')}>Reference</a>
+          <a href={link('/ai/')}>AI</a>
+        </nav>
+        <div class="nav-actions">
+          <a class="icon-link" href="https://github.com/bloxbean/elci-lang" aria-label="Elci on GitHub">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"
+              ><path
+                fill="currentColor"
+                d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"
+              ></path></svg
+            >
+          </a>
+          <a class="btn btn-small btn-primary" href={link('/start/first-validator/')}>Get started</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="pill reveal"><span class="dot"></span> Development preview · Plutus V3</p>
+          <h1 class="reveal">
+            Cardano smart contracts,<br /><span class="gradient-text">written like Elm.</span>
+          </h1>
+          <p class="lede reveal">
+            Elci is a pure, strongly typed functional language with Elm syntax. Your validators compile to compact
+            Plutus V3 scripts through <a href="https://julc.dev">Julc</a>, with strict data boundaries,
+            multi-purpose validators and testing built in.
+          </p>
+          <div class="hero-actions reveal">
+            <a class="btn btn-primary" href={link('/start/first-validator/')}>
+              Build your first validator
+              <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"
+                ><path fill="currentColor" d="M11.3 4.3 17 10l-5.7 5.7-1.4-1.4 3.3-3.3H3V9h10.2L9.9 5.7z"></path></svg
+              >
+            </a>
+            <a class="btn btn-ghost" href={link('/start/introduction/')}>Why Elci?</a>
+          </div>
+          <button class="command reveal" type="button" data-copy="elci init my-contract" aria-label="Copy elci init my-contract">
+            <span class="prompt">$</span> elci init my-contract
+            <span class="copy-label" data-copy-label>Copy</span>
+          </button>
+        </div>
+
+        <div class="hero-visual reveal">
+          <div class="window editor">
+            <div class="window-bar">
+              <span class="lights"><i></i><i></i><i></i></span>
+              <span class="window-title">src/Main.elm</span>
+              <span class="badge">validator main</span>
+            </div>
+            <div class="editor-body" data-typing>
+              <Code code={heroCode} lang="elm" theme="rose-pine-dawn" />
+            </div>
+          </div>
+          <div class="window terminal">
+            <div class="window-bar">
+              <span class="lights"><i></i><i></i><i></i></span>
+              <span class="window-title">terminal</span>
+            </div>
+            <div class="terminal-body" data-terminal>
+              {
+                terminal.map((line) => (
+                  <div class={`term-line term-${line.kind}`}>
+                    {line.kind === 'cmd' && <span class="prompt">$ </span>}
+                    {line.text}
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+          <div class="float-chip chip-a">✓ strict datum decoding</div>
+          <div class="float-chip chip-b">✓ runs the deployed script</div>
+        </div>
+      </section>
+
+      <section class="section" id="why">
+        <div class="section-head reveal">
+          <p class="eyebrow">Why Elci</p>
+          <h2>The clarity of Elm for code that moves value.</h2>
+          <p>
+            On-chain code has no second chance. Elci gives you a small, predictable functional language, and a compiler that
+            refuses programs it cannot represent faithfully rather than erasing types to raw data.
+          </p>
+        </div>
+        <div class="features">
+          {
+            reasons.map((reason, index) => (
+              <article class="feature reveal" style={`--delay: ${index * 70}ms`} data-spotlight>
+                <div class={`feature-icon icon-${reason.icon}`} aria-hidden="true">
+                  {reason.icon === 'leaf' && (
+                    <svg viewBox="0 0 24 24">
+                      <path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14Z" />
+                      <path d="M5 19 13 11" />
+                    </svg>
+                  )}
+                  {reason.icon === 'shield' && (
+                    <svg viewBox="0 0 24 24">
+                      <path d="M12 3 4 6v6c0 5 3.4 8 8 9 4.6-1 8-4 8-9V6l-8-3Z" />
+                      <path d="m8.5 12 2.5 2.5 4.5-5" />
+                    </svg>
+                  )}
+                  {reason.icon === 'lock' && (
+                    <svg viewBox="0 0 24 24">
+                      <rect x="5" y="11" width="14" height="9" rx="2" />
+                      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                    </svg>
+                  )}
+                  {reason.icon === 'layers' && (
+                    <svg viewBox="0 0 24 24">
+                      <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+                      <path d="m3 13 9 5 9-5" />
+                    </svg>
+                  )}
+                  {reason.icon === 'beaker' && (
+                    <svg viewBox="0 0 24 24">
+                      <path d="M9 3h6M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3" />
+                      <path d="M7.5 15h9" />
+                    </svg>
+                  )}
+                  {reason.icon === 'bolt' && (
+                    <svg viewBox="0 0 24 24">
+                      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
+                    </svg>
+                  )}
+                </div>
+                <h3>{reason.title}</h3>
+                <p>{reason.text}</p>
+              </article>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="section showcase-section" id="showcase">
+        <div class="section-head reveal">
+          <p class="eyebrow">See it in action</p>
+          <h2>From validator to property test, in one language.</h2>
+          <p>Real code from the Elci examples. Each sample compiles, and every test passes.</p>
+        </div>
+        <div class="showcase reveal" data-tabs>
+          <div class="tab-list" role="tablist" aria-label="Code samples">
+            {
+              showcase.map((sample, index) => (
+                <button
+                  class="tab"
+                  role="tab"
+                  id={`tab-${sample.id}`}
+                  aria-controls={`panel-${sample.id}`}
+                  aria-selected={index === 0 ? 'true' : 'false'}
+                  tabindex={index === 0 ? 0 : -1}
+                  type="button"
+                >
+                  {sample.label}
+                </button>
+              ))
+            }
+          </div>
+          {
+            showcase.map((sample, index) => (
+              <div
+                class="tab-panel"
+                role="tabpanel"
+                id={`panel-${sample.id}`}
+                aria-labelledby={`tab-${sample.id}`}
+                hidden={index !== 0}
+              >
+                <div class="window code-window">
+                  <div class="window-bar">
+                    <span class="lights">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                    <span class="window-title">{sample.file}</span>
+                  </div>
+                  <Code code={sample.code} lang={sample.lang as 'elm' | 'toml'} theme="rose-pine-dawn" />
+                </div>
+                <p class="caption">{sample.caption}</p>
+              </div>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="section" id="how">
+        <div class="section-head reveal">
+          <p class="eyebrow">How it works</p>
+          <h2>Your language, Julc's backend.</h2>
+          <p>
+            Elci owns the language: parsing, modules, type inference and lowering to typed PIR. Julc owns the rest:
+            verification, linking, optimization and UPLC. The two meet at a checked, revisioned contract.
+          </p>
+        </div>
+        <ol class="pipeline reveal" aria-label="Compilation pipeline">
+          {
+            pipeline.map((stage, index) => (
+              <li style={`--i: ${index}`}>
+                <span class="stage-index">{String(index + 1).padStart(2, '0')}</span>
+                <strong>{stage.title}</strong>
+                <span>{stage.text}</span>
+              </li>
+            ))
+          }
+        </ol>
+        <div class="outputs reveal">
+          <span>build/validators/&lt;name&gt;/</span>
+          <code>validator.plutus.json</code>
+          <code>validator.plutus</code>
+          <code>validator.flat</code>
+          <code>abi.json</code>
+        </div>
+      </section>
+
+      <section class="section" id="path">
+        <div class="section-head reveal">
+          <p class="eyebrow">Learning path</p>
+          <h2>From zero to a tested contract.</h2>
+          <p>The documentation is one guided path. Start at the top, or jump to what you need.</p>
+        </div>
+        <div class="path">
+          {
+            path.map((item, index) => (
+              <a class="path-card reveal" href={link(item.href)} style={`--delay: ${index * 60}ms`} data-spotlight>
+                <span class="path-step">{item.step}</span>
+                <h3>{item.title}</h3>
+                <p>{item.text}</p>
+                <span class="path-arrow" aria-hidden="true">
+                  →
+                </span>
+              </a>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="section ai reveal" id="ai">
+        <div class="ai-copy">
+          <p class="eyebrow">Build with AI</p>
+          <h2>Point your agent at Elci.</h2>
+          <p>
+            AI models have seen little Elci. A starter pack written for agents gives them the language, the APIs and
+            the error fixes in one read, and <code>elci check</code> and <code>elci test</code> let them verify their
+            own code. It works with Claude Code, Codex, Cursor, Copilot and any agent that can run a shell command.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href={link('/ai/')}>Set up your agent</a>
+            <a class="btn btn-ghost" href={link('/llms.txt')}>llms.txt</a>
+          </div>
+        </div>
+        <div class="window prompt-window">
+          <div class="window-bar">
+            <span class="lights"><i></i><i></i><i></i></span>
+            <span class="window-title">prompt for your agent</span>
+            <button class="copy-button" type="button" data-copy={agentPrompt}><span data-copy-label>Copy</span></button>
+          </div>
+          <pre class="prompt-body">{agentPrompt}</pre>
+        </div>
+      </section>
+
+      <section class="section quickstart reveal" id="quickstart">
+        <div class="quickstart-copy">
+          <p class="eyebrow">Quickstart</p>
+          <h2>Three commands to a deployable script.</h2>
+          <p>
+            <code>elci init</code> creates a validator with a deployment parameter and two transaction scenarios.{' '}
+            <code>elci test</code> runs them against the deployed script, and <code>elci build</code> writes
+            Cardano-ready artifacts.
+          </p>
+          <a class="btn btn-primary" href={link('/start/installation/')}>Install Elci</a>
+        </div>
+        <div class="window terminal quick-terminal">
+          <div class="window-bar">
+            <span class="lights"><i></i><i></i><i></i></span>
+            <span class="window-title">terminal</span>
+            <button class="copy-button" type="button" data-copy={quickstart}><span data-copy-label>Copy</span></button>
+          </div>
+          <div class="terminal-body static">
+            <div class="term-line term-cmd"><span class="prompt">$ </span>elci init my-contract</div>
+            <div class="term-line term-out">Created Elci project at my-contract with initial spend handler in validator main.</div>
+            <div class="term-line term-cmd"><span class="prompt">$ </span>elci test my-contract</div>
+            <div class="term-line term-pass">PASS MainTest.ownerSigns (cpu 7675163, mem 29990)</div>
+            <div class="term-line term-pass">PASS MainTest.othersAreRejected (cpu 8053596, mem 31922)</div>
+            <div class="term-line term-out">2 passed, 0 failed</div>
+            <div class="term-line term-cmd"><span class="prompt">$ </span>elci build my-contract</div>
+            <div class="term-line term-ok">validator main (spend): checked; 300 FLAT bytes; plutus-v3-pv11-uplc-1.1.0</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta reveal">
+        <h2>Ready to write your first contract?</h2>
+        <p>Follow the guided path from installation to a tested, deployable validator.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href={link('/start/first-validator/')}>Start the tutorial</a>
+          <a class="btn btn-ghost" href={link('/reference/language/')}>Browse the reference</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <a class="brand" href={link('/')}>
+            <img src={link('/favicon.svg')} alt="" width="26" height="26" />
+            <span>Elci</span>
+          </a>
+          <p>An Elm-syntax functional language for Cardano. A development preview, powered by Julc.</p>
+        </div>
+        <div class="footer-links">
+          <div>
+            <h4>Start</h4>
+            <a href={link('/start/introduction/')}>Why Elci</a>
+            <a href={link('/start/installation/')}>Installation</a>
+            <a href={link('/start/first-validator/')}>First validator</a>
+          </div>
+          <div>
+            <h4>Guides</h4>
+            <a href={link('/learn/basics/')}>Language</a>
+            <a href={link('/contracts/validators/')}>Contracts</a>
+            <a href={link('/testing/unit-tests/')}>Testing</a>
+          </div>
+          <div>
+            <h4>More</h4>
+            <a href={link('/reference/cli/')}>Reference</a>
+            <a href={link('/ai/')}>Build with AI</a>
+            <a href="https://github.com/bloxbean/elci-lang">GitHub</a>
+            <a href="https://julc.dev">Julc</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      // Reveal sections as they scroll into view.
+      const reveals = document.querySelectorAll<HTMLElement>('.reveal');
+      if (reduced || !('IntersectionObserver' in window)) {
+        reveals.forEach((element) => element.classList.add('is-visible'));
+      } else {
+        const observer = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                observer.unobserve(entry.target);
+              }
+            }
+          },
+          { rootMargin: '0px 0px -8% 0px', threshold: 0.08 },
+        );
+        reveals.forEach((element) => observer.observe(element));
+      }
+
+      // Type the hero validator line by line, then play the terminal.
+      const editor = document.querySelector<HTMLElement>('[data-typing]');
+      const terminalLines = document.querySelectorAll<HTMLElement>('[data-terminal] .term-line');
+      const lines = editor ? Array.from(editor.querySelectorAll<HTMLElement>('.line')) : [];
+      if (reduced) {
+        document.documentElement.classList.add('reduced-motion');
+      } else if (editor) {
+        editor.classList.add('typing');
+        let index = 0;
+        const typeNext = () => {
+          if (index < lines.length) {
+            lines[index].classList.add('shown');
+            index += 1;
+            window.setTimeout(typeNext, lines[index - 1].textContent?.trim() ? 140 : 60);
+            return;
+          }
+          editor.classList.add('done');
+          terminalLines.forEach((line, i) => window.setTimeout(() => line.classList.add('shown'), 450 + i * 380));
+        };
+        window.setTimeout(typeNext, 500);
+      }
+
+      // Tabs with keyboard support.
+      document.querySelectorAll<HTMLElement>('[data-tabs]').forEach((container) => {
+        const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+        const select = (tab: HTMLButtonElement) => {
+          for (const other of tabs) {
+            const selected = other === tab;
+            other.setAttribute('aria-selected', String(selected));
+            other.tabIndex = selected ? 0 : -1;
+            const panel = document.getElementById(other.getAttribute('aria-controls') ?? '');
+            if (panel) panel.hidden = !selected;
+          }
+        };
+        tabs.forEach((tab, index) => {
+          tab.addEventListener('click', () => select(tab));
+          tab.addEventListener('keydown', (event) => {
+            const offset = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+            if (!offset) return;
+            const next = tabs[(index + offset + tabs.length) % tabs.length];
+            select(next);
+            next.focus();
+          });
+        });
+      });
+
+      // Copy buttons.
+      document.querySelectorAll<HTMLElement>('[data-copy]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const label = button.querySelector<HTMLElement>('[data-copy-label]');
+          try {
+            await navigator.clipboard.writeText(button.dataset.copy ?? '');
+            if (label) label.textContent = 'Copied';
+          } catch {
+            if (label) label.textContent = 'Press ⌘C';
+          }
+          window.setTimeout(() => {
+            if (label) label.textContent = 'Copy';
+          }, 1600);
+        });
+      });
+
+      // A soft spotlight follows the pointer across cards.
+      document.querySelectorAll<HTMLElement>('[data-spotlight]').forEach((card) => {
+        card.addEventListener('pointermove', (event) => {
+          const rect = card.getBoundingClientRect();
+          card.style.setProperty('--mx', `${event.clientX - rect.left}px`);
+          card.style.setProperty('--my', `${event.clientY - rect.top}px`);
+        });
+      });
+
+      // Condense the navigation bar after scrolling.
+      const nav = document.querySelector<HTMLElement>('[data-nav]');
+      const onScroll = () => nav?.classList.toggle('scrolled', window.scrollY > 12);
+      window.addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    </script>
+  </body>
+</html>

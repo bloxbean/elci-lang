@@ -3,8 +3,6 @@ package org.elci;
 import static org.junit.jupiter.api.Assertions.*;
 
 import org.elci.driver.ElciCompiler;
-import org.julclang.compiler.CompilerOptions;
-import org.julclang.compiler.backend.FrontendProgram;
 import org.julclang.core.PlutusData;
 import org.julclang.ledger.Interval;
 import org.julclang.ledger.PubKeyHash;
@@ -26,16 +24,15 @@ class VestingExampleTest {
     private static final BigInteger DEADLINE = BigInteger.valueOf(1_000);
 
     @Test
-    void beneficiaryCanClaimAtOrAfterDeadline() throws Exception {
+    void beneficiaryCanClaimAfterDeadline() throws Exception {
         var program = compile();
         var beneficiary = beneficiary();
 
         assertInstanceOf(
                 EvalResult.Success.class,
-                evaluate(program, beneficiary, Interval.after(DEADLINE), true));
-        assertInstanceOf(
-                EvalResult.Success.class,
                 evaluate(program, beneficiary, Interval.after(DEADLINE.add(BigInteger.ONE)), true));
+        assertFalse(
+                evaluate(program, beneficiary, Interval.after(DEADLINE), true) instanceof EvalResult.Success);
     }
 
     @Test
@@ -55,19 +52,13 @@ class VestingExampleTest {
                         instanceof EvalResult.Success);
     }
 
-    private ElciCompiler.Result compile() throws Exception {
+    private ElciCompiler.ValidatorBuild compile() throws Exception {
         var source = Files.readString(Path.of("examples/vesting/src/Vesting.elm"));
-        return new ElciCompiler()
-                .compile(
-                        source,
-                        "validate",
-                        FrontendProgram.Purpose.SPEND,
-                        Map.of("Julc.Interval", "org.julclang.stdlib.lib.IntervalLib"),
-                        new CompilerOptions());
+        return Scripts.validator(source, "validate", org.julclang.compiler.schema.ContractSchema.Purpose.SPEND, Map.of());
     }
 
     private EvalResult evaluate(
-            ElciCompiler.Result program,
+            ElciCompiler.ValidatorBuild program,
             PubKeyHash beneficiary,
             Interval validRange,
             boolean signed) {

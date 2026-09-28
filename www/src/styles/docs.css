@@ -1,0 +1,122 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* Dark theme: espresso greys with a clay accent (matches the landing page). */
+:root {
+  --sl-font: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sl-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sl-content-width: 50rem;
+  --sl-color-accent-low: #3d2118;
+  --sl-color-accent: #f0a58a;
+  --sl-color-accent-high: #fbd9cb;
+  --sl-color-white: #f8f1ec;
+  --sl-color-gray-1: #e8dcd4;
+  --sl-color-gray-2: #c9b9ae;
+  --sl-color-gray-3: #9c8a7f;
+  --sl-color-gray-4: #6a5a50;
+  --sl-color-gray-5: #3d2f28;
+  --sl-color-gray-6: #271d18;
+  --sl-color-black: #1e1612;
+  --elci-gradient: linear-gradient(120deg, #f4b39a 0%, #e07a5f 50%, #e0607e 100%);
+}
+
+/* Light theme: neutral paper and near-black ink for reading; rust for text-sized accents. */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #fbe7dc;
+  --sl-color-accent: #b3400f;
+  --sl-color-accent-high: #7a2a08;
+  --sl-color-white: #1a1411;
+  --sl-color-gray-1: #292524;
+  --sl-color-gray-2: #44403c;
+  --sl-color-gray-3: #57534e;
+  --sl-color-gray-4: #a8a29e;
+  --sl-color-gray-5: #e7e5e4;
+  --sl-color-gray-6: #f5f5f4;
+  --sl-color-gray-7: #fafaf9;
+  --sl-color-black: #fafaf9;
+  --elci-gradient: linear-gradient(120deg, #e07a5f 0%, #c2410c 50%, #9f1239 100%);
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.025em;
+}
+
+.sl-markdown-content h2 {
+  padding-top: 0.25rem;
+}
+
+/* The page title carries the brand gradient. */
+.content-panel h1#_top {
+  background: var(--elci-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.sl-markdown-content table {
+  font-size: 0.875rem;
+  display: table;
+  width: 100%;
+}
+
+.sl-markdown-content th {
+  background: var(--sl-color-gray-6);
+}
+
+.sl-markdown-content a {
+  text-underline-offset: 3px;
+}
+
+.sl-markdown-content code:not(pre code) {
+  border-radius: 0.35rem;
+  padding: 0.1em 0.35em;
+}
+
+header.header {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+:root:not([data-theme='light']) header.header {
+  background-color: rgb(30 22 18 / 0.84);
+}
+
+.site-title img {
+  height: 1.9rem;
+  width: auto;
+}
+
+.site-title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Cards and link cards pick up a subtle accent glow. */
+.card,
+.sl-link-card {
+  border-radius: 0.9rem;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.sl-link-card:hover {
+  box-shadow: 0 10px 30px -18px var(--sl-color-accent);
+  transform: translateY(-1px);
+}
+
+starlight-tabs [role='tablist'] {
+  gap: 0.25rem;
+}
+
+/* Show operators as typed (->, ==, >=): readers are learning the syntax. */
+.expressive-code pre,
+.expressive-code code,
+.sl-markdown-content code {
+  font-variant-ligatures: none;
+  font-feature-settings:
+    'liga' 0,
+    'calt' 0;
+}

@@ -18,7 +18,12 @@ translate source to Java and it does not maintain a second UPLC pipeline.
 `syntax` produces tokens and source AST nodes while retaining line, column and
 offset information. `modules` establishes source ownership, resolves imports and
 exposing lists, and qualifies source and Java-library names. Import cycles,
-ambiguous names and private references fail here.
+ambiguous names and private references fail here. It also loads the core library,
+Elci source bundled under `src/main/resources/elci/core/`: `Basics`, `List`,
+`Maybe`, `Result`, `String`, `Tuple`, `Map`, `Dict`, `Array`, `Value`, `Interval`
+and `Tx`. Their names are reserved for project modules and `[java-modules]` keys.
+The core modules are compiled with the program like any module, so a function a
+program does not reach is never lowered.
 
 `types` performs rank-1 inference, checks mandatory top-level signatures,
 identifies recursive groups, checks supported equality/append constraints and
@@ -31,11 +36,31 @@ representation planner encodes lists, tuples, records and unions explicitly.
 
 ## Shared Julc boundary
 
-Elci supplies a closed, specialized `FrontendProgram` containing its PIR term,
-PIR type, compiler target, entrypoint purpose, boundary policy and named types.
-Julc checks target and boundary compatibility, lexical closure and supported
-entrypoint shape. It applies the existing spending or minting wrapper once and
-runs the shared PIR-to-UPLC pass sequence.
+Elci uses two revisions of Julc's neutral backend contract.
+
+**Revision 1 (functions).** An `[entrypoint]` function, and each `elci test`
+program, is a closed, specialized `FrontendProgram` with purpose `FUNCTION`: its
+PIR term, PIR type, target and named types. Library exports are inlined at each
+use. Julc checks the target and lexical closure and lowers it without a wrapper.
+
+**Revision 2 (validators).** Each `[validators.<name>]` group becomes one
+Julc `ValidatorProgram` (ADR-059):
+
+- **imports:** one trusted library import group, materialized once per group, so
+  shared private dependencies are linked once;
+- **definitions:** the specialized top-level definitions reachable from any
+  handler, with declared PIR types;
+- **handlers:** purpose-indexed references to those definitions;
+- **parameters:** deployment parameters in application order;
+- **namedTypes:** Elci's records and unions.
+
+The descriptor declares the capabilities it needs; Elci checks them against
+`CompilerBackend.capabilities` before compiling. Julc then runs its structural
+PIR verifier over Elci's definitions and handlers. It dispatches on the
+ScriptInfo tag through the shared multi-validator wrapper and decodes only the
+selected handler's datum and redeemer. Elci never builds its own dispatcher. The
+one adapter Elci adds converts the optional-datum profile's Julc `Optional` into
+Elci's differently tagged `Maybe`, as ordinary verified PIR.
 
 Java on-chain libraries are exposed through a provider. The provider parses and
 compiles their actual bundled Java source and returns closed PIR with transitive
@@ -44,8 +69,10 @@ dependencies. Elci never invokes those exports as ordinary JVM functions.
 ## Correctness boundaries
 
 The frontend owns source typing, symbol hygiene, specialization and runtime
-representation choices. Julc's experimental backend API checks closure and
-entrypoint boundaries but is not a complete verifier for arbitrary PIR.
+representation choices. Revision-1 function programs are checked for closure
+only. Revision-2 programs also pass Julc's structural verifier, which
+checks binding, typing and data-constructor agreement. It is not a proof of
+semantic correctness.
 
 Serialized data has deterministic representations: records use tag zero and
 lexicographically sorted fields; union tags follow constructor declaration order;
@@ -61,6 +88,7 @@ limits, separate from Cardano's execution budget.
 
 The supported surface is recorded in the language guide. In particular, ledger
 records are context views rather than generally serializable user data, complex
-ledger sums and `Value` operations need dedicated verified adapters, and the Java
-provider currently exposes concrete signatures. These restrictions are intended
+ledger sums need dedicated verified adapters (`Value` operations are the core
+`Value` module, over the CIP-153 builtins), and the Java provider currently
+exposes concrete signatures. These restrictions are intended
 to fail closed rather than erase unsupported types to `Data`.

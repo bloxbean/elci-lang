@@ -15,23 +15,28 @@ consume Elm packages, and is not a production-ready contract toolchain. See the
 module Example.Threshold exposing (validate)
 
 import Julc.Ledger exposing (ScriptContext)
-import Julc.Math as Math
 
 
 validate : Int -> Int -> ScriptContext -> Bool
 validate minimum offered _ =
-    offered >= Math.max minimum 0
+    offered >= max minimum 0
 ```
 
-`Math.max` is compiled from the actual bundled Julc Java on-chain library source.
-The source's three logical arguments become **one Plutus V3 ledger context
-argument**, with strict datum/redeemer decoding and Bool-to-success/failure wrapping.
+Configured as `[validators.threshold]` with `spend = "Example.Threshold.validate"`,
+this becomes one script. `max` comes from Elci's prelude: as in Elm, every module
+imports `Basics`, `List`, `Maybe`, `Result`, `String`, `Tuple` and `Debug`, and
+these core modules are Elci source compiled with your code. Julc's on-chain Java
+libraries fill the gaps: mapped in `elci.toml`, they are compiled from their
+actual bundled Java source. The source's three logical arguments become **one
+Plutus V3 ledger context argument**, with purpose dispatch, strict datum/redeemer
+decoding and Bool-to-success/failure wrapping.
 
 ```sh
 # After publishing the pinned local Julc dependencies; see Getting Started.
 ./gradlew test installDist
-build/install/elci/bin/elci init my-contract --purpose spend
+build/install/elci/bin/elci init my-contract
 build/install/elci/bin/elci build examples/threshold
+build/install/elci/bin/elci test examples/treasury
 
 # Set GRAALVM_HOME to a GraalVM installation containing native-image.
 ./gradlew nativeCompile
@@ -39,13 +44,19 @@ build/native/elci build examples/threshold
 build/native/elci eval examples/functional
 ```
 
-Validator builds include `build/validator.plutus.json` in Julc’s format for Cardano
-Client Lib, plus `abi.json` for Elci schema and ABI drift checks. CIP-57 blueprint
-generation is not implemented yet.
+Validators are configured as `[validators.<name>]` tables. Each one is a single
+script combining any of spend, mint, withdraw, certify, vote and propose
+handlers, with deployment parameters and datum profiles. A build writes
+`build/validators/<name>/validator.plutus.json` in Julc’s format for Cardano
+Client Lib, plus `abi.json` for Elci schema and ABI drift checks. CIP-57
+blueprint generation is not implemented yet.
 
+- [Documentation site](www/README.md): the developer guide, tutorials and reference (Astro Starlight;
+  `cd www && npm install && npm run dev`).
 - [Release workflow](docs/RELEASING.md): versioning, native binaries and GitHub Releases.
 - [Getting started](docs/GETTING_STARTED.md): build, first project, JVM/native CLI.
-- [Standard library guide](docs/STDLIB.md): verified Java exports, limitations and writing Elci libraries.
+- [Testing](docs/TESTING.md): `elci test`, expectations, transaction scenarios, property tests and JUnit.
+- [Standard library guide](docs/STDLIB.md): the core modules, verified Java exports, limitations and writing Elci libraries.
 - [Language guide](docs/LANGUAGE.md): syntax, semantics, types, libraries and limits.
 - [Compiler architecture](docs/ARCHITECTURE.md): frontend/backend API and invariants.
 - [Testing and review](docs/VALIDATION.md): reproducible checks and evidence.
@@ -58,4 +69,6 @@ demonstrates nominal ledger hashes and transaction fields, `functional`
 demonstrates custom types and list traversal, and `core-completion` demonstrates
 nested patterns, generic aliases, destructuring and structural equality.
 `vesting` demonstrates a typed datum and redeemer, transaction validity ranges,
-and beneficiary authorization. They are not complete application contracts.
+and beneficiary authorization. `treasury` demonstrates named validators: one
+parameterized script with spending and withdrawal handlers plus a separate
+minting policy. They are not complete application contracts.

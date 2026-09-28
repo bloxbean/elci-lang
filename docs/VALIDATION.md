@@ -11,13 +11,23 @@ guide, then run:
 ```sh
 ./gradlew clean test
 npm exec --yes --package elm-format@0.8.8 -- \
-  elm-format examples src/main/resources/elci/core \
+  elm-format examples src/main/resources/elci/core src/main/resources/elci/test \
   src/test/resources/syntax/valid src/test/resources/syntax/unsupported --validate
 GRAALVM_HOME=/path/to/graalvm ./gradlew nativeCompile
 build/native/elci check examples/threshold
 build/native/elci build examples/threshold
 build/native/elci eval examples/functional
 build/native/elci eval examples/core-completion
+build/native/elci test examples/treasury --seed 42
+build/native/elci test examples/vesting --fuzz 300
+```
+
+With a Yaci DevKit devnet at protocol version 11 running, the end-to-end suite
+deploys the example contracts and submits their success paths and attacks to the
+node:
+
+```sh
+./gradlew :e2e-test:e2eTest
 ```
 
 The Java test suite covers parsing and diagnostics, inference, generic
@@ -66,6 +76,118 @@ The `3f1b675` functional-core implementation was validated on 19 September 2026:
   skips), including three- and four-function heterogeneous recursive groups.
 - All 30 unchanged Java compiler configurations retained identical FLAT hashes,
   parameter metadata, and source-map entry counts.
+
+## Julc revision-2 baseline evidence (ADR-005 E0)
+
+On 25 September 2026 Elci moved from Julc `d6e716e` (`0.1.0-elci-dev`) to Julc
+`17da92bb`, the head of the stacked generic-backend revision-2 branch
+(`0.1.0-gb-17da92b`). Evidence:
+
+- All 86 Elci tests passed before and after the change.
+- The stdlib inventory (`docs/stdlib-compatibility.tsv`) regenerated identically.
+- All seven examples built with identical script bytes except `core-completion`.
+  Its ABI manifests differ only in the embedded `julcVersion`.
+- `core-completion` keeps its 827 FLAT bytes, its result (`15`) and its budget
+  (CPU 11,311,095, memory 41,004), but its bytes change. Julc main `c95ee610`
+  produces the same new bytes. The change therefore comes from the merged
+  recursion-group fix (Julc #159), not from revision 2, which keeps
+  revision-1 output byte-identical.
+
+The pin then moved to Julc `97e168c6` (`0.1.0-gb-97e168c`), which adds PR #195
+(producer-owned generic type arguments) on top of #192. Every example keeps
+identical script bytes; ABI manifests differ only in `julcVersion`.
+
+It then moved to Julc `f8e9cb87` (`0.1.0-gb-f8e9cb8`, PR #196), which adds the
+following:
+
+- typed map templates (`TypedMapLib`);
+- identical library overloads, which make `ByteStringLib` importable;
+- an order-preserving `JulcMap.keys()`/`values()`.
+
+It then moved to `f97f8042` (`0.1.0-gb-f97f804`, PR #197), which adds julc-testkit's
+schema-driven generators and property checks. PR #197 changes only the testkit.
+Rebuilding every example with the current tree and with the previous commit
+(`ba53190` on `f8e9cb8`) gives identical script bytes, results and budgets.
+ABI manifests differ only in `julcVersion`.
+
+It then moved to `5a3378ba` (`0.1.0-gb-5a3378b`, PR #198), which adds `JulcArray`
+to library signatures and the `TypedArrayLib` templates. Rebuilding every example
+against the previous branch head (`854a995` on `f97f804`) again gives identical
+script bytes, results and budgets. ABI manifests differ only in `julcVersion`.
+
+## Arrays evidence
+
+- **`ArrayTest`:**
+  - `get` with in-range, out-of-range and negative indexes;
+  - `length`, `isEmpty`, `toList`, `map`, `filter`, `foldl`, `foldr`, `slice`
+    with a negative end, `initialize`, `repeat`, `indexedMap` and
+    `toIndexedList`;
+  - record elements decoded at their type;
+  - a named validator indexing its datum list by the redeemer's tier;
+  - rejection of arrays in record fields, lists, `Julc.Data.encode` and `==`.
+- **`TestCommandTest`:** a property over an `Array` parameter is an ELCI2009 error.
+- **Stdlib inventory:** 151 compiling, 41 unsupported and 12 generic (the 3
+  `TypedArrayLib` rows are new).
+- **Native smoke test:** the native binary evaluates an array program
+  (`get`, `length`, `slice`, `foldl`) with the JVM's result.
+
+## Maps and bytes evidence
+
+- **`MapTest`:**
+  - dictionary operations;
+  - keys, values and `toList` in insertion order without duplicates;
+  - record values and `PubKeyHash` keys inside a named validator;
+  - the rejected remap of the core `Julc.TypedMap` alias;
+  - `Julc.ByteString` imports.
+- **`IntrinsicsTest.byteStringCompleteness`:** every added `Bytes` function
+  evaluates to its builtin's result.
+- **`ImportedTypeTest.libraryValuesAreEvaluatedAtScriptStartLikeTopLevelValues`:**
+  records the linking semantics of library values in validators.
+- **Stdlib inventory:** 151 compiling, 41 unsupported, 9 generic (`TypedMapLib`)
+  and 0 blocked.
+
+## Source-level testing evidence (ADR-006)
+
+`elci test` is exercised by `TestCommandTest`, `IntrinsicsTest` and `InitTest`:
+
+- The treasury example has 9 unit and scenario tests: scenarios for both validators
+  across all their roles, and `Bool` and `Expectation` unit tests. The vesting
+  example's 5 scenarios check validity ranges and signatures. Property tests, added
+  later, are listed below.
+- Failures show `Expect.equal` values, a rejected transaction, a budget ceiling
+  broken through julc-testkit's `BudgetAssertions`, `Debug.trace` output and
+  runtime errors, each without aborting other tests.
+- Custom test directories work. Module shadowing, unknown validators and empty
+  runs are diagnosed.
+- `ElciTestkit` scripts pass julc-testkit's `ValidatorTest` checks, and their
+  applied hashes equal those of the published artifacts.
+- `elci init --validator` projects pass their generated scenarios for all six
+  purposes.
+
+## Property test evidence (ADR-006 amendment)
+
+- **`TestCommandTest.propertiesShrinkToCounterexamplesAndReproduceFromTheSeed`:**
+  - false properties shrink to their minimal counterexamples, shown in Elci syntax:
+    `amountsStaySmall 100`, `debtsStaySmall (-5)` and
+    `payoutsStaySmall { amount = 50, beneficiary = #(empty) } (Just 0)`;
+  - an `Expectation` property reports its `Expect.atMost` values;
+  - a scenario property reports the validator's rejection;
+  - `--seed` reproduces identical output and `--fuzz` sets the run count;
+  - invalid option values are rejected.
+- **`TestCommandTest.propertiesNeedGeneratableConcreteParameters`:** function and
+  polymorphic parameters are ELCI2009 errors.
+- **`TestCommandTest.runsScenariosExpectationsAndBooleansWithBudgets`:** the helper
+  functions `claim` and `badge`, which return `Scenario`, are not run as properties.
+- **`JvmPropertyTest`:** jqwik with Julc's `SchemaArbitraries` over the treasury ABI,
+  checking that unsigned spends are always rejected and that the beneficiary
+  releases exactly the positive payouts.
+- **`IntrinsicsTest.modByTakesTheDivisorsSignAndRemainderByTheDividends`:** covers
+  `modBy`.
+- **Examples:** the treasury example has 12 tests, including 3 properties. The
+  vesting example has 6, including a validity-range property.
+- **Native smoke test:** the native binary runs both example suites and a failing
+  property with the same counterexample as the JVM. The treasury suite, with 300
+  scenario runs, completes in under a second.
 
 ## Review gates
 

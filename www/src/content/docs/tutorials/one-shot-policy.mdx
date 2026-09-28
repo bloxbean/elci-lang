@@ -1,0 +1,484 @@
+---
+title: A one-shot minting policy
+description: Build a minting policy that can mint only once, by tying it to a seed output that the minting transaction must spend, and prove the accept and reject cases with scenarios and properties.
+sidebar:
+  order: 3
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+In this tutorial you build a **one-shot** minting policy: a policy under which one token can be minted once, and never again. It is the standard way to make a true NFT. You take a ledger type as a deployment parameter, check the transaction's inputs, inspect what it mints, and prove every rule with scenarios and properties.
+
+You should have finished the [vesting tutorial](/tutorials/vesting/). [Reading the transaction](/contracts/reading-the-transaction/) explains the ledger types used here.
+
+## How a one-shot policy works
+
+A minting policy's id is its script hash, and a parameter is part of the script. So if the policy takes an output reference, a `TxOutRef`, as a parameter, every choice of that **seed** output gives a different policy id.
+
+Now require that minting spends the seed. An output can be spent only once, so only one transaction can ever satisfy the policy. After it, no transaction can mint under this policy id again.
+
+The policy you'll build has two parameters, `seed : TxOutRef` and `tokenName : TokenName`, and these rules:
+
+1. Minting succeeds only in a transaction that spends the seed output.
+2. That transaction must mint exactly one `tokenName` token under this policy, and nothing else.
+3. Burning that one token is always allowed.
+
+## Create the project
+
+```sh
+elci init one-shot --validator nft --purpose mint
+cd one-shot
+rm src/Main.elm tests/MainTest.elm
+```
+
+```text
+Created Elci project at .../one-shot with initial mint handler in validator nft.
+Run: elci check .../one-shot
+```
+
+`--purpose mint` starts from a minting-policy template, which you've just removed; `--validator nft` names the validator.
+
+## Require the seed
+
+<Steps>
+
+1. **Configure the policy** with a single parameter for now:
+
+   ```toml title="elci.toml"
+   [project]
+   source-directories = ["src"]
+   target = "plutus-v3-pv11-uplc-1.1.0"
+   julc-version = "0.1.0-gb-5a3378b"
+
+   [validators.nft]
+   boundary = "julc-strict-v1"
+   parameters = ["seed"]
+   mint = "OneShot.mint"
+   ```
+
+2. **Write the check.** Create `src/OneShot.elm`:
+
+   ```elm title="src/OneShot.elm"
+   module OneShot exposing (mint)
+
+   import Julc.Ledger exposing (ScriptContext, TxOutRef)
+
+
+   {-| Minting is allowed only in the transaction that spends the seed output.
+   -}
+   mint : TxOutRef -> () -> ScriptContext -> Bool
+   mint seed _ ctx =
+       List.any (\input -> input.outRef == seed) ctx.txInfo.inputs
+   ```
+
+   A mint handler has the shape parameters, redeemer, context. `TxOutRef` is a ledger type that can cross the Data boundary, so it can be a parameter; `==` compares two references. Each entry of `ctx.txInfo.inputs` is a `TxInInfo`, whose `outRef` says which output it spends. The core `Tx` module has this check as `Tx.spends seed ctx`; this tutorial writes it out to show what it does.
+
+   ```sh
+   elci check .
+   ```
+
+   ```text
+   validator nft (mint): checked; 208 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+   ```
+
+3. **Test both sides.** A minting scenario doesn't spend anything by default, so add the seed as an input with `Scenario.input`. An input needs an output to spend: here, 5 ADA at a wallet address built from a test key. Create `tests/OneShotTest.elm`:
+
+   ```elm title="tests/OneShotTest.elm"
+   module OneShotTest exposing (mintingWithTheSeedSucceeds, mintingWithoutTheSeedFails)
+
+   import Bytes
+   import Julc.Data as Data
+   import Julc.Ledger as Ledger exposing (Address, TxOutRef)
+   import Scenario exposing (Scenario)
+
+
+   seed : TxOutRef
+   seed =
+       Scenario.outRef "seed" 0
+
+
+   wallet : Address
+   wallet =
+       Ledger.Address (Ledger.PubKeyCredential (Scenario.key "minter")) (Data.toOptional Nothing)
+
+
+   mintOne : Scenario
+   mintOne =
+       Scenario.mint "nft"
+           |> Scenario.parameters [ Data.encode seed ]
+           |> Scenario.minting (Bytes.fromString "TICKET") 1
+
+
+   mintingWithTheSeedSucceeds : Scenario
+   mintingWithTheSeedSucceeds =
+       mintOne
+           |> Scenario.input seed (Scenario.toAddress wallet 5000000)
+
+
+   mintingWithoutTheSeedFails : Scenario
+   mintingWithoutTheSeedFails =
+       mintOne
+           |> Scenario.input (Scenario.outRef "other" 0) (Scenario.toAddress wallet 5000000)
+           |> Scenario.expectFailure
+   ```
+
+   - `Scenario.outRef "seed" 0` derives a deterministic output reference from a name and an index.
+   - `Ledger.Address` builds an address from a payment credential and an optional staking credential. `Data.toOptional Nothing` gives the empty `JulcOptional` the ledger type expects.
+   - `mintOne` is a helper: it isn't exposed, so it doesn't run as a test.
+
+   ```sh
+   elci test .
+   ```
+
+   ```text
+   PASS OneShotTest.mintingWithTheSeedSucceeds (cpu 6395919, mem 20708)
+   PASS OneShotTest.mintingWithoutTheSeedFails (cpu 6774352, mem 22640)
+   2 passed, 0 failed
+   ```
+
+</Steps>
+
+The core idea works. But the seed transaction may still mint as many tokens as it likes, under any names. An NFT needs more.
+
+## Mint exactly one token
+
+The policy must look at what the transaction mints under its own policy id, and accept exactly one token with the expected name.
+
+The mint field is a multi-asset `Value`, which the core [`Value`](/reference/core-modules/#value) module reads. `Value.tokens policy value` gives the tokens of one policy with their quantities, as a `Dict TokenName Int`. Dictionaries have `==`, so a single comparison can check everything the policy mints.
+
+<Steps>
+
+1. **Add the token name parameter.**
+
+   ```toml title="elci.toml" ins={8}
+   [project]
+   source-directories = ["src"]
+   target = "plutus-v3-pv11-uplc-1.1.0"
+   julc-version = "0.1.0-gb-5a3378b"
+
+   [validators.nft]
+   boundary = "julc-strict-v1"
+   parameters = ["seed", "tokenName"]
+   mint = "OneShot.mint"
+   ```
+
+2. **Check what is minted.** Replace `src/OneShot.elm`:
+
+   ```elm title="src/OneShot.elm"
+   module OneShot exposing (mint)
+
+   import Dict exposing (Dict)
+   import Julc.Ledger exposing (PolicyId, ScriptContext, ScriptInfo(..), TokenName, TxOutRef)
+   import Value
+
+
+   {-| Mint exactly one `tokenName` token, in the transaction that spends the seed output.
+   -}
+   mint : TxOutRef -> TokenName -> () -> ScriptContext -> Bool
+   mint seed tokenName _ ctx =
+       case ctx.scriptInfo of
+           MintingScript policy ->
+               spendsSeed seed ctx && minted policy ctx == Dict.singleton tokenName 1
+
+           _ ->
+               False
+
+
+   spendsSeed : TxOutRef -> ScriptContext -> Bool
+   spendsSeed seed ctx =
+       List.any (\input -> input.outRef == seed) ctx.txInfo.inputs
+
+
+   {-| The token names and quantities this transaction mints under `policy`.
+   -}
+   minted : PolicyId -> ScriptContext -> Dict TokenName Int
+   minted policy ctx =
+       Value.tokens policy ctx.txInfo.mint
+   ```
+
+   - `ctx.scriptInfo` is `MintingScript policy` when the script runs as a minting policy, and `policy` is the script's own policy id. Other purposes can't reach this handler, but `case` must be exhaustive.
+   - `minted` keeps only this policy's tokens. A value never holds a zero quantity, so a token the transaction doesn't mint is simply absent.
+   - Comparing the whole dictionary with `Dict.singleton tokenName 1` rejects a second name, a quantity other than one, and a transaction that mints nothing under this policy, all in one test.
+   - `TokenName` is the ledger's type for token names. Its Data is plain bytes, so the parameter is applied as bytes.
+
+   ```sh
+   elci check .
+   ```
+
+   ```text
+   validator nft (mint): checked; 409 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+   ```
+
+   The script grew from 208 to 409 bytes: it now reads the mint value and compares dictionaries.
+
+3. **Test every way to get it wrong.** Replace `tests/OneShotTest.elm`. `mintSpending` builds a transaction that spends a given output; each test adds what it mints:
+
+   ```elm title="tests/OneShotTest.elm"
+   module OneShotTest exposing (..)
+
+   import Bytes
+   import Julc.Data as Data
+   import Julc.Ledger as Ledger exposing (Address, TxOutRef)
+   import Property exposing (Property)
+   import Scenario exposing (Scenario)
+
+
+   seed : TxOutRef
+   seed =
+       Scenario.outRef "seed" 0
+
+
+   ticket : Bytes
+   ticket =
+       Bytes.fromString "TICKET"
+
+
+   wallet : Address
+   wallet =
+       Ledger.Address (Ledger.PubKeyCredential (Scenario.key "minter")) (Data.toOptional Nothing)
+
+
+   {-| A transaction that spends `spent` and mints under the policy.
+   -}
+   mintSpending : TxOutRef -> Scenario
+   mintSpending spent =
+       Scenario.mint "nft"
+           |> Scenario.parameters [ Data.encode seed, Data.encode ticket ]
+           |> Scenario.input spent (Scenario.toAddress wallet 5000000)
+
+
+   mintingWithTheSeedSucceeds : Scenario
+   mintingWithTheSeedSucceeds =
+       mintSpending seed
+           |> Scenario.minting ticket 1
+
+
+   mintingWithoutTheSeedFails : Scenario
+   mintingWithoutTheSeedFails =
+       mintSpending (Scenario.outRef "other" 0)
+           |> Scenario.minting ticket 1
+           |> Scenario.expectFailure
+
+
+   mintingTwoFails : Scenario
+   mintingTwoFails =
+       mintSpending seed
+           |> Scenario.minting ticket 2
+           |> Scenario.expectFailure
+
+
+   mintingAnotherNameFails : Scenario
+   mintingAnotherNameFails =
+       mintSpending seed
+           |> Scenario.minting (Bytes.fromString "OTHER") 1
+           |> Scenario.expectFailure
+
+
+   mintingExtraTokensFails : Scenario
+   mintingExtraTokensFails =
+       mintSpending seed
+           |> Scenario.minting ticket 1
+           |> Scenario.minting (Bytes.fromString "BONUS") 1
+           |> Scenario.expectFailure
+
+
+   {-| Whatever output a transaction spends, it can mint only when that output is the seed.
+   -}
+   onlyTheSeedUnlocksMinting : TxOutRef -> Property
+   onlyTheSeedUnlocksMinting spent =
+       let
+           transaction =
+               mintSpending spent
+                   |> Scenario.minting ticket 1
+       in
+       if spent == seed then
+           Property.scenario transaction
+
+       else
+           Property.scenario (Scenario.expectFailure transaction)
+
+
+   {-| Spending the seed mints exactly one ticket, never more, fewer or a burn.
+   -}
+   exactlyOneTicket : Int -> Property
+   exactlyOneTicket quantity =
+       let
+           transaction =
+               mintSpending seed
+                   |> Scenario.minting ticket quantity
+       in
+       if quantity == 1 then
+           Property.scenario transaction
+
+       else
+           Property.scenario (Scenario.expectFailure transaction)
+   ```
+
+   The two properties generalize the scenarios:
+
+   - `onlyTheSeedUnlocksMinting` generates output references. Random references essentially never equal the seed, so it checks that every other output is rejected; `mintingWithTheSeedSucceeds` covers the seed itself.
+   - `exactlyOneTicket` generates quantities, including zero and negative ones. Only `1` may succeed.
+
+   ```sh
+   elci test . --seed 42
+   ```
+
+   ```text
+   PASS OneShotTest.mintingWithTheSeedSucceeds (cpu 13722157, mem 43763)
+   PASS OneShotTest.mintingWithoutTheSeedFails (cpu 9127629, mem 31957)
+   PASS OneShotTest.mintingTwoFails (cpu 13706157, mem 43663)
+   PASS OneShotTest.mintingAnotherNameFails (cpu 13706157, mem 43663)
+   PASS OneShotTest.mintingExtraTokensFails (cpu 13706157, mem 43663)
+   PASS OneShotTest.onlyTheSeedUnlocksMinting (100 runs, max cpu 9127629, mem 31957)
+   PASS OneShotTest.exactlyOneTicket (100 runs, max cpu 13722157, mem 43763)
+   7 passed, 0 failed (seed 42)
+   ```
+
+</Steps>
+
+The budgets tell a story. Without the seed, `&&` stops after `spendsSeed`, at about 9M CPU units. With it, reading the mint value and comparing the dictionaries costs about 5M more. That is well within a transaction's limits, and it only runs once.
+
+## Allow burning
+
+As written, the token can never be burned: a burn is a negative quantity, and it can't spend the long-gone seed. Give the redeemer a meaning: `Mint` or `Burn`.
+
+<Steps>
+
+1. **Add the action type.** Replace `src/OneShot.elm`:
+
+   ```elm title="src/OneShot.elm"
+   module OneShot exposing (Action(..), mint)
+
+   import Dict exposing (Dict)
+   import Julc.Ledger exposing (PolicyId, ScriptContext, ScriptInfo(..), TokenName, TxOutRef)
+   import Value
+
+
+   type Action
+       = Mint
+       | Burn
+
+
+   {-| Mint exactly one `tokenName` token, in the transaction that spends the seed output.
+   Burning that token is always allowed.
+   -}
+   mint : TxOutRef -> TokenName -> Action -> ScriptContext -> Bool
+   mint seed tokenName action ctx =
+       case ctx.scriptInfo of
+           MintingScript policy ->
+               case action of
+                   Mint ->
+                       spendsSeed seed ctx && minted policy ctx == Dict.singleton tokenName 1
+
+                   Burn ->
+                       minted policy ctx == Dict.singleton tokenName -1
+
+           _ ->
+               False
+
+
+   spendsSeed : TxOutRef -> ScriptContext -> Bool
+   spendsSeed seed ctx =
+       List.any (\input -> input.outRef == seed) ctx.txInfo.inputs
+
+
+   {-| The token names and quantities this transaction mints under `policy`.
+   -}
+   minted : PolicyId -> ScriptContext -> Dict TokenName Int
+   minted policy ctx =
+       Value.tokens policy ctx.txInfo.mint
+   ```
+
+   `Burn` doesn't need the seed. It accepts only a burn of exactly one `tokenName`, which is all there can be.
+
+2. **Update the tests.** Import the action, send `Mint` as the redeemer in `mintSpending`, and add a burn scenario at the end:
+
+   ```elm title="tests/OneShotTest.elm" ins={6}
+   module OneShotTest exposing (..)
+
+   import Bytes
+   import Julc.Data as Data
+   import Julc.Ledger as Ledger exposing (Address, TxOutRef)
+   import OneShot exposing (Action(..))
+   import Property exposing (Property)
+   import Scenario exposing (Scenario)
+   ```
+
+   ```elm title="tests/OneShotTest.elm" ins={6}
+   {-| A transaction that spends `spent` and mints under the policy.
+   -}
+   mintSpending : TxOutRef -> Scenario
+   mintSpending spent =
+       Scenario.mint "nft"
+           |> Scenario.redeemer (Data.encode Mint)
+           |> Scenario.parameters [ Data.encode seed, Data.encode ticket ]
+           |> Scenario.input spent (Scenario.toAddress wallet 5000000)
+   ```
+
+   ```elm title="tests/OneShotTest.elm (at the end)"
+   burningIsAlwaysAllowed : Scenario
+   burningIsAlwaysAllowed =
+       Scenario.mint "nft"
+           |> Scenario.parameters [ Data.encode seed, Data.encode ticket ]
+           |> Scenario.redeemer (Data.encode Burn)
+           |> Scenario.minting ticket -1
+   ```
+
+   As in Elm, `-1` directly after a space is a negative argument, so `Scenario.minting ticket -1` burns one token.
+
+   ```sh
+   elci test . --seed 42
+   ```
+
+   ```text
+   PASS OneShotTest.mintingWithTheSeedSucceeds (cpu 14212973, mem 45528)
+   PASS OneShotTest.mintingWithoutTheSeedFails (cpu 9618445, mem 33722)
+   PASS OneShotTest.mintingTwoFails (cpu 14196973, mem 45428)
+   PASS OneShotTest.mintingAnotherNameFails (cpu 14196973, mem 45428)
+   PASS OneShotTest.mintingExtraTokensFails (cpu 14196973, mem 45428)
+   PASS OneShotTest.onlyTheSeedUnlocksMinting (100 runs, max cpu 9618445, mem 33722)
+   PASS OneShotTest.exactlyOneTicket (100 runs, max cpu 14212973, mem 45528)
+   PASS OneShotTest.burningIsAlwaysAllowed (cpu 11424675, mem 39941)
+   8 passed, 0 failed (seed 42)
+   ```
+
+   `exactlyOneTicket` now also proves that the `Mint` action can't be used to burn: a quantity of `-1` with `Mint` is still rejected.
+
+</Steps>
+
+## Build and apply
+
+```sh
+elci build .
+```
+
+```text
+validator nft (mint): checked; 477 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+```
+
+To deploy, pick the seed: an unspent output in the minter's wallet, identified by its transaction id and output index. Apply it with the token name. A `TxOutRef` is constructor 0 with the transaction id's bytes and the index; the token name is the hex of `TICKET`:
+
+```sh
+elci apply . --validator nft \
+  --param 'seed={"constructor": 0, "fields": [{"bytes": "a8a61c7bc19b634cd1ad661a305682b387363841f79194bee1df3b12d7054f8e"}, {"int": 1}]}' \
+  --param 'tokenName={"bytes": "5449434b4554"}'
+```
+
+```text
+validator nft: applied 2 parameters; hash 4481b6b376b6479a565cde7c29f6ab8e12019a6091d2140afc94d5b5; wrote .../one-shot/build/validators/nft/applied.plutus.json
+```
+
+The hash is the policy id of your NFT. The minting transaction must spend exactly the output you applied (`a8a61c...#1` here), mint one `TICKET` under this policy id with the `Mint` redeemer, and attach `applied.plutus.json`'s script. Once that output is spent, the policy can never mint again.
+
+:::caution
+Apply the seed only after you've chosen an output that really exists and is unspent. If the seed is spent by any other transaction first, nothing can ever be minted under this policy id.
+:::
+
+## Recap
+
+- A ledger type such as `TxOutRef` can be a deployment parameter, so a script can be tied to one specific output.
+- `ctx.txInfo.inputs` tells you which outputs a transaction spends; `ctx.scriptInfo` gives a minting policy its own policy id. The core `Tx` module packages these checks as `Tx.spends`, `Tx.ownPolicy` and `Tx.mintedOf`.
+- `Value.tokens` gives the tokens a transaction mints under one policy as a `Dict`, which `==` compares exactly.
+- Properties over generated `TxOutRef`s and quantities check the rules far beyond the cases you write by hand.
+
+What this tutorial doesn't cover: token metadata (CIP-25 or CIP-68) is off-chain or needs more on-chain rules, and building and submitting the minting transaction happens in off-chain code, for example with Cardano Client Lib as shown in [Build and deploy](/contracts/build-and-deploy/).

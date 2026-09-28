@@ -491,6 +491,9 @@
     },
     {
       "glob": "elci/core/**"
+    },
+    {
+      "glob": "elci/test/**"
     }
   ]
 }

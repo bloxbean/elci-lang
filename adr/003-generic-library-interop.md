@@ -1,6 +1,7 @@
 # ADR-003: Generic library interoperability
 
-Status: **Proposed** — provider extensions and acceptance gates remain open.
+Status: **Implemented** for I1–I4 on Julc revision 2 (see
+[Revision-2 integration](#revision-2-integration-25-september-2026)).
 Implementation roadmap and Julc dependencies: [ADR-005](005-remaining-frontend-and-backend-integration.md).
 Date: 19 September 2026
 Baseline: Elci `974bd41`; companion to [ADR-001](elci-language-syntax-compiler-design-adr.md),
@@ -164,3 +165,59 @@ programmatic provider catalogue and additional imported-type capabilities remain
 open. Imported sums are opaque to Elci patterns, and imported records retain the
 existing datum/redeemer restriction. The source descriptor work is governed by
 Julc ADR-050; it is not a claim of full generic Java interoperability.
+
+## Revision-2 integration (25 September 2026)
+
+Julc's revision-2 backend (ADR-059, Julc `17da92bb`) supplies the provider
+extensions this ADR asked for. Elci now consumes them.
+
+- **I1:** `LibraryProvider.schemes` describes generic exports. Each scheme type
+  parameter becomes one quantified type variable, so every use is instantiated
+  freshly. The `DATA_ENCODABLE` constraint is retained and checked for each
+  concrete instance before any request (`ELCI3003`). Templates the provider cannot
+  describe, such as bounded parameters, stay unsupported with the provider's
+  reason (`ELCI2105`).
+- **I2:** a real generic Java-source library (`demo.Pick` in `GenericImportTest`)
+  is specialized by Julc's Java compiler.
+  - `firstOr`, `count` and `contains` run at `Int`, `String` and the nominal
+    `PubKeyHash`.
+  - Recursion and self-dependencies are closed by the provider.
+  - Strict single evaluation is inherited from the curried call.
+- **I3:** Julc's programmatic `ListsLib` exports (`map`, `filter`, `any`, `all`,
+  `find`, `foldl`) go through the same import, typing and lowering path.
+  - They agree with Elci's own `List` core at Int and at an Elci record type.
+  - A failing function argument fails even for an empty list, which shows
+    strict, single evaluation.
+- **Composition:** `LibraryProviders.compose` combines the Java-source provider,
+  the programmatic provider and Elci's own type descriptions. Named validators
+  link each specialization once. `[entrypoint]` projects link a closed copy at
+  each use.
+
+**I4** (`ImportedTypeTest`): imported types expose exactly their approved
+operations.
+
+- **CONSTRUCT and MATCH:** constructors are resolved through each module's
+  imports (`T(..)` or a qualifier), and `case` over imported sums is exhaustive.
+- **Other operations:** PROJECT is used in revision-2 programs, and EQUALS,
+  ENCODE/DECODE_STRICT and BOUNDARY are supported. Special layouts stay opaque.
+- **Explicit adapters:** the `Julc.Data` module provides the strict decoder and
+  encoder (`LibraryRequest.Codec`) and the Julc optional/`Maybe` re-tagging
+  adapters. Elci describes its own records and unions to the providers, so their
+  codecs are also Julc-built.
+- **Evidence:**
+  - a Java record and sum agree with the Java library's own `equals`, accessor
+    and `switch`;
+  - `Quote(5, true)` encodes to the pinned `Constr 0 [I 5, Constr 1 []]`;
+  - strict decoding rejects wrong tags, arities and nested kinds;
+  - `List Quote` round-trips;
+  - a one-shot policy takes a `TxOutRef` parameter and a `Credential` redeemer,
+    and reads an inline datum through `findOwnInput`;
+  - unapproved uses are diagnosed: `TxOut` equality, decoding or boundary use,
+    and `Value` constructors.
+
+Elci's own records, tuples and unions are type arguments for both Java-source
+templates and programmatic exports. Each request carries their representations as
+producer-owned types, added by Julc PR #195, stacked on #192. Specialization keys
+include them, and requests without producer types keep their historical binding
+names. `GenericImportTest` specializes `firstOr`, `contains` and `count` at an Elci
+record containing an Elci union.
