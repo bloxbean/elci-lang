@@ -12,6 +12,7 @@ gentle introduction, start with [values, functions and types](/learn/basics/).
 
 Elci uses Elm 0.19 syntax for a functional core, with its own on-chain semantics. It is a development
 preview: the profile below is implemented and tested, and everything outside it is rejected with an error.
+The [grammar](/reference/grammar/) defines the syntax exactly.
 
 ## Feature matrix
 
@@ -160,7 +161,7 @@ Function and lambda parameters, and local destructuring, accept only **irrefutab
 
 Indentation is significant, as in Elm. Top-level declarations start in column 1. The declarations of a
 `let` align with each other, and so do the branches of a `case`. A signature must directly precede its
-definition. Tabs are rejected.
+definition. Tabs are rejected. The grammar gives the [exact layout rules](/reference/grammar/#layout).
 
 ### Lexical rules
 

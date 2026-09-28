@@ -16,7 +16,9 @@ translate source to Java and it does not maintain a second UPLC pipeline.
 ## Frontend stages
 
 `syntax` produces tokens and source AST nodes while retaining line, column and
-offset information. `modules` establishes source ownership, resolves imports and
+offset information. [GRAMMAR.md](GRAMMAR.md) specifies what it accepts, and
+[`tree-sitter-elci/`](../tree-sitter-elci/) is a tree-sitter grammar that follows it
+for editors. `modules` establishes source ownership, resolves imports and
 exposing lists, and qualifies source and Java-library names. Import cycles,
 ambiguous names and private references fail here. It also loads the core library,
 Elci source bundled under `src/main/resources/elci/core/`: `Basics`, `List`,

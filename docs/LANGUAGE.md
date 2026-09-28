@@ -5,7 +5,7 @@
 Elci uses an implemented functional-core subset of Elm syntax and its own
 on-chain semantics. The core is complete for the profile below; full Elm, the
 generic Java interoperability ADR, and the wider ledger marketplace surface are
-separate milestones.
+separate milestones. [GRAMMAR.md](GRAMMAR.md) defines the syntax exactly.
 
 | Feature | Current support |
 | --- | --- |

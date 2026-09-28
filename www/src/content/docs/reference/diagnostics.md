@@ -2,7 +2,7 @@
 title: Diagnostics
 description: How to read an Elci error, the JSON report for tools, and every ELCI error code with real messages and fixes for the errors you will meet most often.
 sidebar:
-  order: 6
+  order: 7
 ---
 
 Elci reports each error with a stable code and a source location, shows the source line it is about and

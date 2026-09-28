@@ -633,7 +633,9 @@ These are the details as implemented; formatted code does not rely on them.
 
 ## Keeping this grammar true
 
-- `GrammarDocumentTest` parses every `elm` code block in this file that is a complete module.
+- `GrammarDocumentTest` parses every `elm` code block that is a complete module, in this file and in
+  its copy on the documentation site, `www/src/content/docs/reference/grammar.md`, and checks that
+  the copy shows the same productions.
 - The syntax corpus, `src/test/resources/syntax/valid`, has a module for each production;
   `SyntaxCorpusTest` compiles and runs each one.
 - The tree-sitter grammar in [`tree-sitter-elci/`](../tree-sitter-elci/) follows this grammar. Its
