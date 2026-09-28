@@ -102,7 +102,12 @@ src/Main.elm:7:9: ELCI2002: The 1st argument to `String.fromInt` is `String`, bu
             ^
 ```
 
-The line and column of the first line are where the underline starts.
+The line and column of the first line are where the underline starts. A longer expression shows its
+first five lines, then a line with `…`.
+
+Some expressions are reported at a token inside them: an operation such as `"x" ++ "y"` at its operator,
+and a call without parentheses such as `String.fromInt 3` at its last argument. The caret then marks that
+token alone, as an underline from there would cover only part of the expression.
 
 ### Long types
 
@@ -1345,6 +1350,18 @@ elci: ELCI4001: Unknown configuration key: [project] name
 elci: ELCI4001: Unsupported purpose: lend; expected spend, mint, withdraw, certify, vote, propose or function
 elci: ELCI4001: Unknown option: --frob
 elci: ELCI4001: the [entrypoint] function main is not defined in module Main
+elci: ELCI4001: my-project/elci.toml not found; a project needs an elci.toml, which elci init creates
+elci: ELCI4001: Source directory not found: my-project/lib
+elci: ELCI4001: library-jars file my-project/libs/pricing.jar not found
+elci: ELCI4001: No source file for module Nope; add Nope.elm under a source directory
+```
+
+A problem with one validator's table names the table after the code:
+
+```text
+elci: ELCI4001: my-project/elci.toml:6: [validators.main]: Handler Main.spent for spend: module Main does not declare spent
+elci: ELCI4001: my-project/elci.toml:6: [validators.main]: Handler Vault.spend for spend: no source module Vault
+elci: ELCI4001: my-project/elci.toml:6: [validators.main]: [java-modules] may not map Value, a module name of Elci's core library
 ```
 
 The [CLI](/reference/cli/) and [`elci.toml`](/reference/configuration/) references list the others. A
@@ -1360,21 +1377,11 @@ program that triggers them.
 
 ## Errors without a code
 
-A few errors are still reported without a code or location. Each is printed after `elci:`, and in the JSON
-report its `code` is null:
+Three errors from reading a Java library are still reported without a code or location. Each is printed
+after `elci:`, and in the JSON report its `code` is null:
 
 | Message | Cause |
 | --- | --- |
-| `my-project/elci.toml` | The directory has no `elci.toml`. |
-| `my-project/libs/pricing.jar` | A `library-jars` file does not exist. |
-| `Source directory not found: ...` | A directory in `source-directories` does not exist. |
-| `Expected exactly one source for Nope, found 0` | The `[entrypoint]` module has no source file. |
-| `my-project/elci.toml:6: [validators.main]: Handler Main.spent for spend: module Main does not declare spent` | A handler key names a function its module doesn't define. |
-| `my-project/elci.toml:6: [validators.main]: Handler Vault.spend for spend: no source module Vault` | A handler key names a module that has no source file. |
 | `On-chain Java source not found: org.julclang.stdlib.lib.NopeLib` | An imported `[java-modules]` class that does not exist. |
 | `Cannot resolve type: ?. Supported types: ...` | A Java library that uses a wildcard type such as `JulcList<?>`. |
 | `Unknown type: T. Did you mean: Vote?` | A Java library that declares a parameterized record such as `Box<T>`. |
-
-A `[java-modules]` mistake in a validator project, such as mapping a core module name, is printed after
-the validator's table: `elci: my-project/elci.toml:6: [validators.main]: ELCI4001: [java-modules] may not
-map Value, a module name of Elci's core library`. Its JSON `code` is null too.

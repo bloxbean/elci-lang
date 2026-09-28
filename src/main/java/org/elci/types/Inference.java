@@ -199,8 +199,14 @@ public final class Inference {
     public void check(List<Decl> ds, Map<String, Ty> imports) {
         // Type definitions first: every error in them is reported, and checking stops there, since
         // declarations use them.
+        // A definition that uses a failed alias is not checked: its error would be the alias's again.
+        var failedAliases = new HashSet<String>();
         for (var alias : aliases.values())
             try {
+                if (mentions(alias.target(), failedAliases)) {
+                    failedAliases.add(alias.name());
+                    continue;
+                }
                 var free = new HashSet<String>();
                 sourceVariables(alias.target(), free);
                 if (!alias.parameters().containsAll(free))
@@ -217,11 +223,13 @@ public final class Inference {
                     aliasConstructors.put(alias.name(), alias);
             } catch (Diagnostic e) {
                 errors.add(e);
+                failedAliases.add(alias.name());
             }
         for (var u : unions.values())
             for (var v : u.variants())
                 for (var field : v.fields())
                     try {
+                        if (mentions(field, failedAliases)) continue;
                         validateType(expand(field, new HashSet<>()), u.token());
                         var vars = new HashSet<String>();
                         sourceVariables(field, vars);
@@ -233,18 +241,23 @@ public final class Inference {
                     } catch (Diagnostic e) {
                         errors.add(e);
                     }
-        throwErrors();
-        // A declaration whose annotation is invalid is reported, and not checked.
+        boolean definitionsFailed = !errors.isEmpty();
+        // A declaration whose annotation is invalid is reported, and not checked. Annotations are
+        // checked even when a type definition failed, and checking stops after them.
         var checked = new ArrayList<Decl>();
         var invalid = new ArrayList<Decl>();
         for (var d : ds)
             try {
-                if (d.annotation() != null) validateType(expand(d.annotation(), new HashSet<>()), d.token());
-                checked.add(d);
+                if (d.annotation() != null && mentions(d.annotation(), failedAliases)) invalid.add(d);
+                else {
+                    if (d.annotation() != null) validateType(expand(d.annotation(), new HashSet<>()), d.token());
+                    checked.add(d);
+                }
             } catch (Diagnostic e) {
                 errors.add(e);
                 invalid.add(d);
             }
+        if (definitionsFailed) throwErrors();
         imports.forEach((name, type) -> globals.put(name, new Scheme(variables(type), type)));
         for (var alias : aliasConstructors.values()) {
             var vars = new HashMap<String, Ty>();
@@ -267,10 +280,10 @@ public final class Inference {
                                 constructor);
             if (globals.putIfAbsent(alias.name(), new Scheme(variables(constructor), constructor))
                     != null)
-                throw new Diagnostic(
+                errors.add(new Diagnostic(
                         "ELCI2011",
                         alias.token(),
-                        "Type alias constructor conflicts with an existing name: " + alias.name());
+                        "Type alias constructor conflicts with an existing name: " + alias.name()));
         }
         for (var u : unions.values())
             for (var v : u.variants()) {
@@ -280,14 +293,17 @@ public final class Inference {
                 for (int i = v.fields().size() - 1; i >= 0; i--)
                     t = fn(annotated(v.fields().get(i), vars), t);
                 if (globals.putIfAbsent(v.name(), new Scheme(variables(t), t)) != null)
-                    throw new Diagnostic(
+                    errors.add(new Diagnostic(
                             "ELCI2011",
                             u.token(),
-                            "Constructor name conflicts with import " + v.name());
+                            "Constructor name conflicts with import " + v.name()));
             }
+        // A constructor that conflicts would be checked at the other's type.
+        if (errors.stream().anyMatch(e -> e.code().equals("ELCI2011"))) throwErrors();
         for (var d : invalid) {
             var any = new Var();
             globals.put(d.name(), new Scheme(Set.of(any), any));
+            unknown.add(d.name());
         }
         inferDeclarations(checked, globals, true);
         solveFields();
@@ -525,8 +541,17 @@ public final class Inference {
         var pending = new LinkedHashMap<String, Decl>();
         ds.forEach(d -> pending.put(d.name(), d));
         // Dependency SCCs preserve monomorphic recursion and generalize only completed groups.
-        for (var group : groups(ds)) {
+        List<List<Decl>> groups;
+        try {
+            groups = groups(ds);
+        } catch (Diagnostic e) {
+            if (!top) throw e;
+            errors.add(e);
+            throw Diagnostic.of(errors);
+        }
+        for (var group : groups) {
             int equalityMark = equality.size(), appendMark = append.size(), comparableMark = comparable.size();
+            boolean usesUnknown = top && usesUnknown(group);
             try {
                 var monotypes = new LinkedHashMap<String, Ty>();
                 for (var d : group) {
@@ -703,11 +728,23 @@ public final class Inference {
                 equality.removeIf(generalizedEquality::contains);
                 append.removeIf(generalizedAppend::contains);
                 comparable.removeIf(generalizedComparable::contains);
+                // Requirements on a type that came from a failed declaration can't be decided.
+                if (usesUnknown) {
+                    equality.subList(Math.min(equalityMark, equality.size()), equality.size()).clear();
+                    append.subList(Math.min(appendMark, append.size()), append.size()).clear();
+                    comparable.subList(Math.min(comparableMark, comparable.size()), comparable.size()).clear();
+                }
             } catch (Diagnostic e) {
                 // A top-level group that fails is recorded, and its names take their annotated
                 // types, so the rest of the module is checked without cascading errors (ADR-012).
                 if (!top) throw e;
-                errors.add(e);
+                // A group that uses a failed declaration of unknown type may fail only because of
+                // it; only a missing signature, which doesn't depend on types, is reported then.
+                if (!usesUnknown) errors.add(e);
+                else
+                    for (var d : group)
+                        if (d.annotation() == null)
+                            errors.add(new Diagnostic("ELCI2004", d.token(), "Top-level declarations require a type signature"));
                 equality.subList(equalityMark, equality.size()).clear();
                 append.subList(appendMark, append.size()).clear();
                 comparable.subList(comparableMark, comparable.size()).clear();
@@ -724,13 +761,40 @@ public final class Inference {
     private Scheme failed(Decl d) {
         if (d.annotation() != null)
             try {
-                Ty t = annotated(d.annotation(), new HashMap<>());
-                return new Scheme(variables(t), t);
+                var named = new HashMap<String, Ty>();
+                Ty t = annotated(d.annotation(), named);
+                // As in Elm, `comparable` and `appendable` variables still constrain callers.
+                var comparableRequirements = new ArrayList<Ty>();
+                var appendRequirements = new ArrayList<Ty>();
+                named.forEach((name, variable) -> {
+                    if (comparableName(name)) comparableRequirements.add(variable);
+                    if (appendableName(name)) appendRequirements.add(variable);
+                });
+                return new Scheme(variables(t), t, List.of(), appendRequirements, comparableRequirements);
             } catch (Diagnostic ignored) {
                 // An annotation that doesn't check is reported on its own.
             }
+        unknown.add(d.name());
         var any = new Var();
         return new Scheme(Set.of(any), any);
+    }
+
+    /** Top-level names bound to any type because their declaration failed without a usable annotation. */
+    private final Set<String> unknown = new HashSet<>();
+
+    /** Whether a group refers to a name in {@link #unknown}. */
+    private boolean usesUnknown(List<Decl> group) {
+        if (unknown.isEmpty()) return false;
+        var refs = new HashSet<String>();
+        for (var d : group) references(d.body(), new HashSet<>(d.parameters()), refs);
+        return !Collections.disjoint(refs, unknown);
+    }
+
+    /** Whether a source type refers to one of {@code names}. */
+    private static boolean mentions(Type type, Set<String> names) {
+        if (names.contains(type.name())) return true;
+        for (var argument : type.arguments()) if (mentions(argument, names)) return true;
+        return false;
     }
 
     private boolean nonExpansive(Decl d) {
@@ -1618,8 +1682,33 @@ public final class Inference {
             var list = hints == Hints.NONE ? List.<String>of() : mismatchHints(found, needed, hints == Hints.COMPARABLE);
             var mismatch = new Diagnostic("ELCI2002", at, message.apply(shown.get(0), shown.get(1)), list)
                     .withTypes(shown.get(0), shown.get(1));
-            throw span == null ? mismatch : mismatch.withSpan(lastToken(span));
+            throw span == null || !starts(at, span) ? mismatch : mismatch.withSpan(lastToken(span));
         }
+    }
+
+    /**
+     * Whether a diagnostic reported at {@code at} is at the start of {@code e}, or of the
+     * parentheses around it. Only then is the whole expression underlined: a binary expression
+     * or a call is reported at its operator or last argument, and an underline from there would
+     * mark only part of it.
+     */
+    private static boolean starts(Token at, Expr e) {
+        Token first = firstToken(e);
+        return at.offset() == first.offset() || at.text().equals("(") && at.offset() < first.offset();
+    }
+
+    /** The first token of an expression as written. */
+    private static Token firstToken(Expr e) {
+        return switch (e) {
+            case Field f -> earlier(firstToken(f.record()), f.token());
+            case Apply a -> earlier(firstToken(a.function()), a.token());
+            case Binary b -> earlier(firstToken(b.left()), b.token());
+            default -> e.token();
+        };
+    }
+
+    private static Token earlier(Token a, Token b) {
+        return b.offset() < a.offset() ? b : a;
     }
 
     /** The last token of an expression as written, for underlining all of it (ADR-012). */

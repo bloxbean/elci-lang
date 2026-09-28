@@ -22,8 +22,7 @@ public final class Main {
         for(String a:args)if(a.startsWith("--color="))color=a.substring("--color=".length());
         args=Arrays.stream(args).filter(a->!a.startsWith("--color=")).toArray(String[]::new);
         if(!Set.of("auto","always","never").contains(color)){System.err.println("elci: ELCI4001: --color takes auto, always or never");return 1;}
-        colour=!json&&(color.equals("always")||color.equals("auto")&&System.getenv("NO_COLOR")==null
-                &&System.console()!=null&&System.console().isTerminal());
+        colour=!json&&(color.equals("always")||color.equals("auto")&&System.getenv("NO_COLOR")==null&&stderrIsTerminal());
         try {
             // `elci --help`, `elci help` and `elci <command> --help` all print the usage.
             if(args.length==0||args[0].equals("help")||Arrays.asList(args).contains("--help")) {
@@ -35,8 +34,8 @@ public final class Main {
                         +"       elci init <project-directory> [--validator <name>] [--purpose spend|mint|withdraw|certify|vote|propose|function]\n"
                         +"       elci explain [code]\n"
                         +"       elci --version\n"
-                        +"check, build, eval and test take --report=json to print each compile error as a JSON object on its own line,\n"
-                        +"and --color=auto|always|never for coloured errors (auto: on a terminal, unless NO_COLOR is set)\n"
+                        +"check, build, eval and test take --report=json to print each compile error as a JSON object on its own line\n"
+                        +"Every command takes --color=auto|always|never for coloured output (auto: on a terminal, unless NO_COLOR is set)\n"
                         +"A build writes build/validators/<name>/validator.flat, validator.plutus, validator.plutus.json (Julc format) and abi.json (Elci schema)\n"
                         +"for each [validators.<name>] group; an [entrypoint] function project writes build/validator.flat, validator.plutus and abi.json.");return 0;
             }
@@ -100,6 +99,19 @@ public final class Main {
     private static boolean colour;
 
     /**
+     * Whether standard error is a terminal: a character device, as isatty(2) would say. Where
+     * that can't be read, whether the console is.
+     */
+    private static boolean stderrIsTerminal() {
+        try {
+            int mode=(Integer)Files.getAttribute(Path.of("/dev/fd/2"),"unix:mode");
+            return (mode&0170000)==0020000&&!"dumb".equals(System.getenv("TERM"));
+        } catch(Exception e) {
+            return System.console()!=null&&System.console().isTerminal();
+        }
+    }
+
+    /**
      * Print a run's diagnostics in source order, at most {@link Diagnostic#LIMIT}: each with its
      * excerpt and hints, then the validator group they arose in, then a count when there are
      * several, and last where to read more about their codes. With {@code --report=json}, one
@@ -158,9 +170,13 @@ public final class Main {
                 java.util.function.Function<String,String> files=module->{try{return project.source(module).toString();}catch(RuntimeException x){return null;}};
                 throw new ValidatorDiagnostic(where(project,group),e,files,sourceFor(project,group,e));
             } catch(BackendException e) {
-                throw new IllegalArgumentException(where(project,group)+": backend rejected the validator: "+e.getMessage(),e);
+                throw new IllegalArgumentException("ELCI4002: "+where(project,group)+": backend rejected the validator: "+e.getMessage(),e);
             } catch(IllegalArgumentException e) {
-                throw new IllegalArgumentException(where(project,group)+": "+e.getMessage(),e);
+                // The code first, as on every error line; a problem without one is the table's.
+                String message=e.getMessage()==null?"":e.getMessage();
+                var coded=java.util.regex.Pattern.compile("^(ELCI\\d{4}): ").matcher(message);
+                throw new IllegalArgumentException(coded.find()?coded.group(1)+": "+where(project,group)+": "+message.substring(coded.end())
+                        :"ELCI4001: "+where(project,group)+": "+message,e);
             }
             var output=ValidatorOutputs.render(build);
             if(group.expectedAbi()!=null) {

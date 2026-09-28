@@ -53,6 +53,19 @@ class DiagnosticPresentationTest {
     }
 
     @Test
+    void aSpanPastFiveLinesEndsWithAnEllipsisLine() throws Exception {
+        String err = check("main : Int\nmain =\n    List.sum\n        [ \"a\"\n        , \"b\"\n        , \"c\"\n        , \"d\"\n        , \"e\"\n        , \"f\"\n        ]\n");
+        assertTrue(err.contains("\n11|         , \"e\"\n            ^^^^^\n  | …\n"), err);
+    }
+
+    @Test
+    void anExpressionReportedAtItsOperatorIsNotUnderlinedFromThere() throws Exception {
+        // The element is reported at ++; an underline from there would mark half of it.
+        String err = check("main : List Int\nmain =\n    [ 1, \"x\" ++ \"y\" ]\n");
+        assertTrue(err.contains("\n6|     [ 1, \"x\" ++ \"y\" ]\n" + " ".repeat(3 + 13) + "^^\n"), err);
+    }
+
+    @Test
     void longTypesAreLaidOutWithTheirFirstDifference() throws Exception {
         String err = check("""
                 listing : { owner : String, amount : Int, note : String }

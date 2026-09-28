@@ -273,7 +273,7 @@ In .../vault/elci.toml:7: [validators.vault]
 And a handler key that names a missing function:
 
 ```text
-elci: .../vault/elci.toml:7: [validators.vault]: Handler Vault.spent for spend: module Vault does not declare spent
+elci: ELCI4001: .../vault/elci.toml:7: [validators.vault]: Handler Vault.spent for spend: module Vault does not declare spent
 ```
 
 The [diagnostics reference](/reference/diagnostics/) lists every error code.

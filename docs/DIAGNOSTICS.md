@@ -39,7 +39,9 @@ shown, such as ``For more on ELCI2002 and ELCI2005, run `elci explain <code>`.``
   colour the text is the same, character for character.
 - **Underlines.** A mismatch in an argument, a list element or a `case` branch body
   underlines the whole expression, and a field access underlines `.field`. An
-  expression over several lines is underlined on each, up to five lines.
+  expression over several lines is underlined on each, up to five lines. An
+  expression reported at an operator, or a call at its last argument, keeps a caret
+  under that token alone.
 - **Long types.** When the two types of a mismatch are 60 characters or longer
   together, `It is:` and `It needs:` lines follow the excerpt, with the first
   difference marked.

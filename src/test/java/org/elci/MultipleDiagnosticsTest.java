@@ -166,6 +166,104 @@ class MultipleDiagnosticsTest {
     }
 
     @Test
+    void anInvalidAnnotationIsReportedWithEveryOtherKindOfError() {
+        // Annotations are checked before stopping at a type definition, and a cycle is recorded.
+        assertEquals(List.of("Main 4:1: ELCI2012", "Main 8:6: ELCI2012"), codes(errors("""
+                module Main exposing (main)
+
+
+                bad : List Int Int
+                bad =
+                    1
+
+                type T = T (List Int Int)
+
+
+                main : Int
+                main =
+                    1
+                """)));
+        assertEquals(List.of("Main 4:1: ELCI2012", "Main 9:1: ELCI2008"), codes(errors("""
+                module Main exposing (main)
+
+
+                bad : List Int Int
+                bad =
+                    1
+
+
+                loop : Int
+                loop =
+                    loop + 1
+
+
+                main : Int
+                main =
+                    1
+                """)));
+    }
+
+    @Test
+    void aDeclarationOfUnknownTypeDoesNotFailItsUsers() {
+        // `bad` has no usable type, so nothing is known about `bad.x` or `bad ++ bad`.
+        assertEquals(List.of("Main 4:1: ELCI2012"), codes(errors("""
+                module Main exposing (main)
+
+
+                bad : List Int Int
+                bad =
+                    1
+
+
+                main : Int
+                main =
+                    bad.x + List.length (bad ++ bad)
+                """)));
+    }
+
+    @Test
+    void aCycleOfAliasesIsReportedOnce() {
+        var found = errors("module Main exposing (main)\n\n\ntype alias A =\n    B\n\n\ntype alias B =\n    A\n\n\nmain : Int\nmain =\n    1\n");
+        assertEquals(1, found.size(), found.toString());
+        assertTrue(found.get(0).contains("ELCI2012: Cyclic type alias"), found.toString());
+    }
+
+    @Test
+    void aStringThatRunsPastItsLineEndsLexing() {
+        // What follows the line break is the string's text, not code to report.
+        var found = errors("module Main exposing (main)\n\n\nmain : String\nmain =\n    \"Hello,\nit's fine; really\"\n");
+        assertEquals(List.of("Main 7:1: ELCI1001"), codes(found));
+    }
+
+    @Test
+    void aPhantomFunctionTypeStillEncodes() {
+        // Only the fields of a type are encoded; a type argument no field uses has no bearing.
+        new ElciCompiler().compileProject(Map.of("Main", """
+                module Main exposing (main)
+
+                import Julc.Data as Data
+
+
+                type Box a
+                    = Box Int
+
+
+                box : Box (Int -> Int)
+                box =
+                    Box 1
+
+
+                main : Data
+                main =
+                    Data.encode box
+                """), "Main", "main", FrontendProgram.Purpose.FUNCTION, Map.of(), new CompilerOptions());
+    }
+
+    private static List<String> codes(List<String> errors) {
+        return errors.stream().map(e -> e.substring(0, e.indexOf(": ", e.indexOf("ELCI")))).toList();
+    }
+
+    @Test
     void theFirstErrorIsTheFirstInSourceOrder() {
         // The type checker reaches `later` before `earlier` (it checks `main`'s dependencies first),
         // but the error reported first is the earlier one in the file.

@@ -248,7 +248,7 @@ public final class Diagnostic extends RuntimeException {
         int shown = 0;
         for (int r = row; r <= endRow; r++) {
             if (shown == SPAN_LINES) {
-                out.append(" ".repeat(digits)).append("| …");
+                out.append("\n").append(" ".repeat(digits)).append("| …");
                 break;
             }
             String text = lines.get(r - 1);

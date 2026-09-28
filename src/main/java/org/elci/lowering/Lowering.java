@@ -1921,10 +1921,6 @@ public final class Lowering {
             throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
                     ? "encoder" : "strict decoder") + " for " + prune(type) + ": ScriptContext has no approved Data"
                     + " codec; only the ledger supplies a context");
-        String unencodable = unencodable(prune(type));
-        if (unencodable != null)
-            throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
-                    ? "encoder" : "strict decoder") + " for " + Types.show(prune(type)) + ": " + unencodable);
         if (prune(type) instanceof Con c && c.name().equals(LEDGER_VALUE)) {
             // The Data map is the value; decoding rebuilds it through the builtins, which reject
             // anything but the canonical form.
@@ -1939,8 +1935,11 @@ public final class Lowering {
         try {
             return library(new LibraryRequest.Codec(representation, direction), token);
         } catch (Diagnostic e) {
+            // Say why in Elci's terms when a function or array is the cause; Julc's reason otherwise.
+            String unencodable = unencodable(prune(type));
             throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
-                    ? "encoder" : "strict decoder") + " for " + prune(type) + ": " + e.getMessage());
+                    ? "encoder" : "strict decoder") + " for " + (unencodable != null ? Types.show(prune(type)) + ": " + unencodable
+                    : prune(type) + ": " + e.getMessage()));
         }
     }
 

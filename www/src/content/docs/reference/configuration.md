@@ -216,10 +216,9 @@ purpose = "function"
 | Unquoted value | `ELCI4001: Expected a quoted string without escapes: julc-strict-v1` |
 | Comment after a value | `ELCI4001: Expected a quoted string without escapes: "0.1.0-gb-5a3378b" # pinned` |
 | Multi-line array | `ELCI4001: elci.toml:3: expected key = value` |
-| Missing source directory | `Source directory not found: my-project/lib` |
-| Remapping a core library | `my-project/elci.toml:6: [validators.main]: ELCI4001: [java-modules] may not remap Julc.TypedMap, which the Elci core library uses for org.julclang.stdlib.lib.TypedMapLib` |
-| Mapping a core module name | `my-project/elci.toml:6: [validators.main]: ELCI4001: [java-modules] may not map Value, a module name of Elci's core library` |
+| Missing source directory | `ELCI4001: Source directory not found: my-project/lib` |
+| Remapping a core library | `ELCI4001: my-project/elci.toml:6: [validators.main]: [java-modules] may not remap Julc.TypedMap, which the Elci core library uses for org.julclang.stdlib.lib.TypedMapLib` |
+| Mapping a core module name | `ELCI4001: my-project/elci.toml:6: [validators.main]: [java-modules] may not map Value, a module name of Elci's core library` |
 | ABI changed | `ELCI4001: my-project/elci.toml:9: [validators.main]: ABI drift from abi/main.json; compare constructor tags, field order, handler roles and parameters` |
 
-Each message is printed after `elci: ` and the command exits with status 1. A missing source directory has
-no code yet; see [errors without a code](/reference/diagnostics/#errors-without-a-code).
+Each message is printed after `elci: ` and the command exits with status 1.

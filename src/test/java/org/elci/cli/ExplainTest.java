@@ -182,6 +182,17 @@ class ExplainTest {
     }
 
     @Test
+    void configurationErrorsHaveACode() throws Exception {
+        Path empty = root.resolve("empty");
+        Files.createDirectories(empty);
+        assertEquals("elci: ELCI4001: " + empty.resolve("elci.toml") + " not found; a project needs an elci.toml, which elci init creates\n",
+                run("check", empty.toString()).err());
+        Files.writeString(empty.resolve("elci.toml"), FUNCTION_PROJECT);
+        assertTrue(run("check", empty.toString()).err().startsWith("elci: ELCI4001: No source file for module Main; add Main.elm"));
+        assertTrue(run("check", empty.toString(), "--frobnicate").err().startsWith("elci: ELCI4001: Unknown option"));
+    }
+
+    @Test
     void aFailedRunEndsWithWhereToReadMore() throws Exception {
         Files.writeString(root.resolve("elci.toml"), FUNCTION_PROJECT);
         Files.createDirectories(root.resolve("src"));

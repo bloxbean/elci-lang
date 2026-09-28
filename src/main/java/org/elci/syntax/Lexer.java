@@ -17,8 +17,12 @@ public final class Lexer {
     /**
      * The tokens of the source. A lexical error is recorded and lexing continues after it, so a
      * source reports all its lexical errors at once (ADR-012); a source with any is not parsed.
+     * After a string that runs past its line, what follows can't be told apart from the string's
+     * text, so lexing stops there. An unsupported character is reported once per line.
      */
     public List<Token> lex() {
+        int unsupportedLine = 0;
+        lexing:
         while (pos < source.length()) {
             char c = source.charAt(pos);
             if (c == '\t') { record("Tabs are not permitted; use spaces for Elm layout"); advance(); continue; }
@@ -48,8 +52,7 @@ public final class Lexer {
                     char ch = advance();
                     if (ch == '\n' || ch == '\r') {
                         record("Use an escaped newline in a string");
-                        closed = true;
-                        break;
+                        break lexing;
                     }
                     if (ch == '\\') {
                         if (pos >= source.length()) { record("Unterminated string escape"); break; }
@@ -74,7 +77,12 @@ public final class Lexer {
                 for (String candidate : List.of("->","//","==","/=","<=",">=","&&","||","::","++","|>","<|",">>","<<",".."))
                     if (at(candidate)) { op=candidate; break; }
                 if (op == null) {
-                    if ("()[]{},:=|.\\+-*<>/^".indexOf(c) < 0) { record("Unsupported character '" + c + "'"); advance(); continue; }
+                    if ("()[]{},:=|.\\+-*<>/^".indexOf(c) < 0) {
+                        if (unsupportedLine != line) record("Unsupported character '" + c + "'");
+                        unsupportedLine = line;
+                        advance();
+                        continue;
+                    }
                     op = String.valueOf(c);
                 }
                 for (int i=0;i<op.length();i++) advance();
