@@ -165,10 +165,12 @@ definition. Tabs are rejected. The grammar gives the [exact layout rules](/refer
 
 ### Lexical rules
 
-- **Names.** Values and functions start with a lowercase letter or `_`; types, constructors and module
-  segments start with an uppercase letter.
+- **Names.** Values and functions start with a lowercase letter; types, constructors and module segments
+  start with an uppercase letter. Letters, digits and `_` may follow.
 - **Reserved words.** `if`, `then`, `else`, `case`, `of`, `let`, `in`, `module`, `import`, `exposing`,
-  `as`, `type` and `port`. `alias` is only special after `type`.
+  `as`, `type` and `port`. `alias` is only special after `type`. Don't use them as names: the parser
+  doesn't yet reject every such use, as the grammar's [parser details](/reference/grammar/#parser-details-that-differ-from-elm)
+  describe.
 - **Integers.** Decimal digits only, arbitrarily large. `1.5` is rejected (`Float is unsupported`), and so
   are `0xFF` and `1_000`. elm-format 0.8.8 corrupts literals that do not fit in 64 bits, so check large
   constants after formatting.

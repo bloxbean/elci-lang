@@ -78,6 +78,9 @@ Char         ::= /* any character */
 ```
 
 - Block comments nest: `{- a {- b -} c -}` is one comment.
+- The lexer scans a block comment from left to right: each `{-` opens a nested comment, and each
+  `-}` closes one. So `{- a{-}` is unterminated, since its `{-}` opens a comment
+  (`ELCI1001: Unterminated block comment`).
 - `{-| ... -}`, Elm's doc comment, is an ordinary block comment. The compiler does not read it.
 - An unterminated block comment is `ELCI1001: Unterminated block comment`.
 - Comments are not tokens. They take no part in layout: a token after a comment is placed by its
@@ -168,10 +171,11 @@ a pattern; and the module header, imports and exposing lists.
 | `let` | the column of the first token after `let` | declarations | at `in`, in any column |
 | `case` | the column of the first token after `of` | branches | at a token not in column `c`, or at `in`, `else` or the end of the input |
 
-- Each item starts in column `c`. A declaration elsewhere is `ELCI1002: Declarations must align at
-  column c`.
-- After a declaration, the next token must end the block or be in column `c`; otherwise it is
-  `ELCI1002: Unexpected token after declaration`.
+- Each item starts in column `c`. After an item, the next token must end the block or be in column
+  `c`. Otherwise it is:
+  - after a value declaration, `ELCI1002: Unexpected token after declaration`;
+  - after a `type`, a `type alias` or a destructuring, `ELCI1002: Declarations must align at
+    column c`.
 - A declaration's expressions and types have the floor `c`. A branch's body has the floor `c` too.
   So a line that continues a declaration or branch must be indented past `c`.
 
@@ -271,9 +275,11 @@ Signature<c>    ::= LowerName ":" Type<c> COL<c>
 Destructuring<c> ::= ( PatternAtom - LowerName ) "=" Expr<c>
 ```
 
-- A signature must be followed directly by the definition of the same name, in the same column:
-  otherwise `ELCI1002: A signature must precede its matching definition`. Every top-level value
-  needs a signature, but that is a type-checking rule (`ELCI2004`).
+- A signature must be followed directly by the definition of the same name, in the same column.
+  When another value declaration follows instead, it is
+  `ELCI1002: A signature must precede its matching definition`. When the input ends, or a `type`
+  or an uppercase name follows, it is `ELCI1002: Expected name` or `Expected lowercase name`. Every
+  top-level value needs a signature, but that is a type-checking rule (`ELCI2004`).
 - A function's parameters and a destructuring pattern must be irrefutable: `_`, a name, `()`, a
   tuple of irrefutable patterns, a record pattern, or an irrefutable pattern with `as`. Otherwise:
   `ELCI1002: Function parameters require irrefutable patterns; use case for refutable matching`,
@@ -636,7 +642,7 @@ These are the details as implemented; formatted code does not rely on them.
 - `GrammarDocumentTest` parses every `elm` code block that is a complete module, in this file and in
   its copy on the documentation site, `www/src/content/docs/reference/grammar.md`, and checks that
   the copy shows the same productions.
-- The syntax corpus, `src/test/resources/syntax/valid`, has a module for each production;
-  `SyntaxCorpusTest` compiles and runs each one.
+- The syntax corpus, `src/test/resources/syntax/valid`, has a module for each area of the grammar;
+  `SyntaxCorpusTest` compiles and runs each one, and each checks what it parsed.
 - The tree-sitter grammar in [`tree-sitter-elci/`](../tree-sitter-elci/) follows this grammar. Its
   test script parses every `.elm` file in the repository.

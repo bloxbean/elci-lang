@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.stream.Stream;
 
 class SyntaxCorpusTest {
@@ -44,18 +45,20 @@ class SyntaxCorpusTest {
     }
 
     /**
-     * The corpus has a module for each production of docs/GRAMMAR.md. Each one's {@code main}
+     * The corpus has a module for each area of docs/GRAMMAR.md. Each one's {@code main}
      * checks what it parsed and returns True.
      */
     @TestFactory
     Stream<DynamicTest> everyValidCorpusModuleCompilesAndChecksItself() throws IOException {
         var directory = Path.of("src/test/resources/syntax/valid");
-        var modules =
-                Files.list(directory)
-                        .filter(path -> path.toString().endsWith(".elm"))
-                        .filter(path -> !path.getFileName().toString().equals("core-completion.elm"))
-                        .sorted()
-                        .toList();
+        List<Path> modules;
+        try (var files = Files.list(directory)) {
+            modules =
+                    files.filter(path -> path.toString().endsWith(".elm"))
+                            .filter(path -> !path.getFileName().toString().equals("core-completion.elm"))
+                            .sorted()
+                            .toList();
+        }
         assertFalse(modules.isEmpty(), "no corpus modules in " + directory);
         return modules.stream()
                 .map(

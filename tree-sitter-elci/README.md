@@ -96,7 +96,8 @@ the files of an Elci project, for example the `.elm` files under a directory tha
 `elci.toml`.
 
 The highlight queries use tree-sitter's standard capture names, and later patterns override earlier
-ones, as in tree-sitter-highlight and Neovim.
+ones, as in tree-sitter-highlight, Neovim and Helix 25.07 or later. In older Helix releases the first
+matching pattern wins.
 
 ### Neovim
 
@@ -122,14 +123,16 @@ vim.api.nvim_create_autocmd("FileType", {
   pattern = "elci",
   callback = function()
     vim.treesitter.start()
+    vim.bo.commentstring = "-- %s"
     vim.wo.foldmethod = "expr"
     vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
   end,
 })
 ```
 
-`indents.scm` uses nvim-treesitter's capture names; it takes effect with nvim-treesitter's
-`indentexpr`.
+`indents.scm` uses nvim-treesitter's capture names. With the nvim-treesitter plugin installed, turn
+it on in the same callback with
+`vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"`.
 
 ### Helix
 
@@ -151,9 +154,18 @@ block-comment-tokens = { start = "{-", end = "-}" }
 indent = { tab-width = 4, unit = "    " }
 ```
 
-Run `hx --grammar fetch` and `hx --grammar build`, and copy `queries/*.scm` to
-`~/.config/helix/runtime/queries/elci/`. Helix's themes use some other capture names, such as
-`namespace` for `module` and `variable.other.member` for `property`; rename those in your copy.
+Run `hx --grammar fetch` and `hx --grammar build`, and copy `queries/highlights.scm`,
+`locals.scm` and `folds.scm` to `~/.config/helix/runtime/queries/elci/`. `indents.scm` uses
+nvim-treesitter's capture names, which Helix doesn't read. Helix's themes use some other capture
+names; rename these in your copy:
+
+| In the queries | In Helix |
+| --- | --- |
+| `module` | `namespace` |
+| `property` | `variable.other.member` |
+| `number` | `constant.numeric` |
+| `string.escape` | `constant.character.escape` |
+| `comment.documentation` | `comment.block.documentation` |
 
 ### Zed
 
@@ -174,4 +186,16 @@ name = "Elci"
 grammar = "elci"
 path_suffixes = ["elm"]
 line_comments = ["-- "]
+block_comment = ["{- ", " -}"]
+```
+
+The Elm extension claims `.elm` files too, so choose Elci for a project in its
+`.zed/settings.json`:
+
+```json
+{
+  "file_types": {
+    "Elci": ["*.elm"]
+  }
+}
 ```
