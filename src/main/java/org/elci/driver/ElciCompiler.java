@@ -99,8 +99,8 @@ public final class ElciCompiler {
         // Validators are named and compiled with compileValidator (ADR-007).
         if(purpose!=FrontendProgram.Purpose.FUNCTION)throw new IllegalArgumentException("Only function entrypoints compile here; validators are [validators.<name>] groups compiled with compileValidator");
         var frontend=frontend(module,javaModules,options,java);
-        var entry=module.declarations().stream().filter(d->d.name().equals(function)).findFirst().orElseThrow(()->new IllegalArgumentException("Entrypoint not found: "+function));
-        if(!module.exposing().contains(function)&&!module.exposing().contains(".."))throw new Diagnostic("ELCI2103",entry.token(),"Entrypoint must be exposed by its module");
+        var entry=module.declarations().stream().filter(d->d.name().equals(function)).findFirst().orElseThrow(()->new IllegalArgumentException("ELCI4001: the [entrypoint] function "+function+" is not defined in module "+module.name()));
+        if(!module.exposing().contains(function)&&!module.exposing().contains(".."))throw new Diagnostic("ELCI2103",entry.token(),"Entrypoint "+module.name()+"."+function+" must be exposed by its module");
         var inference=frontend.inference();inference.check(module.declarations(),frontend.importedTypes());
         Ty entryType=inference.globals.get(function).body();
         if(!Types.concrete(entryType))throw new Diagnostic("ELCI2009",entry.token(),"Entrypoints require concrete types");

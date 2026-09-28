@@ -107,10 +107,12 @@ public final class Inference {
         for (var u : all) {
             if (unions.putIfAbsent(u.name(), u) != null)
                 throw new Diagnostic("ELCI2011", u.token(), "Duplicate type " + u.name());
-            for (var v : u.variants())
-                if (constructors.putIfAbsent(v.name(), u) != null)
-                    throw new Diagnostic(
-                            "ELCI2011", u.token(), "Duplicate constructor " + v.name());
+            for (var v : u.variants()) {
+                var other = constructors.putIfAbsent(v.name(), u);
+                if (other != null)
+                    throw new Diagnostic("ELCI2011", u.token(), "Duplicate constructor " + v.name()
+                            + (other == u ? " in the type " + u.name() : ": the type " + other.name() + " has one too"));
+            }
         }
     }
 

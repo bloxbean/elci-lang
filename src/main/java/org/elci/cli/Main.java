@@ -33,6 +33,7 @@ public final class Main {
                         +"       elci test [project-directory] [--match <substring>] [--seed <n>] [--fuzz <runs>]\n"
                         +"       elci apply [project-directory] --validator <name> --param <name>=<plutus-data-json|@file> [--output <file>]\n"
                         +"       elci init <project-directory> [--validator <name>] [--purpose spend|mint|withdraw|certify|vote|propose|function]\n"
+                        +"       elci explain [code]\n"
                         +"       elci --version\n"
                         +"check, build, eval and test take --report=json to print each compile error as a JSON object on its own line,\n"
                         +"and --color=auto|always|never for coloured errors (auto: on a terminal, unless NO_COLOR is set)\n"
@@ -42,8 +43,9 @@ public final class Main {
             if(args[0].equals("--version")){System.out.println("elci "+org.elci.driver.BuildInfo.VERSION+" / julc "+ElciCompiler.JULC_VERSION);return 0;}
             if(json&&!Set.of("check","build","eval","test").contains(args[0]))throw new IllegalArgumentException("ELCI4001: --report=json applies to check, build, eval and test");
             if(args[0].equals("init"))return ProjectInitializer.run(Arrays.copyOfRange(args,1,args.length));
+            if(args[0].equals("explain"))return Explain.run(Arrays.copyOfRange(args,1,args.length),colour);
             if(args[0].equals("test"))return test(json,Arrays.copyOfRange(args,1,args.length));
-            if(!Set.of("check","build","eval","apply").contains(args[0]))throw new IllegalArgumentException("Expected init, check, build, eval, test or apply; see --help");
+            if(!Set.of("check","build","eval","apply").contains(args[0]))throw new IllegalArgumentException("ELCI4001: Expected init, check, build, eval, test, apply or explain; see --help");
             String directory=null;var selected=new LinkedHashSet<String>();var parameters=new LinkedHashMap<String,String>();Path appliedOutput=null;boolean builtins=false;
             for(int i=1;i<args.length;i++) {
                 if(args[0].equals("apply")&&args[i].equals("--param")) {
@@ -60,9 +62,9 @@ public final class Main {
                     if(args[0].equals("eval"))throw new IllegalArgumentException("ELCI4001: eval does not select validators; it runs [entrypoint] purpose = \"function\" projects");
                     if(++i==args.length)throw new IllegalArgumentException("ELCI4001: --validator requires a validator name");
                     if(!selected.add(args[i]))throw new IllegalArgumentException("ELCI4001: validator "+args[i]+" is selected more than once");
-                } else if(args[i].startsWith("--"))throw new IllegalArgumentException("Unknown option: "+args[i]);
+                } else if(args[i].startsWith("--"))throw new IllegalArgumentException("ELCI4001: Unknown option: "+args[i]);
                 else if(directory==null)directory=args[i];
-                else throw new IllegalArgumentException("Expected at most one project directory; see --help");
+                else throw new IllegalArgumentException("ELCI4001: Expected at most one project directory; see --help");
             }
             var project=Project.read(Path.of(directory==null?".":directory));
             files=module->{try{return project.source(module).toString();}catch(RuntimeException e){return null;}};
@@ -94,14 +96,15 @@ public final class Main {
         catch(Exception e){System.err.println(json?failure(e.getMessage()):"elci: "+e.getMessage());return 1;}
     }
 
-    /**
-     * Print a run's diagnostics in source order, at most {@link Diagnostic#LIMIT}: each with its
-     * excerpt and hints, then the validator group they arose in, then a count when there are
-     * several. With {@code --report=json}, one JSON object per line (ADR-012).
-     */
     /** Whether diagnostics are printed in colour: a terminal, or --color=always. */
     private static boolean colour;
 
+    /**
+     * Print a run's diagnostics in source order, at most {@link Diagnostic#LIMIT}: each with its
+     * excerpt and hints, then the validator group they arose in, then a count when there are
+     * several, and last where to read more about their codes. With {@code --report=json}, one
+     * JSON object per line (ADR-012).
+     */
     private static void report(Diagnostic diagnostic,java.util.function.Function<String,String> files,String fallback,boolean json,String context) {
         var all=diagnostic.all();
         int shown=Math.min(all.size(),Diagnostic.LIMIT);
@@ -114,6 +117,8 @@ public final class Main {
         if(context!=null)System.err.println("\nIn "+context);
         if(all.size()>shown)System.err.println("\n... and "+(all.size()-shown)+" more");
         if(all.size()>1)System.err.println("\n"+all.size()+" errors");
+        String footer=Explain.footer(all.subList(0,shown).stream().map(Diagnostic::code).toList());
+        if(footer!=null)System.err.println("\n"+footer);
     }
 
     /** A diagnostic in one named validator group, with where to render it. */
@@ -181,9 +186,9 @@ public final class Main {
             if(args[i].equals("--match")){if(++i==args.length||match!=null)throw new IllegalArgumentException("ELCI4001: --match requires one substring");match=args[i];}
             else if(args[i].equals("--seed")){if(++i==args.length||seed!=null)throw new IllegalArgumentException("ELCI4001: --seed requires one integer");seed=number(args[i],"--seed");}
             else if(args[i].equals("--fuzz")){if(++i==args.length||runs!=null)throw new IllegalArgumentException("ELCI4001: --fuzz requires one positive number of runs");runs=(int)number(args[i],"--fuzz");if(runs<1)throw new IllegalArgumentException("ELCI4001: --fuzz requires a positive number of runs");}
-            else if(args[i].startsWith("--"))throw new IllegalArgumentException("Unknown option: "+args[i]);
+            else if(args[i].startsWith("--"))throw new IllegalArgumentException("ELCI4001: Unknown option: "+args[i]);
             else if(directory==null)directory=args[i];
-            else throw new IllegalArgumentException("Expected at most one project directory; see --help");
+            else throw new IllegalArgumentException("ELCI4001: Expected at most one project directory; see --help");
         }
         var project=Project.read(Path.of(directory==null?".":directory));
         var settings=seed==null?org.julclang.testkit.property.PropertyCheck.Settings.defaults():org.julclang.testkit.property.PropertyCheck.Settings.seeded(seed);

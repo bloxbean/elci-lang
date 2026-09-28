@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -67,8 +68,14 @@ public final class Diagnostic extends RuntimeException {
      */
     public static Diagnostic of(List<Diagnostic> found) {
         if (found.isEmpty()) return null;
+        // One mistake can fail several checks alike, such as each comparison inside List.sort;
+        // it is reported once.
+        var seen = new HashSet<String>();
         var sorted = new ArrayList<Diagnostic>();
-        found.forEach(d -> sorted.addAll(d.all()));
+        found.forEach(d -> d.all().forEach(e -> {
+            if (seen.add(e.token.source() + ":" + e.token.line() + ":" + e.token.column() + ":" + e.code + ":" + e.getMessage()))
+                sorted.add(e);
+        }));
         sorted.sort(Comparator.comparing((Diagnostic d) -> d.token.source() == null ? "" : d.token.source())
                 .thenComparingInt(d -> d.token.line()).thenComparingInt(d -> d.token.column()));
         var first = sorted.getFirst();

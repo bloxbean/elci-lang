@@ -17,7 +17,16 @@ final class ProjectInitializer {
 
     private ProjectInitializer() {}
 
+    /** Run {@code elci init}. Every problem with its request is ELCI4001. */
     static int run(String... args) throws IOException {
+        try {
+            return initialize(args);
+        } catch (IllegalArgumentException e) {
+            throw Project.configuration(e);
+        }
+    }
+
+    private static int initialize(String... args) throws IOException {
         Path target = null;
         String purpose = null;
         String validator = null;

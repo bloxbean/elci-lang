@@ -42,6 +42,8 @@ Elm does, so one mistake is not reported again as a different error in a later p
   - Invalid annotations are reported together, and their declarations are treated as failed.
 - **Order and limit.** Diagnostics are reported in source order: by module, then line and
   column. At most 20 are shown per run, followed by `and N more`.
+- **Once each.** One mistake can fail several checks alike, such as each comparison inside
+  `List.sort`. A diagnostic with the same position, code and message is reported once.
 - **One exception carries them all.** The first diagnostic is thrown as before, and carries
   the others. Every caller that catches a `Diagnostic` sees the same first error as it would
   have. The CLI prints them all, with a blank line between them, and ends with a summary line
@@ -73,19 +75,28 @@ The first line and the JSON fields keep their exact format.
 
 ### 3. `elci explain` (#20)
 
-- `elci explain ELCI2002` prints a long-form entry for the code:
-  - what it means and its typical causes;
-  - a failing example with its output;
-  - the fixed example;
-  - links to the relevant pages.
+- `elci explain ELCI2002` prints a long-form entry for the code. `2002` and `elci2002` name
+  it too. An entry has:
+  - what the code means and its common causes;
+  - a failing example with its exact output;
+  - the fix, and the pages to read.
 
-  `elci explain` with no code lists every code.
-- **Bundled with the compiler.** The entries are Markdown files in the compiler's resources.
-  The site's diagnostics reference links to them. A test compiles every entry's examples and
-  checks that the failing one gives the stated code. Another test checks that every code the
-  compiler emits has an entry.
-- **Pointed to from errors.** The first error of a run with a code that has an entry gets the
-  hint `run elci explain ELCI2002 for more`, once per code in a run.
+  `elci explain` with no code lists every code with its title.
+- **Bundled with the compiler.** The entries are Markdown files in the compiler's resources,
+  `elci/explain/ELCI2002.md`, printed with headings and code fences removed and code
+  indented. Tests check that:
+  - the codes with entries are exactly the codes in the compiler's source;
+  - every example gives exactly the output its entry shows;
+  - every fix compiles.
+
+  ELCI3002, ELCI4002 and ELCI4003 have no example. The first needs a program too large to
+  show, and the others a fault in the compiler or in Julc.
+- **Pointed to from errors.** A failed run's text report ends with one line naming the codes
+  it showed, such as ``For more on ELCI2002, run `elci explain ELCI2002`.`` A hint on each
+  error would repeat itself and change every diagnostic; one line at the end, as `rustc` does,
+  does neither. The JSON report is unchanged.
+- **Configuration errors have a code.** An error in `elci.toml` or on the command line that
+  had no code is now `ELCI4001`, so every error a user meets has an entry.
 
 ## Invariants and evidence required
 

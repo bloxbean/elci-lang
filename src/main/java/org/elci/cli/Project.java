@@ -50,7 +50,18 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
     public boolean named(){return entrypoint==null;}
     private Entrypoint legacy(){if(entrypoint==null)throw new IllegalArgumentException("ELCI4001: this project configures named validators, not an [entrypoint]");return entrypoint;}
 
+    /** Read a project's {@code elci.toml}. Every problem with it is ELCI4001. */
     public static Project read(Path root) throws IOException {
+        try{return parse(root);}catch(IllegalArgumentException e){throw configuration(e);}
+    }
+
+    /** {@code e} with the code ELCI4001, unless its message already starts with a code. */
+    static IllegalArgumentException configuration(IllegalArgumentException e) {
+        String message=e.getMessage()==null?"":e.getMessage();
+        return message.matches("(?s)ELCI\\d{4}: .*")?e:new IllegalArgumentException("ELCI4001: "+message,e);
+    }
+
+    private static Project parse(Path root) throws IOException {
         var sections=new LinkedHashMap<String,Map<String,String>>();var headers=new HashMap<String,Integer>();var lines=new HashMap<String,Integer>();
         String section="";int line=0;
         for(String raw:source(root.resolve("elci.toml")).lines().toList()) {

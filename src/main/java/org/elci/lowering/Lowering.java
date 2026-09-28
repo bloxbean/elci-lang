@@ -1921,6 +1921,10 @@ public final class Lowering {
             throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
                     ? "encoder" : "strict decoder") + " for " + prune(type) + ": ScriptContext has no approved Data"
                     + " codec; only the ledger supplies a context");
+        String unencodable = unencodable(prune(type));
+        if (unencodable != null)
+            throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
+                    ? "encoder" : "strict decoder") + " for " + Types.show(prune(type)) + ": " + unencodable);
         if (prune(type) instanceof Con c && c.name().equals(LEDGER_VALUE)) {
             // The Data map is the value; decoding rebuilds it through the builtins, which reject
             // anything but the canonical form.
@@ -1938,6 +1942,18 @@ public final class Lowering {
             throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
                     ? "encoder" : "strict decoder") + " for " + prune(type) + ": " + e.getMessage());
         }
+    }
+
+    /** Why a type, or a type argument in it, has no Data encoding; null when nothing says so. */
+    private String unencodable(Ty type) {
+        if (!(prune(type) instanceof Con c)) return null;
+        if (c.name().equals("->")) return "functions have no Data encoding";
+        if (c.name().equals("Array")) return "arrays have no Data encoding; convert with Array.toList and Array.fromList";
+        for (Ty argument : c.args()) {
+            String inner = unencodable(argument);
+            if (inner != null) return inner;
+        }
+        return null;
     }
 
     /** Whether {@code type} is or contains the ledger context, through Elci records and unions. */

@@ -147,6 +147,25 @@ class MultipleDiagnosticsTest {
     }
 
     @Test
+    void aMistakeThatFailsSeveralChecksIsReportedOnce() {
+        // List.sort compares its elements in several places; the record is not comparable once.
+        var found = errors("""
+                module Main exposing (main)
+
+
+                type alias Person =
+                    { age : Int }
+
+
+                main : List Person
+                main =
+                    List.sort [ { age = 1 }, { age = 2 } ]
+                """);
+        assertEquals(1, found.size(), found.toString());
+        assertTrue(found.get(0).startsWith("Main 10:5: ELCI2003: `List.sort` needs comparable values"), found.toString());
+    }
+
+    @Test
     void theFirstErrorIsTheFirstInSourceOrder() {
         // The type checker reaches `later` before `earlier` (it checks `main`'s dependencies first),
         // but the error reported first is the earlier one in the file.
@@ -194,8 +213,9 @@ class MultipleDiagnosticsTest {
         Files.writeString(main, source.toString());
         var text = NamedValidatorCliTest.run("check", project.toString());
         assertEquals(1, text.status());
-        assertEquals(20, text.err().split("ELCI2002").length - 1, "At most 20 are shown");
-        assertTrue(text.err().endsWith("\n... and 5 more\n\n25 errors\n"), text.err());
+        assertEquals(20, text.err().split(": ELCI2002: ").length - 1, "At most 20 are shown");
+        assertTrue(text.err().endsWith("\n... and 5 more\n\n25 errors\n\nFor more on ELCI2002, run `elci explain ELCI2002`.\n"),
+                text.err());
         var json = NamedValidatorCliTest.run("check", project.toString(), "--report=json");
         var lines = json.err().strip().split("\n");
         assertEquals(20, lines.length);
