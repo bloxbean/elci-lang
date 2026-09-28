@@ -9,10 +9,15 @@ import org.julclang.core.Constant;
 import org.julclang.core.Term;
 import org.julclang.vm.EvalResult;
 import org.julclang.vm.JulcVm;
+import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.stream.Stream;
 
 class SyntaxCorpusTest {
     private String resource(String path) throws IOException {
@@ -36,6 +41,45 @@ class SyntaxCorpusTest {
                         JulcVm.create()
                                 .evaluate(compiled.program(), compiled.target().ledgerTarget()));
         assertEquals(new Term.Const(Constant.integer(16)), result.resultTerm());
+    }
+
+    /**
+     * The corpus has a module for each production of docs/GRAMMAR.md. Each one's {@code main}
+     * checks what it parsed and returns True.
+     */
+    @TestFactory
+    Stream<DynamicTest> everyValidCorpusModuleCompilesAndChecksItself() throws IOException {
+        var directory = Path.of("src/test/resources/syntax/valid");
+        var modules =
+                Files.list(directory)
+                        .filter(path -> path.toString().endsWith(".elm"))
+                        .filter(path -> !path.getFileName().toString().equals("core-completion.elm"))
+                        .sorted()
+                        .toList();
+        assertFalse(modules.isEmpty(), "no corpus modules in " + directory);
+        return modules.stream()
+                .map(
+                        path ->
+                                DynamicTest.dynamicTest(
+                                        path.getFileName().toString(),
+                                        () -> {
+                                            var compiled =
+                                                    new ElciCompiler()
+                                                            .compile(
+                                                                    Files.readString(path),
+                                                                    "main",
+                                                                    FrontendProgram.Purpose.FUNCTION);
+                                            var result =
+                                                    assertInstanceOf(
+                                                            EvalResult.Success.class,
+                                                            JulcVm.create()
+                                                                    .evaluate(
+                                                                            compiled.program(),
+                                                                            compiled.target().ledgerTarget()));
+                                            assertEquals(
+                                                    new Term.Const(Constant.bool(true)),
+                                                    result.resultTerm());
+                                        }));
     }
 
     @Test
