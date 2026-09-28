@@ -54,11 +54,12 @@ The rules:
 - **Types must agree.** Each parameter must have the same type in every handler. If `Treasury.spend` takes `admin : PubKeyHash` but `Treasury.withdraw` declares and uses it as an `Int`, the check fails:
 
   ```text
-  elci: .../treasury/elci.toml:7: [validators.treasury]
-  .../treasury/src/Treasury.elm:28:1: ELCI2014: Handler Treasury.withdraw does not have the withdraw signature admin -> redeemer -> ScriptContext -> Bool that [validators.treasury] needs (1 parameter); its type is Int -> () -> ScriptContext -> Bool; it has `Int` where the configuration needs `PubKeyHash`
+  .../treasury/src/Treasury.elm:11:1: ELCI2014: Handler Treasury.withdraw does not have the withdraw signature admin -> redeemer -> ScriptContext -> Bool that [validators.treasury] needs (1 parameter); its type is Int -> () -> ScriptContext -> Bool; it has `Int` where the configuration needs `PubKeyHash`
 
-  28| withdraw : Int -> () -> ScriptContext -> Bool
+  11| withdraw : Int -> () -> ScriptContext -> Bool
       ^^^^^^^^
+
+  In .../treasury/elci.toml:6: [validators.treasury]
   ```
 
 - **Boundary types only.** Parameters follow the same rules as datums and redeemers: records, custom types, lists, dictionaries, maps and ledger types such as `PubKeyHash` or `TxOutRef` are fine; functions, arrays and `Value` are not. To parameterize a script by an amount of tokens, take a `List ( PolicyId, TokenName, Int )` and build the value with `Value.fromList`. See [Datums and redeemers](/contracts/datums-and-redeemers/).

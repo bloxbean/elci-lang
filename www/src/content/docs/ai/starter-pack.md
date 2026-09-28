@@ -847,8 +847,9 @@ Run from the project directory (or pass it as the first argument). Exit status i
    parameter must list its keys strictly ascending (integers numerically, bytes lexicographically).
 
 Error format: the first line is `path:line:col: ELCIxxxx: message`. Then come a blank line, the source line
-as `N| code`, a caret line under the reported token, and zero or more `Hint: ...` lines. For a validator, a
-blank line and `In .../elci.toml:<line>: [validators.<name>]` follow:
+as `N| code`, a caret line under the reported token or expression, and zero or more `Hint: ...` lines. For a
+validator, a blank line and `In .../elci.toml:<line>: [validators.<name>]` follow. The report ends with the
+command that explains the code:
 
 ```text
 src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
@@ -856,14 +857,21 @@ src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
 6|     lenght [ 1, 2 ]
        ^^^^^^
 Hint: did you mean `List.length`?
+
+For more on ELCI2005, run `elci explain ELCI2005`.
 ```
 
 Parse the first line, whose form never changes, and apply the hints: they name a close name, a conversion
 (`String.fromInt`, `Bytes.fromString`, `.hash`, `Maybe.withDefault`, `Value.lovelaceOf`) or an import to
-add. The compiler stops at the first error, so rerun it after each fix. Configuration errors start with
-`elci:`. For tools, `--report=json` on `check`, `build`, `eval` and `test` prints the error on stderr as one
-JSON object with `code`, `path`, `line`, `column`, `message`, `hints` (an array), `excerpt` and `context`
-(the validator's `elci.toml` line, or null); prefer it to parsing text. Results and test output stay text.
+add. A run reports every error it finds, in source order and separated by blank lines, up to 20, then
+`... and N more` and a count such as `3 errors`. Each top-level declaration reports its first error. Type
+errors appear only once there are no syntax, import or qualified-name errors, so rerun after each round of
+fixes. A long type mismatch adds `It is:` and `It needs:` lines with the first difference marked.
+`elci explain ELCI2002` explains a code with an example and its fix. Configuration and command-line errors
+start with `elci: ELCI4001:`. For tools, `--report=json` on `check`, `build`, `eval` and `test` prints each error on
+stderr as one JSON object on its own line (JSON Lines), with `code`, `path`, `line`, `column`, `message`,
+`hints` (an array), `excerpt` and `context` (the validator's `elci.toml` line, or null); prefer it to
+parsing text. Results and test output stay text.
 
 ## 11. Error codes: cause and fix
 
@@ -881,21 +889,21 @@ JSON object with `code`, `path`, `line`, `column`, `message`, `hints` (an array)
 | `ELCI2008` | `Cyclic eager values are unsupported; recursion requires functions` | break the cycle |
 | `ELCI2009` | `Entrypoints require concrete types`, `Handler Main.mint requires a concrete type` | no type variables in handlers |
 | `ELCI2010` | `Missing field 'price'; available fields: [amount]` | correct field; annotate the record type |
-| `ELCI2011` | `Duplicate constructor Buy`, `Nothing is a constructor of the built-in Maybe type; choose another name`, `Bytes is a built-in type; choose another name` | rename |
+| `ELCI2011` | `Duplicate constructor Buy: the type Action has one too`, `Nothing is a constructor of the built-in Maybe type; choose another name`, `Bytes is a built-in type; choose another name` | rename |
 | `ELCI2012` | `The type List takes 1 argument, but it is given 2`, `Type is not declared or imported in this module: Amount`, `Write tuple types as ( a, b ) or ( a, b, c )` | declare/import the type |
-| `ELCI2013` | `Functions cannot be serialized as datum or redeemer`, `Arrays have no Data encoding ...`, `org.julclang.ledger.Value has no approved strict Data boundary (BOUNDARY); ...` | Data-encodable boundary types; `List` in data; `List ( PolicyId, TokenName, Int )` for a value |
+| `ELCI2013` | `Functions cannot be serialized as datum or redeemer`, `Arrays have no Data encoding ...`, `A Value cannot be part of a datum, redeemer or parameter yet: ...` | Data-encodable boundary types; `List` in data; `List ( PolicyId, TokenName, Int )` for a value |
 | `ELCI2014` | `Handler Main.spend does not have the spend signature datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (0 parameters); its type is ...` | section 6 |
 | `ELCI2101` | `Missing source module: X; add X.elm under a source directory, or map a Java library to it under [java-modules]`, `Expect is part of the test library; only test modules can import it` | add module / mapping; move to `tests/` |
 | `ELCI2102` | `max is ambiguous: it could be Basics.max or Utils.max. Write the one you mean, like Basics.max, or stop exposing the other` | qualify, or expose the name explicitly |
-| `ELCI2103` | `Handler Main.mint must be exposed by its module` | expose it |
+| `ELCI2103` | `Handler Main.mint must be exposed by its module`, `Entrypoint Main.main must be exposed by its module` | expose it |
 | `ELCI2104` | ``Bytes.fromString needs the Bytes module; add `import Bytes` ``, `Module Helper does not expose 'doubel'`, ``Module Helper is not imported; add `import Helper` ``, `No module Lsit is imported, and none has that name`, `Elci's List module has no find. It has all, any, ...`, `Elci has no Debug.log; use Debug.trace message value, which returns value`, `Map is imported as M; write M.get`, `The module name Tx is taken by Elci's core library; rename this module`, `Import cycle: Main -> Pricing -> Main`, `Java modules cannot be imported with exposing (..); ...` | add the import; section 3.3; rename; break cycles |
 | `ELCI2105` | `...MathLib.divMod: Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>`, `...ValuesLib.add: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module` | use another export; the core `Value` module |
 | `ELCI3001` | `Cannot determine the type converted by Julc.Data.decode; add a type annotation` | annotate (`let xs : List Int`) |
 | `ELCI3002` | specialization limit (256) | remove polymorphic recursion |
-| `ELCI3003` | `Type argument T = Unit of firstOr must have a Plutus Data encoding`, `No strict decoder for org.julclang.ledger.TxOut ...`, `No encoder for List [org.julclang.ledger.Value] ...`, `Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; ...`, `Type argument a = Value of filter contains a Value, which a Java library does not keep in the ledger's canonical order; ...` | Data-encodable type; convert values with `Value.toList`; no `Dict` or `Value` through Java generics |
-| `ELCI4001` | `unknown validator 'x'`, `src/Main.elm is not valid UTF-8 text; save it as UTF-8`, `eval runs an [entrypoint] function; test validators with elci test`, `ABI drift from ...`, `parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats` | fix config or command; sort `Dict` keys |
+| `ELCI3003` | `No encoder for Int -> Int: functions have no Data encoding`, `Type argument T = Unit of firstOr must have a Plutus Data encoding`, `No strict decoder for org.julclang.ledger.TxOut ...`, `No encoder for List [org.julclang.ledger.Value] ...`, `Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; ...`, `Type argument a = Value of filter contains a Value, which a Java library does not keep in the ledger's canonical order; ...` | Data-encodable type; convert values with `Value.toList`; no `Dict` or `Value` through Java generics |
+| `ELCI4001` | `unknown validator 'x'`, `src/Main.elm is not valid UTF-8 text; save it as UTF-8`, `eval runs an [entrypoint] function; test validators with elci test`, `ABI drift from ...`, `parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats`, `Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"`, `Unknown configuration key: [project] name`, `Unknown option: --frob` | fix config or command; sort `Dict` keys |
 | `ELCI4002`, `ELCI4003` | backend rejected or lacks a capability | compiler issue; report it |
-| (none) | `Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"`, `Unknown configuration key: [project] name` | fix `elci.toml` |
+| (none) | `my-project/elci.toml` (no `elci.toml` there), `Source directory not found: ...`, `Handler Main.spent for spend: module Main does not declare spent`, `On-chain Java source not found: ...` | fix `elci.toml` or the path |
 
 A failing scenario that was never run prints `cannot prepare validator 'badge': it takes 1 parameter
 [admin], but the scenario gives 0; set them with Scenario.parameters`.

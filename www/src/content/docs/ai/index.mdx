@@ -102,8 +102,10 @@ A chat can't run the compiler, so paste `elci check` and `elci test` output back
 
 The CLI is the agent's feedback loop. Every command is non-interactive and exits with status 1 on failure.
 Errors are printed as `path:line:column: ELCIxxxx: message`, followed by the source line and any hints
-with the likely fix. With `--report=json`, `check`, `build`, `eval` and `test` print an error as one JSON
-object instead.
+with the likely fix. A run reports every error it finds, one per top-level declaration, so the agent can fix
+several at once. With `--report=json`, `check`, `build`, `eval` and `test` print each error as one JSON
+object on its own line instead. `elci explain <code>` prints the long-form explanation of a code, with an
+example and its fix.
 
 | Command | What the agent uses it for |
 | --- | --- |
@@ -111,6 +113,7 @@ object instead.
 | `elci test .` | Run unit tests, transaction scenarios and property tests. `--match` selects tests, and `--seed` reproduces a property run |
 | `elci eval .` | Evaluate a function project's value and print it with its cost; handy for checking an expression |
 | `elci build .` | Write the deployable artifacts once everything passes |
+| `elci explain <code>` | Explain an error code, such as `ELCI2002`, with an example and its fix |
 | `elci --help` | Every command and option |
 
 A loop that works well:

@@ -102,13 +102,13 @@ The file uses a strict subset of TOML: section headers, `key = "value"` with quo
 arrays of quoted strings. Full-line `#` comments are fine, but a comment at the end of a line is not:
 
 ```text
-elci: Expected a quoted string without escapes: "Main.spend" # the handler
+elci: ELCI4001: Expected a quoted string without escapes: "Main.spend" # the handler
 ```
 
 Unknown or duplicate keys are errors too, which catches typos:
 
 ```text
-elci: Unknown configuration key: [validators.main] boundry
+elci: ELCI4001: Unknown configuration key: [validators.main] boundry
 ```
 
 [elci.toml reference](/reference/configuration/) lists every key.

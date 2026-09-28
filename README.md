@@ -60,7 +60,8 @@ blueprint generation is not implemented yet.
 - [Language guide](docs/LANGUAGE.md): syntax, semantics, types, libraries and limits.
 - [Compiler architecture](docs/ARCHITECTURE.md): frontend/backend API and invariants.
 - [Testing and review](docs/VALIDATION.md): reproducible checks and evidence.
-- [Diagnostic catalogue](docs/DIAGNOSTICS.md): stable compiler error categories.
+- [Diagnostic catalogue](docs/DIAGNOSTICS.md): stable compiler error categories, every-error reports and
+  `elci explain <code>`.
 - [Implementation log](docs/IMPLEMENTATION.md): decisions and milestone status.
 - [Remaining integration roadmap](adr/005-remaining-frontend-and-backend-integration.md): planned Elci work and shared backend dependencies.
 
