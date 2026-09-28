@@ -17,6 +17,13 @@ public final class Main {
         // `--report=json` prints a failure as one JSON object on stderr, for editors and agents (ADR-011).
         boolean json=Arrays.asList(args).contains("--report=json");
         if(json)args=Arrays.stream(args).filter(a->!a.equals("--report=json")).toArray(String[]::new);
+        // Colour for a terminal, unless NO_COLOR is set; --color=always|never overrides (ADR-012).
+        String color="auto";
+        for(String a:args)if(a.startsWith("--color="))color=a.substring("--color=".length());
+        args=Arrays.stream(args).filter(a->!a.startsWith("--color=")).toArray(String[]::new);
+        if(!Set.of("auto","always","never").contains(color)){System.err.println("elci: ELCI4001: --color takes auto, always or never");return 1;}
+        colour=!json&&(color.equals("always")||color.equals("auto")&&System.getenv("NO_COLOR")==null
+                &&System.console()!=null&&System.console().isTerminal());
         try {
             // `elci --help`, `elci help` and `elci <command> --help` all print the usage.
             if(args.length==0||args[0].equals("help")||Arrays.asList(args).contains("--help")) {
@@ -27,7 +34,8 @@ public final class Main {
                         +"       elci apply [project-directory] --validator <name> --param <name>=<plutus-data-json|@file> [--output <file>]\n"
                         +"       elci init <project-directory> [--validator <name>] [--purpose spend|mint|withdraw|certify|vote|propose|function]\n"
                         +"       elci --version\n"
-                        +"check, build, eval and test take --report=json to print a compile failure as one JSON object\n"
+                        +"check, build, eval and test take --report=json to print each compile error as a JSON object on its own line,\n"
+                        +"and --color=auto|always|never for coloured errors (auto: on a terminal, unless NO_COLOR is set)\n"
                         +"A build writes build/validators/<name>/validator.flat, validator.plutus, validator.plutus.json (Julc format) and abi.json (Elci schema)\n"
                         +"for each [validators.<name>] group; an [entrypoint] function project writes build/validator.flat, validator.plutus and abi.json.");return 0;
             }
@@ -91,13 +99,16 @@ public final class Main {
      * excerpt and hints, then the validator group they arose in, then a count when there are
      * several. With {@code --report=json}, one JSON object per line (ADR-012).
      */
+    /** Whether diagnostics are printed in colour: a terminal, or --color=always. */
+    private static boolean colour;
+
     private static void report(Diagnostic diagnostic,java.util.function.Function<String,String> files,String fallback,boolean json,String context) {
         var all=diagnostic.all();
         int shown=Math.min(all.size(),Diagnostic.LIMIT);
         for(int i=0;i<shown;i++) {
             if(json){System.err.println(all.get(i).json(files,fallback,context));continue;}
             if(i>0)System.err.println();
-            System.err.println(all.get(i).explain(files,fallback));
+            System.err.println(all.get(i).explain(files,fallback,colour));
         }
         if(json)return;
         if(context!=null)System.err.println("\nIn "+context);

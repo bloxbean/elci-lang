@@ -18,23 +18,34 @@ public final class Diagnostic extends RuntimeException {
     /** The most diagnostics one run reports (ADR-012). */
     public static final int LIMIT = 20;
 
+    /** How many source lines an underlined span shows before it is cut (ADR-012). */
+    private static final int SPAN_LINES = 5;
+
+    private static final String RESET = "\u001b[0m", BOLD = "\u001b[1m", RED = "\u001b[31m",
+            BOLD_RED = "\u001b[1;31m", CYAN = "\u001b[36m";
+
     private final String code;
     private final Token token;
     private final List<String> hints;
     /** The run's later diagnostics, in source order, when a phase found several (ADR-012). */
     private final List<Diagnostic> others;
+    /** The last token of the reported expression, which the excerpt underlines to; or null. */
+    private final Token spanEnd;
+    /** A mismatch's two types, as source, for laying them out when they are long; or null. */
+    private final String found, needed;
 
     public Diagnostic(String code, Token token, String message) {
         this(code, token, message, List.of());
     }
 
     public Diagnostic(String code, Token token, String message, List<String> hints) {
-        this(code, token, message, hints, List.of());
+        this(code, token, message, hints, List.of(), null, null, null);
     }
 
-    private Diagnostic(String code, Token token, String message, List<String> hints, List<Diagnostic> others) {
+    private Diagnostic(String code, Token token, String message, List<String> hints, List<Diagnostic> others,
+                       Token spanEnd, String found, String needed) {
         super(message); this.code = code; this.token = token; this.hints = List.copyOf(hints);
-        this.others = List.copyOf(others);
+        this.others = List.copyOf(others); this.spanEnd = spanEnd; this.found = found; this.needed = needed;
     }
 
     public String code() { return code; }
@@ -44,7 +55,7 @@ public final class Diagnostic extends RuntimeException {
     /** This diagnostic and the run's others, in source order. */
     public List<Diagnostic> all() {
         var all = new ArrayList<Diagnostic>();
-        all.add(new Diagnostic(code, token, getMessage(), hints));
+        all.add(new Diagnostic(code, token, getMessage(), hints, List.of(), spanEnd, found, needed));
         all.addAll(others);
         return all;
     }
@@ -61,7 +72,8 @@ public final class Diagnostic extends RuntimeException {
         sorted.sort(Comparator.comparing((Diagnostic d) -> d.token.source() == null ? "" : d.token.source())
                 .thenComparingInt(d -> d.token.line()).thenComparingInt(d -> d.token.column()));
         var first = sorted.getFirst();
-        return new Diagnostic(first.code, first.token, first.getMessage(), first.hints, sorted.subList(1, sorted.size()));
+        return new Diagnostic(first.code, first.token, first.getMessage(), first.hints, sorted.subList(1, sorted.size()),
+                first.spanEnd, first.found, first.needed);
     }
 
     /** Every diagnostic of the run changed alike. */
@@ -74,7 +86,17 @@ public final class Diagnostic extends RuntimeException {
         if (more.isEmpty()) return this;
         var all = new ArrayList<>(hints);
         more.forEach(h -> { if (!all.contains(h)) all.add(h); });
-        return new Diagnostic(code, token, getMessage(), all, others);
+        return new Diagnostic(code, token, getMessage(), all, others, spanEnd, found, needed);
+    }
+
+    /** This diagnostic underlining the expression from its token to {@code end}. */
+    public Diagnostic withSpan(Token end) {
+        return new Diagnostic(code, token, getMessage(), hints, others, end, found, needed);
+    }
+
+    /** This diagnostic with a mismatch's types, laid out under the excerpt when they are long. */
+    public Diagnostic withTypes(String found, String needed) {
+        return new Diagnostic(code, token, getMessage(), hints, others, spanEnd, found, needed);
     }
 
     public String render(String source) {
@@ -98,17 +120,52 @@ public final class Diagnostic extends RuntimeException {
 
     /** The first line, then the source line with a caret under the token, then the hints. */
     public String explain(Function<String, String> files, String fallback) {
+        return explain(files, fallback, false);
+    }
+
+    /**
+     * {@link #explain(Function, String)}, in colour for a terminal when {@code colour}: the path
+     * and code, the carets and the hints. Without colour the text is the same, character for
+     * character.
+     */
+    public String explain(Function<String, String> files, String fallback, boolean colour) {
         String path = path(files, fallback);
-        var out = new StringBuilder(render(path));
-        String excerpt = excerpt(path);
+        var out = new StringBuilder(colour
+                ? BOLD + path + ":" + token.line() + ":" + token.column() + ":" + RESET + " " + BOLD_RED + code + RESET
+                        + ": " + getMessage()
+                : render(path));
+        String excerpt = excerpt(path, colour);
         if (excerpt != null) out.append("\n\n").append(excerpt);
-        if (!hints.isEmpty()) out.append(excerpt != null ? "\n" : "\n\n");
-        for (int i = 0; i < hints.size(); i++) out.append(i == 0 ? "" : "\n").append("Hint: ").append(hints.get(i));
+        String types = types(colour);
+        if (types != null) out.append(excerpt != null ? "\n\n" : "\n\n").append(types);
+        if (!hints.isEmpty()) out.append(excerpt != null || types != null ? "\n" : "\n\n");
+        for (int i = 0; i < hints.size(); i++)
+            out.append(i == 0 ? "" : "\n").append(colour ? CYAN + "Hint:" + RESET : "Hint:").append(" ").append(hints.get(i));
         return out.toString();
+    }
+
+    /**
+     * A long mismatch's two types on their own lines, with the first difference marked; null when
+     * the message holds them comfortably.
+     */
+    private String types(boolean colour) {
+        if (found == null || needed == null || found.length() + needed.length() < 60) return null;
+        String first = "It is:     ", second = "It needs:  ";
+        int common = 0;
+        while (common < found.length() && common < needed.length() && found.charAt(common) == needed.charAt(common)) common++;
+        int stop = common;
+        while (stop < needed.length() && " ,()[]{}".indexOf(needed.charAt(stop)) < 0) stop++;
+        if (stop == common) stop = Math.min(common + 1, needed.length());
+        String marker = " ".repeat(second.length() + common) + "^".repeat(Math.max(1, stop - common));
+        return first + found + "\n" + second + needed + "\n" + (colour ? RED + marker + RESET : marker);
     }
 
     /** {@code N| line} and a caret line under the token; null when the source can't be read. */
     public String excerpt(String path) {
+        return excerpt(path, false);
+    }
+
+    private String excerpt(String path, boolean colour) {
         if (path == null || path.startsWith("<") || token.line() < 1) return null;
         List<String> lines;
         try {
@@ -146,9 +203,75 @@ public final class Diagnostic extends RuntimeException {
             start = found;
             width = token.text().length();
         }
-        width = Math.max(1, Math.min(width, line.length() - start));
-        String number = row + "| ";
-        return number + line + "\n" + " ".repeat(number.length() + start) + "^".repeat(width);
+        int endRow = row, endColumn = start + width;
+        if (spanEnd != null && spanEnd.offset() > token.offset() && spanEnd.line() <= lines.size()
+                && token.kind() != Token.Kind.EOF) {
+            String last = lines.get(spanEnd.line() - 1);
+            int lastStart = Math.max(0, spanEnd.column() - 1);
+            int lastWidth = spanEnd.kind() == Token.Kind.STRING ? literalWidth(last, lastStart)
+                    : last.startsWith(spanEnd.text(), lastStart) ? spanEnd.text().length() : 1;
+            endRow = spanEnd.line();
+            endColumn = Math.min(last.length(), lastStart + lastWidth);
+            // The reported expression may close brackets after its last token: include them.
+            int open = 0;
+            for (int r = row; r <= endRow; r++) {
+                String text = lines.get(r - 1);
+                int from = r == row ? start : 0, to = r == endRow ? endColumn : text.length();
+                open += balance(text.substring(Math.min(from, text.length()), Math.min(to, text.length())));
+            }
+            // Past spaces and line breaks, as far as the brackets it opened are closed.
+            int r = endRow, c = endColumn;
+            while (open > 0 && r <= lines.size()) {
+                String text = lines.get(r - 1);
+                while (c < text.length() && text.charAt(c) == ' ') c++;
+                if (c >= text.length()) {
+                    if (r - endRow >= SPAN_LINES) break;
+                    r++;
+                    c = 0;
+                    continue;
+                }
+                if (")]}".indexOf(text.charAt(c)) < 0) break;
+                open--;
+                endRow = r;
+                endColumn = ++c;
+            }
+        }
+        int digits = String.valueOf(endRow).length();
+        var out = new StringBuilder();
+        int shown = 0;
+        for (int r = row; r <= endRow; r++) {
+            if (shown == SPAN_LINES) {
+                out.append(" ".repeat(digits)).append("| …");
+                break;
+            }
+            String text = lines.get(r - 1);
+            String number = String.format("%" + digits + "d| ", r);
+            // The first line from the token, later ones from their indentation; the last to the span's end.
+            int from = r == row ? start : text.length() - text.stripLeading().length();
+            int to = Math.min(text.length(), r == endRow ? endColumn : text.stripTrailing().length());
+            int carets = Math.max(1, to - from);
+            if (shown > 0) out.append("\n");
+            String caretLine = " ".repeat(number.length() + from) + "^".repeat(carets);
+            out.append(number).append(text).append("\n").append(colour ? RED + caretLine + RESET : caretLine);
+            shown++;
+        }
+        return out.toString();
+    }
+
+    /** Opening minus closing brackets in a piece of source, outside string literals. */
+    private static int balance(String text) {
+        int open = 0;
+        boolean string = false;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (string) {
+                if (c == '\\') i++;
+                else if (c == '"') string = false;
+            } else if (c == '"') string = true;
+            else if ("([{".indexOf(c) >= 0) open++;
+            else if (")]}".indexOf(c) >= 0) open--;
+        }
+        return open;
     }
 
     /** The row (from 1) and the column (from 0) just past the last code in a source, or null. */

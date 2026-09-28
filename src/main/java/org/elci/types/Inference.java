@@ -915,7 +915,7 @@ public final class Inference {
                             var node = spine.get(i);
                             // A qualified argument is reported under its whole name.
                             Token at = node.argument() instanceof Name argument ? argument.token() : node.token();
-                            f = apply(f, infer(node.argument(), env), head, i, spine.size(), at);
+                            f = apply(f, infer(node.argument(), env), head, i, spine.size(), at, node.argument());
                             if (node != a) expressions.put(node, f);
                         }
                         yield f;
@@ -953,7 +953,7 @@ public final class Inference {
                                 head = inner.function();
                                 given++;
                             }
-                            yield apply(op.equals("|>") ? z : a, op.equals("|>") ? a : z, head, given, -1, b.token());
+                            yield apply(op.equals("|>") ? z : a, op.equals("|>") ? a : z, head, given, -1, b.token(), null);
                         }
                         if (op.equals("::")) {
                             if (prune(z) instanceof Con list && !list.name().equals("List"))
@@ -1040,9 +1040,11 @@ public final class Inference {
                         for (int i = 0; i < items.elements().size(); i++) {
                             var item = items.elements().get(i);
                             int position = i + 1;
-                            expect(element, infer(item, env), item.token(), (found, needed) -> "The " + ordinal(position)
+                            Ty itemType = infer(item, env);
+                            expect(element, itemType, item.token(), (found, needed) -> "The " + ordinal(position)
                                     + " element of this list is `" + found + "`, but "
-                                    + (position == 2 ? "the first element is `" : "the elements before it are `") + needed + "`");
+                                    + (position == 2 ? "the first element is `" : "the elements before it are `") + needed + "`",
+                                    Hints.ALL, item);
                         }
                         yield con("List", element);
                     }
@@ -1072,9 +1074,11 @@ public final class Inference {
                             if (previous.contains(p))
                                 throw new Diagnostic("ELCI2006", p.token(), "Duplicate pattern");
                             previous.add(p);
-                            expect(out, infer(branch.body(), local), branch.body().token(), (found, needed) -> "The "
+                            Ty bodyType = infer(branch.body(), local);
+                            expect(out, bodyType, branch.body().token(), (found, needed) -> "The "
                                     + ordinal(position) + " branch of this case is `" + found + "`, but "
-                                    + (position == 2 ? "the first branch is `" : "the branches before it are `") + needed + "`");
+                                    + (position == 2 ? "the first branch is `" : "the branches before it are `") + needed + "`",
+                                    Hints.ALL, branch.body());
                         }
                         coverMemo.clear();
                         var missing = missing(previous.stream().map(List::of).toList(), List.of(scrutinee), WITNESS_LIMIT + 1);
@@ -1545,13 +1549,13 @@ public final class Inference {
      * {@code arg}. {@code head} is the function as written; {@code total} is how many arguments
      * it is given, or -1 when the argument is piped in.
      */
-    private Ty apply(Ty f, Ty arg, Expr head, int index, int total, Token at) {
+    private Ty apply(Ty f, Ty arg, Expr head, int index, int total, Token at, Expr argument) {
         Ty function = prune(f);
         String name = head instanceof Name n ? "`" + spelling(n) + "`" : null;
         if (function instanceof Con c && c.name().equals("->")) {
             expect(c.args().get(0), arg, at, (found, needed) -> "The " + ordinal(index + 1) + " argument to "
                     + (name == null ? "this function" : name) + (total < 0 ? ", the value piped in," : "") + " is `" + found
-                    + "`, but " + (name == null ? "it" : name) + " needs `" + needed + "`");
+                    + "`, but " + (name == null ? "it" : name) + " needs `" + needed + "`", Hints.ALL, argument);
             return c.args().get(1);
         }
         if (function instanceof Con) {
@@ -1592,6 +1596,12 @@ public final class Inference {
 
     private void expect(Ty needed, Ty found, Token at, java.util.function.BiFunction<String, String, String> message,
                         Hints hints) {
+        expect(needed, found, at, message, hints, null);
+    }
+
+    /** {@link #expect}, underlining {@code span}, the expression reported at {@code at}, when it fails. */
+    private void expect(Ty needed, Ty found, Token at, java.util.function.BiFunction<String, String, String> message,
+                        Hints hints, Expr span) {
         try {
             unify(needed, found, at);
         } catch (Diagnostic d) {
@@ -1604,8 +1614,37 @@ public final class Inference {
             if (!d.getMessage().startsWith("Type mismatch")) throw d;
             var shown = showAll(List.of(found, needed));
             var list = hints == Hints.NONE ? List.<String>of() : mismatchHints(found, needed, hints == Hints.COMPARABLE);
-            throw new Diagnostic("ELCI2002", at, message.apply(shown.get(0), shown.get(1)), list);
+            var mismatch = new Diagnostic("ELCI2002", at, message.apply(shown.get(0), shown.get(1)), list)
+                    .withTypes(shown.get(0), shown.get(1));
+            throw span == null ? mismatch : mismatch.withSpan(lastToken(span));
         }
+    }
+
+    /** The last token of an expression as written, for underlining all of it (ADR-012). */
+    private static Token lastToken(Expr e) {
+        return switch (e) {
+            case Field f -> {
+                // The field's name follows its dot.
+                Token dot = f.token();
+                yield new Token(f.name(), Token.Kind.NAME, dot.offset() + 1, dot.line(), dot.column() + 1, dot.source());
+            }
+            case RecordValue r -> r.fields().values().stream().map(Inference::lastToken)
+                    .max(java.util.Comparator.comparingInt(Token::offset)).orElse(r.token());
+            case Name n -> n.token();
+            case Literal l -> l.token();
+            case Apply a -> later(lastToken(a.function()), lastToken(a.argument()));
+            case Lambda l -> lastToken(l.body());
+            case If i -> lastToken(i.no());
+            case Binary b -> later(lastToken(b.left()), lastToken(b.right()));
+            case Let l -> lastToken(l.body());
+            case Items i -> i.elements().isEmpty() ? i.token() : i.elements().stream().map(Inference::lastToken)
+                    .max(java.util.Comparator.comparingInt(Token::offset)).orElseThrow();
+            case Case c -> c.branches().isEmpty() ? c.token() : lastToken(c.branches().getLast().body());
+        };
+    }
+
+    private static Token later(Token a, Token b) {
+        return b.offset() >= a.offset() ? b : a;
     }
 
     /**
