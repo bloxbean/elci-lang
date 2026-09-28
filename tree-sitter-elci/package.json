@@ -1,0 +1,33 @@
+{
+  "name": "tree-sitter-elci",
+  "version": "0.1.0",
+  "description": "Elci grammar for tree-sitter",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bloxbean/elci-lang.git",
+    "directory": "tree-sitter-elci"
+  },
+  "keywords": [
+    "incremental",
+    "parsing",
+    "tree-sitter",
+    "elci",
+    "elm",
+    "cardano"
+  ],
+  "files": [
+    "grammar.js",
+    "tree-sitter.json",
+    "queries/*",
+    "src/**"
+  ],
+  "devDependencies": {
+    "tree-sitter-cli": "0.25.10"
+  },
+  "scripts": {
+    "generate": "tree-sitter generate --abi 14",
+    "test": "tree-sitter test",
+    "parse-all": "script/parse-all.sh"
+  }
+}

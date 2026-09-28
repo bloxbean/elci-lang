@@ -1,0 +1,513 @@
+================================================================================
+Operator precedence
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    a + b * c ^ d ^ e - f // g == h && i || j
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (bin_op_expr
+      (bin_op_expr
+        (bin_op_expr
+          (bin_op_expr
+            (bin_op_expr
+              (value_expr
+                (value_qid
+                  (lower_case_identifier)))
+              (operator)
+              (bin_op_expr
+                (value_expr
+                  (value_qid
+                    (lower_case_identifier)))
+                (operator)
+                (bin_op_expr
+                  (value_expr
+                    (value_qid
+                      (lower_case_identifier)))
+                  (operator)
+                  (bin_op_expr
+                    (value_expr
+                      (value_qid
+                        (lower_case_identifier)))
+                    (operator)
+                    (value_expr
+                      (value_qid
+                        (lower_case_identifier)))))))
+            (operator)
+            (bin_op_expr
+              (value_expr
+                (value_qid
+                  (lower_case_identifier)))
+              (operator)
+              (value_expr
+                (value_qid
+                  (lower_case_identifier)))))
+          (operator)
+          (value_expr
+            (value_qid
+              (lower_case_identifier))))
+        (operator)
+        (value_expr
+          (value_qid
+            (lower_case_identifier))))
+      (operator)
+      (value_expr
+        (value_qid
+          (lower_case_identifier))))))
+
+================================================================================
+Right-associative cons and append
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    a :: b ++ c :: d
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (bin_op_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (operator)
+      (bin_op_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (operator)
+        (bin_op_expr
+          (value_expr
+            (value_qid
+              (lower_case_identifier)))
+          (operator)
+          (value_expr
+            (value_qid
+              (lower_case_identifier))))))))
+
+================================================================================
+Pipelines and composition
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    [ 1, 2 ]
+        |> List.map (f >> g >> h)
+        |> List.foldl (+) 0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (bin_op_expr
+      (bin_op_expr
+        (list_expr
+          (number_constant_expr)
+          (number_constant_expr))
+        (operator)
+        (function_call_expr
+          (value_expr
+            (value_qid
+              (module_prefix)
+              (lower_case_identifier)))
+          (parenthesized_expr
+            (bin_op_expr
+              (value_expr
+                (value_qid
+                  (lower_case_identifier)))
+              (operator)
+              (bin_op_expr
+                (value_expr
+                  (value_qid
+                    (lower_case_identifier)))
+                (operator)
+                (value_expr
+                  (value_qid
+                    (lower_case_identifier))))))))
+      (operator)
+      (function_call_expr
+        (value_expr
+          (value_qid
+            (module_prefix)
+            (lower_case_identifier)))
+        (operator_as_function_expr
+          (operator))
+        (number_constant_expr)))))
+
+================================================================================
+Application binds tighter than operators
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    max 1 2 + List.length xs
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (bin_op_expr
+      (function_call_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (number_constant_expr)
+        (number_constant_expr))
+      (operator)
+      (function_call_expr
+        (value_expr
+          (value_qid
+            (module_prefix)
+            (lower_case_identifier)))
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))))))
+
+================================================================================
+Negative arguments, negation and subtraction
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    [ f -1, a - b, a-b, -x * 2, -(scale x 2), -f x, 2 * -3, modBy 3 -7 ]
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (list_expr
+      (function_call_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (negative_argument
+          (operator)
+          (number_constant_expr)))
+      (bin_op_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (operator)
+        (value_expr
+          (value_qid
+            (lower_case_identifier))))
+      (bin_op_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (operator)
+        (value_expr
+          (value_qid
+            (lower_case_identifier))))
+      (bin_op_expr
+        (negate_expr
+          (operator)
+          (value_expr
+            (value_qid
+              (lower_case_identifier))))
+        (operator)
+        (number_constant_expr))
+      (negate_expr
+        (operator)
+        (parenthesized_expr
+          (function_call_expr
+            (value_expr
+              (value_qid
+                (lower_case_identifier)))
+            (value_expr
+              (value_qid
+                (lower_case_identifier)))
+            (number_constant_expr))))
+      (negate_expr
+        (operator)
+        (function_call_expr
+          (value_expr
+            (value_qid
+              (lower_case_identifier)))
+          (value_expr
+            (value_qid
+              (lower_case_identifier)))))
+      (bin_op_expr
+        (number_constant_expr)
+        (operator)
+        (negate_expr
+          (operator)
+          (number_constant_expr)))
+      (function_call_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (number_constant_expr)
+        (negative_argument
+          (operator)
+          (number_constant_expr))))))
+
+================================================================================
+A space before the minus and none after it makes an argument
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    a -b
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (function_call_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (negative_argument
+        (operator)
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))))))
+
+================================================================================
+Operators as functions
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    ( (+), (::), [ (-), (|>) ] )
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (tuple_expr
+      (operator_as_function_expr
+        (operator))
+      (operator_as_function_expr
+        (operator))
+      (list_expr
+        (operator_as_function_expr
+          (operator))
+        (operator_as_function_expr
+          (operator))))))
+
+================================================================================
+If with else-if
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    if a then
+        1
+
+    else if b then
+        2
+
+    else
+        3
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (if_else_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (number_constant_expr)
+      (if_else_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (number_constant_expr)
+        (number_constant_expr)))))
+
+================================================================================
+The else branch takes a following operator
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    if a then b else c |> d
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (if_else_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (bin_op_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (operator)
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))))))
+
+================================================================================
+Lambda with patterns
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    List.map (\( a, b ) _ -> a + b) pairs
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (function_call_expr
+      (value_expr
+        (value_qid
+          (module_prefix)
+          (lower_case_identifier)))
+      (parenthesized_expr
+        (anonymous_function_expr
+          (tuple_pattern
+            (lower_pattern
+              (lower_case_identifier))
+            (lower_pattern
+              (lower_case_identifier)))
+          (anything_pattern)
+          (arrow)
+          (bin_op_expr
+            (value_expr
+              (value_qid
+                (lower_case_identifier)))
+            (operator)
+            (value_expr
+              (value_qid
+                (lower_case_identifier))))))
+      (value_expr
+        (value_qid
+          (lower_case_identifier))))))
+
+================================================================================
+Tuples, lists and unit
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    ( (), [], ( [ 1, 2 ], ( 1, "two", True ) ) )
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (tuple_expr
+      (unit_expr)
+      (list_expr)
+      (tuple_expr
+        (list_expr
+          (number_constant_expr)
+          (number_constant_expr))
+        (tuple_expr
+          (number_constant_expr)
+          (string_constant_expr)
+          (boolean))))))

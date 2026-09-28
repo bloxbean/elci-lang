@@ -1,0 +1,123 @@
+================================================================================
+Strings and escapes
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    "a \"quoted\" \\ word\n\t\r" ++ "{- not a comment -}" ++ "-- nor this"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (bin_op_expr
+      (string_constant_expr
+        (string_escape)
+        (string_escape)
+        (string_escape)
+        (string_escape)
+        (string_escape)
+        (string_escape))
+      (operator)
+      (bin_op_expr
+        (string_constant_expr)
+        (operator)
+        (string_constant_expr)))))
+
+================================================================================
+Integers
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    1000000000000000000000000 + 007
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (bin_op_expr
+      (number_constant_expr)
+      (operator)
+      (number_constant_expr))))
+
+================================================================================
+Nested block comments
+================================================================================
+
+module Main exposing (main)
+
+{- outer {- inner -} still outer -}
+
+
+main =
+    {--} 1 -- trailing
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (block_comment)
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (block_comment)
+    (number_constant_expr))
+  (line_comment))
+
+================================================================================
+Keywords that are names elsewhere
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    alias + index + office
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (bin_op_expr
+      (bin_op_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (operator)
+        (value_expr
+          (value_qid
+            (lower_case_identifier))))
+      (operator)
+      (value_expr
+        (value_qid
+          (lower_case_identifier))))))

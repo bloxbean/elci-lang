@@ -1,0 +1,313 @@
+================================================================================
+Signature and definition
+================================================================================
+
+module Main exposing (main)
+
+
+main : Int
+main =
+    1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (type_annotation
+      (lower_case_identifier)
+      (type_expression
+        (type_ref
+          (upper_case_qid
+            (upper_case_identifier)))))
+    (function_declaration_left
+      (lower_case_identifier))
+    (number_constant_expr)))
+
+================================================================================
+Function with irrefutable parameter patterns
+================================================================================
+
+module Main exposing (swap)
+
+
+swap : ( a, b ) -> { value : Int } -> ( b, a )
+swap ( first, second ) { value } =
+    ( second, first )
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (type_annotation
+      (lower_case_identifier)
+      (type_expression
+        (tuple_type
+          (type_expression
+            (type_variable
+              (lower_case_identifier)))
+          (type_expression
+            (type_variable
+              (lower_case_identifier))))
+        (arrow)
+        (record_type
+          (field_type
+            (lower_case_identifier)
+            (type_expression
+              (type_ref
+                (upper_case_qid
+                  (upper_case_identifier))))))
+        (arrow)
+        (tuple_type
+          (type_expression
+            (type_variable
+              (lower_case_identifier)))
+          (type_expression
+            (type_variable
+              (lower_case_identifier))))))
+    (function_declaration_left
+      (lower_case_identifier)
+      (tuple_pattern
+        (lower_pattern
+          (lower_case_identifier))
+        (lower_pattern
+          (lower_case_identifier)))
+      (record_pattern
+        (lower_pattern
+          (lower_case_identifier))))
+    (tuple_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (value_expr
+        (value_qid
+          (lower_case_identifier))))))
+
+================================================================================
+Type alias with parameters
+================================================================================
+
+module Main exposing (Box)
+
+
+type alias Box a =
+    { value : a, label : String }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_type
+        (upper_case_identifier))))
+  (type_alias_declaration
+    (upper_case_identifier)
+    (type_variable
+      (lower_case_identifier))
+    (type_expression
+      (record_type
+        (field_type
+          (lower_case_identifier)
+          (type_expression
+            (type_variable
+              (lower_case_identifier))))
+        (field_type
+          (lower_case_identifier)
+          (type_expression
+            (type_ref
+              (upper_case_qid
+                (upper_case_identifier)))))))))
+
+================================================================================
+Custom type over several lines
+================================================================================
+
+module Main exposing (Shape(..))
+
+
+type Shape a
+    = Circle Int
+    | Rect { width : Int, height : Int } ( Int, Int )
+    | Other (Maybe a) (List.List (Maybe.Maybe a))
+    | Empty
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_type
+        (upper_case_identifier)
+        (exposed_union_constructors
+          (double_dot)))))
+  (type_declaration
+    (upper_case_identifier)
+    (type_variable
+      (lower_case_identifier))
+    (union_variant
+      (upper_case_identifier)
+      (type_ref
+        (upper_case_qid
+          (upper_case_identifier))))
+    (union_variant
+      (upper_case_identifier)
+      (record_type
+        (field_type
+          (lower_case_identifier)
+          (type_expression
+            (type_ref
+              (upper_case_qid
+                (upper_case_identifier)))))
+        (field_type
+          (lower_case_identifier)
+          (type_expression
+            (type_ref
+              (upper_case_qid
+                (upper_case_identifier))))))
+      (tuple_type
+        (type_expression
+          (type_ref
+            (upper_case_qid
+              (upper_case_identifier))))
+        (type_expression
+          (type_ref
+            (upper_case_qid
+              (upper_case_identifier))))))
+    (union_variant
+      (upper_case_identifier)
+      (parenthesized_type
+        (type_expression
+          (type_ref
+            (upper_case_qid
+              (upper_case_identifier))
+            (type_variable
+              (lower_case_identifier)))))
+      (parenthesized_type
+        (type_expression
+          (type_ref
+            (upper_case_qid
+              (module_prefix)
+              (upper_case_identifier))
+            (parenthesized_type
+              (type_expression
+                (type_ref
+                  (upper_case_qid
+                    (module_prefix)
+                    (upper_case_identifier))
+                  (type_variable
+                    (lower_case_identifier)))))))))
+    (union_variant
+      (upper_case_identifier))))
+
+================================================================================
+Function types and the unit type
+================================================================================
+
+module Main exposing (apply)
+
+
+apply : (a -> b) -> List a -> () -> List b
+apply f xs () =
+    List.map f xs
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (type_annotation
+      (lower_case_identifier)
+      (type_expression
+        (parenthesized_type
+          (type_expression
+            (type_variable
+              (lower_case_identifier))
+            (arrow)
+            (type_variable
+              (lower_case_identifier))))
+        (arrow)
+        (type_ref
+          (upper_case_qid
+            (upper_case_identifier))
+          (type_variable
+            (lower_case_identifier)))
+        (arrow)
+        (unit_type)
+        (arrow)
+        (type_ref
+          (upper_case_qid
+            (upper_case_identifier))
+          (type_variable
+            (lower_case_identifier)))))
+    (function_declaration_left
+      (lower_case_identifier)
+      (lower_pattern
+        (lower_case_identifier))
+      (lower_pattern
+        (lower_case_identifier))
+      (unit_pattern))
+    (function_call_expr
+      (value_expr
+        (value_qid
+          (module_prefix)
+          (lower_case_identifier)))
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (value_expr
+        (value_qid
+          (lower_case_identifier))))))
+
+================================================================================
+A signature continues at any column after an arrow
+================================================================================
+
+module Main exposing (f)
+
+
+f : Int
+-> Int
+f x =
+    x
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (type_annotation
+      (lower_case_identifier)
+      (type_expression
+        (type_ref
+          (upper_case_qid
+            (upper_case_identifier)))
+        (arrow)
+        (type_ref
+          (upper_case_qid
+            (upper_case_identifier)))))
+    (function_declaration_left
+      (lower_case_identifier)
+      (lower_pattern
+        (lower_case_identifier)))
+    (value_expr
+      (value_qid
+        (lower_case_identifier)))))

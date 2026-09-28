@@ -1,0 +1,15 @@
+[
+  (value_declaration)
+  (type_declaration)
+  (type_alias_declaration)
+  (let_in_expr)
+  (case_of_expr)
+  (case_of_branch)
+  (if_else_expr)
+  (record_expr)
+  (record_type)
+  (list_expr)
+  (tuple_expr)
+  (anonymous_function_expr)
+  (block_comment)
+] @fold
