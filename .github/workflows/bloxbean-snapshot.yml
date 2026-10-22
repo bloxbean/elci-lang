@@ -1,5 +1,5 @@
 # From the release-ops standard (templates/workflows/bloxbean-snapshot.yml, 2026-10-04), kept light for now:
-# - Elci has no push CI to gate on, so this workflow runs the tests itself instead of require-green-ci.sh.
+# - The workflow runs the tests itself instead of require-green-ci.sh, so a run never depends on build.yml.
 # - Elci has no Maven Central deployment, so there is no discover step. The one artifact is named below, and
 #   verify-maven-staging.py fails if the build stages any other.
 # - There is no "Development snapshot" GitHub release job, and no cleanup or distribution workflow yet.
@@ -81,7 +81,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Publishing $VERSION"
 
-      # Elci has no push CI yet, so the tests run here, against the version being published.
+      # The tests run here, against the version being published, rather than gating on build.yml.
       - name: Test
         env:
           VERSION: ${{ steps.version.outputs.version }}

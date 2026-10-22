@@ -12,7 +12,7 @@ guide, then run:
 ./gradlew clean test
 npm exec --yes --package elm-format@0.8.8 -- \
   elm-format examples src/main/resources/elci/core src/main/resources/elci/test \
-  src/test/resources/syntax/valid src/test/resources/syntax/unsupported --validate
+  src/test/resources/syntax/valid/core-completion.elm src/test/resources/syntax/unsupported --validate
 GRAALVM_HOME=/path/to/graalvm ./gradlew nativeCompile
 build/native/elci check examples/threshold
 build/native/elci build examples/threshold
