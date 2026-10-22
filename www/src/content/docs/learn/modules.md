@@ -231,7 +231,7 @@ directory in a Git repository that several projects check out, and list that dir
 [project]
 source-directories = ["src", "lib"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 ```
 
 A module in `lib/Finance/Pricing.elm` is then `Finance.Pricing`, imported like any other:

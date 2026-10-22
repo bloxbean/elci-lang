@@ -5,47 +5,28 @@
 Use Java 25 and the checked-in Gradle wrapper. Building a native executable also
 requires GraalVM Native Image and the platform C toolchain.
 
-This development build depends on the Julc revision named by `julcVersion` and
-`julcRevision` in `gradle.properties`. It is currently **`0.1.0-gb-5a3378b`**, Julc
-commit `5a3378ba`, which contains:
-
-- the generic-backend revision-2 stack with PR #195;
-- the typed-map and byte-string follow-up (#196);
-- the testkit's property generators (#197);
-- `JulcArray` in library signatures and typed array templates (#198).
-
-Publish it locally from a Julc checkout at that commit. Maven Central's existing Julc release does not contain
-this experimental frontend boundary.
+This development build depends on the Julc snapshot named by `julcVersion` in
+`gradle.properties`, currently **`0.1.0-pre20-ebaf028-SNAPSHOT`**: Julc `main` at
+commit `ebaf028c` (`julcRevision`), which contains the generic-backend revision 2
+(Julc PR #187). Gradle resolves it from the BloxBean Maven repository,
+`https://repo.bloxbean.org/maven/snapshots`, which publishes one version per Julc
+commit. Maven Central's existing Julc release does not contain this experimental
+frontend boundary.
 
 Set these paths for your development machine:
 
 ```sh
 export JAVA_HOME=/path/to/jdk-25
 export GRAALVM_HOME=/path/to/graalvm
-export JULC_WORKTREE=/path/to/julc-worktree
 ```
 
-Publish the required modules from the Julc worktree. Pass the pinned version on
-the command line so that stale JARs published under another development version
-cannot be picked up:
+To test Elci against an unpublished Julc change instead, publish it to Maven local
+from a Julc checkout and set `julcVersion` (and every example's `julc-version`) to
+the version it reports. A `-SNAPSHOT` Julc version gets the commit id inserted, so
+read the published version from `~/.m2/repository/org/julclang/julc-compiler/`
+rather than passing the pinned one with `-Pversion`.
 
-```sh
-cd "$JULC_WORKTREE"
-git checkout "$(sed -n 's/^julcRevision=//p' /path/to/elci-lang/gradle.properties)"
-./gradlew -Pversion="$(sed -n 's/^julcVersion=//p' /path/to/elci-lang/gradle.properties)" \
-  :julc-core:publishToMavenLocal \
-  :julc-vm:publishToMavenLocal \
-  :julc-ledger-api:publishToMavenLocal \
-  :julc-compiler:publishToMavenLocal \
-  :julc-stdlib:publishToMavenLocal \
-  :julc-bls:publishToMavenLocal \
-  :julc-vm-java:publishToMavenLocal \
-  :julc-cardano-client-lib:publishToMavenLocal \
-  :julc-testkit:publishToMavenLocal \
-  :julc-testkit-jqwik:publishToMavenLocal -PskipSigning=true
-```
-
-Return to the Elci project:
+Build and check Elci:
 
 ```sh
 ./gradlew test installDist
@@ -106,7 +87,7 @@ Elm source:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 
 [validators.threshold]
 boundary = "julc-strict-v1"
@@ -146,7 +127,7 @@ and the ledger purpose selects the handler to run:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 
 # One script: spends payouts and withdraws the address's staking rewards.
 [validators.treasury]
@@ -342,8 +323,8 @@ each error as one JSON object on its own line (JSON Lines).
 
 ## 6. Troubleshooting
 
-**Dependency not found:** publish the exact `julcVersion` modules above, then
-check Elci's `gradle.properties`. A project's `julc-version` must equal the
+**Dependency not found:** check that `https://repo.bloxbean.org/maven/snapshots` is
+reachable and that `julcVersion` in Elci's `gradle.properties` is a published snapshot. A project's `julc-version` must equal the
 compiler's pinned `julcVersion` (`elci --version` prints it). Both projects require Java 25.
 
 **No supported Java export:** only bundled `@OnchainLibrary` sources with mapped

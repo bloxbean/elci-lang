@@ -19,7 +19,7 @@ List the names under `parameters` in the validator's table. The handlers receive
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 
 [validators.drop]
 boundary = "julc-strict-v1"

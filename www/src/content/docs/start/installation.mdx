@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Build the elci compiler from source with Java 25 and the pinned Julc modules, optionally as a native executable, and put it on your PATH.
+description: Build the elci compiler from source with Java 25, optionally as a native executable, and put it on your PATH.
 sidebar:
   order: 2
 ---
@@ -11,28 +11,28 @@ On this page you build the `elci` command-line compiler from source and put it o
 Java 25. GraalVM is only needed if you also want the native executable.
 
 :::note[Development preview]
-Elci depends on a development build of [Julc](https://github.com/bloxbean/julc) that is not on Maven
-Central. Before you build Elci, you build that exact Julc version and publish it to your local Maven
-repository (`~/.m2`). The steps below do this for you.
+Elci depends on a development snapshot of [Julc](https://github.com/bloxbean/julc) that is not on Maven
+Central. Gradle downloads that exact version from the BloxBean Maven repository
+(`https://repo.bloxbean.org/maven/snapshots`), so you don't need to build Julc yourself.
 :::
 
 ## Prerequisites
 
 | Tool | Needed for | Notes |
 | --- | --- | --- |
-| JDK 25 | Building Elci and Julc, and running the JVM `elci` | Set `JAVA_HOME` to it |
-| Git | Cloning Elci and Julc | |
+| JDK 25 | Building Elci and running the JVM `elci` | Set `JAVA_HOME` to it |
+| Git | Cloning Elci | |
 | GraalVM 25 with `native-image` | Only the native `elci` executable | Also needs your platform's C toolchain |
 | Node.js and npm | Only formatting with elm-format | Optional |
 
-You don't need to install Gradle: both projects include the Gradle wrapper (`./gradlew`). The commands
+You don't need to install Gradle: the project includes the Gradle wrapper (`./gradlew`). The commands
 below are for macOS and Linux shells.
 
 ## Build from source
 
 <Steps>
 
-1. **Check your Java version.** Gradle builds both projects with Java 25:
+1. **Check your Java version.** Gradle builds Elci with Java 25:
 
    ```sh
    java -version
@@ -41,50 +41,27 @@ below are for macOS and Linux shells.
    The first line of the output should report version 25. If it doesn't, install a JDK 25 and point
    `JAVA_HOME` at it.
 
-2. **Clone Elci and Julc side by side.**
+2. **Clone Elci.**
 
    ```sh
    git clone https://github.com/bloxbean/elci-lang.git
-   git clone https://github.com/bloxbean/julc.git
    ```
 
-3. **Find the pinned Julc version.** Elci's `gradle.properties` names the Julc version it was built and
-   tested with, and the exact commit:
+3. **Check the pinned Julc version.** Elci's `gradle.properties` names the Julc snapshot it was built
+   and tested with, and the Julc commit it was built from:
 
    ```sh
    grep '^julc' elci-lang/gradle.properties
    ```
 
    ```text
-   julcVersion=0.1.0-gb-5a3378b
-   julcRevision=5a3378ba4b84f5b335d47bca788134df80108fa1
+   julcVersion=0.1.0-pre20-ebaf028-SNAPSHOT
+   julcRevision=ebaf028c982479906a1f9449b9fef68fa7836301
    ```
 
-4. **Publish that Julc version to your local Maven repository.** Check out the pinned commit, then publish
-   the modules Elci uses. Pass the version on the command line, so that JARs published earlier under another
-   development version can't be picked up by mistake:
+   The first build downloads that version from the BloxBean Maven repository.
 
-   ```sh
-   cd julc
-   git checkout "$(sed -n 's/^julcRevision=//p' ../elci-lang/gradle.properties)"
-   ./gradlew -Pversion="$(sed -n 's/^julcVersion=//p' ../elci-lang/gradle.properties)" \
-     :julc-core:publishToMavenLocal \
-     :julc-vm:publishToMavenLocal \
-     :julc-ledger-api:publishToMavenLocal \
-     :julc-compiler:publishToMavenLocal \
-     :julc-stdlib:publishToMavenLocal \
-     :julc-bls:publishToMavenLocal \
-     :julc-vm-java:publishToMavenLocal \
-     :julc-cardano-client-lib:publishToMavenLocal \
-     :julc-testkit:publishToMavenLocal \
-     :julc-testkit-jqwik:publishToMavenLocal -PskipSigning=true
-   cd ..
-   ```
-
-   The modules land in `~/.m2/repository/org/julclang/`. Repeat this step whenever you update Elci to a
-   version that pins a different Julc revision.
-
-5. **Build the Elci CLI.**
+4. **Build the Elci CLI.**
 
    ```sh
    cd elci-lang
@@ -94,7 +71,7 @@ below are for macOS and Linux shells.
    This creates `build/install/elci/bin/elci`, a launcher script that runs the compiler on your Java 25.
    To run Elci's own test suite first, use `./gradlew test installDist`.
 
-6. **Optional: build the native executable.** Point `GRAALVM_HOME` at a GraalVM 25 installation that
+5. **Optional: build the native executable.** Point `GRAALVM_HOME` at a GraalVM 25 installation that
    contains `bin/native-image`, then run:
 
    ```sh
@@ -105,7 +82,7 @@ below are for macOS and Linux shells.
    This creates `build/native/elci`. It starts fast and doesn't need Java at runtime, but it only runs on
    the platform you built it on.
 
-7. **Put `elci` on your `PATH`.** From the `elci-lang` directory, add one of the two builds:
+6. **Put `elci` on your `PATH`.** From the `elci-lang` directory, add one of the two builds:
 
    ```sh
    # The JVM build
@@ -118,14 +95,14 @@ below are for macOS and Linux shells.
    Add the same line, with the absolute path, to your shell profile (for example `~/.zshrc` or
    `~/.bashrc`) to keep it in new terminals.
 
-8. **Check the installation.**
+7. **Check the installation.**
 
    ```sh
    elci --version
    ```
 
    ```text
-   elci 0.1.0-dev / julc 0.1.0-gb-5a3378b
+   elci 0.1.0-dev / julc 0.1.0-pre20-ebaf028-SNAPSHOT
    ```
 
    The first part is the Elci version and the second is the Julc version the compiler is pinned to.
@@ -143,14 +120,14 @@ against `SHA256SUMS`, and put the `elci` executable on your `PATH` without insta
 Every project's `elci.toml` records the Julc version it expects:
 
 ```toml
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 ```
 
 It must equal the version that `elci --version` prints. `elci init` writes the right value for you. If they
 differ, for example after you upgrade Elci, every command stops with:
 
 ```text
-elci: ELCI4001: Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"
+elci: ELCI4001: Julc version does not match this compiler; expected julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 ```
 
 Update `julc-version` in `elci.toml`, then rebuild and re-run your tests. A new Julc version can change
@@ -180,9 +157,9 @@ numbers. See [Coming from Elm](/learn/coming-from-elm/).
 
 ## Troubleshooting
 
-- **Could not resolve `org.julclang:...` while building Elci.** The pinned Julc modules are not in your local
-  Maven repository. Repeat step 4, and check that the version you published matches `julcVersion` in
-  `gradle.properties`.
+- **Could not resolve `org.julclang:...` while building Elci.** Gradle could not download the pinned Julc
+  snapshot. Check that `https://repo.bloxbean.org/maven/snapshots` is reachable from your machine (a proxy or
+  firewall can block it), and that `julcVersion` in `gradle.properties` is unchanged.
 - **Gradle reports a Java toolchain problem.** Elci and Julc need Java 25. Check `java -version` and
   `JAVA_HOME`.
 - **`GRAALVM_HOME must point to a GraalVM installation containing native-image`.** `nativeCompile` needs

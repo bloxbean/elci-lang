@@ -224,8 +224,8 @@ pretending their signatures are concrete Data.
 
 This milestone was introduced against Julc's library-description boundary
 (`d6e716e2`, ADR-050), which is now merged. Elci currently pins the Julc revision
-in `gradle.properties` (see [Getting started](GETTING_STARTED.md)); publish that
-exact version to Maven local before building Elci. Source JARs are compiled using
+in `gradle.properties` (see [Getting started](GETTING_STARTED.md)); Gradle resolves
+that exact snapshot from the BloxBean Maven repository. Source JARs are compiled using
 the target and compiler selected by Elci.
 
 Validation for this milestone: 81 Elci tests and 2,276 Julc compiler, stdlib,

@@ -38,7 +38,7 @@ Required in every project.
 | --- | --- | --- |
 | `source-directories` | yes | Array of directories holding source modules, relative to the project. At least one; each must exist. |
 | `target` | yes | Must be `"plutus-v3-pv11-uplc-1.1.0"`, the only supported target. |
-| `julc-version` | yes | Must equal the Julc version the compiler is pinned to, currently `"0.1.0-gb-5a3378b"`. `elci --version` prints it. |
+| `julc-version` | yes | Must equal the Julc version the compiler is pinned to, currently `"0.1.0-pre20-ebaf028-SNAPSHOT"`. `elci --version` prints it. |
 | `library-jars` | no | Array of JAR paths, relative to the project, that contain on-chain Java library sources. See [Java libraries](/advanced/java-libraries/). |
 | `expected-abi` | no | Path of a committed `abi.json` to compare with the build. **Function projects only**; validators set it in their own table. |
 
@@ -136,7 +136,7 @@ ABI, a Java library JAR, a second source directory and a custom test directory.
 [project]
 source-directories = ["src", "lib"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 library-jars = ["libs/pricing.jar"]
 
 # One script with two purposes and a deployment parameter.
@@ -189,7 +189,7 @@ This is what `elci init my-project --purpose function` creates:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 
 [entrypoint]
 module = "Main"
@@ -201,7 +201,7 @@ purpose = "function"
 
 | Mistake | Message |
 | --- | --- |
-| Wrong `julc-version` | `ELCI4001: Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"` |
+| Wrong `julc-version` | `ELCI4001: Julc version does not match this compiler; expected julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"` |
 | Wrong `target` | `ELCI4001: Unsupported target; expected plutus-v3-pv11-uplc-1.1.0` |
 | Misspelled key | `ELCI4001: Unknown configuration key: [project] name` |
 | Unknown table | `ELCI4001: elci.toml:6: unknown configuration section: dependencies` |
@@ -214,7 +214,7 @@ purpose = "function"
 | Neither project kind | `ELCI4001: elci.toml must configure at least one [validators.<name>], or an [entrypoint] function` |
 | `expected-abi` in `[project]` of a validator project | `ELCI4001: [project] expected-abi applies to [entrypoint] projects; set expected-abi in each [validators.<name>] table` |
 | Unquoted value | `ELCI4001: Expected a quoted string without escapes: julc-strict-v1` |
-| Comment after a value | `ELCI4001: Expected a quoted string without escapes: "0.1.0-gb-5a3378b" # pinned` |
+| Comment after a value | `ELCI4001: Expected a quoted string without escapes: "0.1.0-pre20-ebaf028-SNAPSHOT" # pinned` |
 | Multi-line array | `ELCI4001: elci.toml:3: expected key = value` |
 | Missing source directory | `ELCI4001: Source directory not found: my-project/lib` |
 | Remapping a core library | `ELCI4001: my-project/elci.toml:6: [validators.main]: [java-modules] may not remap Julc.TypedMap, which the Elci core library uses for org.julclang.stdlib.lib.TypedMapLib` |

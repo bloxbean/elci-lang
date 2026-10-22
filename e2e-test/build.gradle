@@ -1,7 +1,16 @@
 plugins {
     id 'java'
 }
-repositories { mavenLocal(); mavenCentral() }
+repositories {
+    mavenLocal()
+    mavenCentral()
+    // BloxBean Maven repository: development snapshots of BloxBean projects, including the pinned Julc
+    // (release-ops docs/12-bloxbean-maven-repository.md). snapshotsOnly() keeps releases on Maven Central.
+    maven {
+        url = uri('https://repo.bloxbean.org/maven/snapshots')
+        mavenContent { snapshotsOnly() }
+    }
+}
 java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 
 def cclVersion = '0.8.0-pre5'

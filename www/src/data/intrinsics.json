@@ -1,6 +1,6 @@
 {
   "description": "Signatures of Elci's compiler-provided functions that have no Elci source: the Bytes, Julc.Data and Debug modules, the Basics intrinsics (not, modBy, remainderBy and the ^ operator) and the built-in constructors. Basics, List, Maybe, Result, String, Tuple, Dict, Map and Array are Elci source modules bundled with the compiler; Expect, Scenario and Property are the test library. Every module imports Basics exposing (..), List, Maybe exposing (Maybe(..)), Result exposing (Result(..)), String, Tuple and Debug by default, as in Elm. Every signature was type-checked with the Elci CLI.",
-  "compiler": "elci 0.1.0-dev / julc 0.1.0-gb-5a3378b",
+  "compiler": "elci 0.1.0-dev / julc 0.1.0-pre20-ebaf028-SNAPSHOT",
   "modules": [
     {
       "module": "Bytes",
