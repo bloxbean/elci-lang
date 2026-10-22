@@ -1,0 +1,82 @@
+# Elci
+
+> Elci is an Elm-syntax functional language for Cardano smart contracts. It compiles to Plutus V3 scripts through Julc, with named multi-purpose validators, strict datum/redeemer decoding and built-in unit, scenario and property tests. Development preview.
+
+Elci is not browser Elm: no Html, ports, Float, typeclasses or Elm packages. Every top-level declaration needs a type signature. Evaluation is strict. Verify generated code with `elci check` and `elci test`.
+
+## Start here for agents
+
+- [AI starter pack](https://elci-lang.dev/ai/starter-pack.md): everything needed to write correct Elci; read it first
+- [Agent instructions](https://elci-lang.dev/ai/agent-instructions.md): compact rules for AGENTS.md or CLAUDE.md
+- [Full documentation](https://elci-lang.dev/llms-full.txt): every page in one file
+
+## Machine-readable
+
+- [Catalog](https://elci-lang.dev/ai/catalog.json): signatures of bundled modules and Java libraries
+- [Diagnostics](https://elci-lang.dev/ai/diagnostics.json): ELCI codes
+- [Examples](https://elci-lang.dev/ai/examples.json): complete example projects
+- [Manifest](https://elci-lang.dev/ai/manifest.json): versions and checksums
+
+## Start here
+
+- [Why Elci](https://elci-lang.dev/ai/pages/start/introduction.md): What Elci is, who it is for, how it turns Elm-syntax source into Plutus V3 scripts, and what you get from it today.
+- [Installation](https://elci-lang.dev/ai/pages/start/installation.md): Build the elci compiler from source with Java 25, optionally as a native executable, and put it on your PATH.
+- [Your first validator](https://elci-lang.dev/ai/pages/start/first-validator.md): Create a validator with elci init, read every generated file, check, test and build it, then change it to require a second signature.
+- [Anatomy of a project](https://elci-lang.dev/ai/pages/start/project-tour.md): What each file and directory in an Elci project is for, from elci.toml and src/ to tests/ and the build outputs.
+
+## Build with AI
+
+- [Build with AI](https://elci-lang.dev/ai/pages/ai.md): Point Claude Code, Codex, Cursor, Copilot or any coding agent at Elci's AI resources, and let it write, check and test Elci contracts.
+- [Elci AI starter pack](https://elci-lang.dev/ai/pages/ai/starter-pack.md): Everything an AI agent needs to write correct Elci on the first try. Ingest this page before generating Elci code.
+- [Agent instructions](https://elci-lang.dev/ai/pages/ai/agent-instructions.md): A compact ruleset for AI coding agents working in an Elci project. Save it as AGENTS.md, CLAUDE.md or a Cursor rule.
+
+## Learn the language
+
+- [Values, functions and types](https://elci-lang.dev/ai/pages/learn/basics.md): Elci's basic types, operators, functions with type signatures, lambdas, currying and generic functions, with examples you can run.
+- [Conditionals, let and pipelines](https://elci-lang.dev/ai/pages/learn/control-flow.md): Make decisions with if and case, name intermediate values with let, chain calls with pipelines, and understand Elci's strict evaluation.
+- [Records and tuples](https://elci-lang.dev/ai/pages/learn/records-and-tuples.md): Group values with records and tuples, update and destructure them, and see how they are encoded as on-chain data.
+- [Custom types and pattern matching](https://elci-lang.dev/ai/pages/learn/custom-types.md): Define custom types, match on them exhaustively with case, use Maybe and Result, nest patterns, and see how constructors are encoded on-chain.
+- [Lists, dictionaries, maps and arrays](https://elci-lang.dev/ai/pages/learn/collections.md): Work with Elci's collections, List, Dict, Map and Array, write your own list functions with recursion, and choose the right one for on-chain cost.
+- [Modules and imports](https://elci-lang.dev/ai/pages/learn/modules.md): Split code into modules, control what each module exposes, import Elci modules and Julc Java libraries, and share code between projects.
+- [Coming from Elm](https://elci-lang.dev/ai/pages/learn/coming-from-elm.md): What carries over from Elm 0.19 to Elci and what changes, from the program model and the core library to Data encoding, Dict, Map and strict decoding.
+
+## Write contracts
+
+- [Validators and purposes](https://elci-lang.dev/ai/pages/contracts/validators.md): Declare validators in elci.toml, give each purpose a handler with the right signature, and let one script serve several purposes.
+- [Reading the transaction](https://elci-lang.dev/ai/pages/contracts/reading-the-transaction.md): What a handler can read from the ScriptContext, the ledger types behind it, and verified recipes with the Tx and Interval modules for signers, validity ranges, inputs, payments, datums and minting, including the defence against double satisfaction.
+- [Datums and redeemers](https://elci-lang.dev/ai/pages/contracts/datums-and-redeemers.md): Which types can be datums, redeemers and parameters, how strict decoding protects a validator, the three spending-datum profiles, and exactly how Elci values are encoded as Plutus Data.
+- [Parameterized validators](https://elci-lang.dev/ai/pages/contracts/parameters.md): Declare deployment parameters, test them with scenarios, and apply them to a built script with elci apply and cardano-cli's detailed Data JSON.
+- [Build and deploy](https://elci-lang.dev/ai/pages/contracts/build-and-deploy.md): What elci build writes, how abi.json and expected-abi guard your data layout, where script hashes come from, and how to load an artifact in Java with Cardano Client Lib.
+
+## Test your contracts
+
+- [Unit tests](https://elci-lang.dev/ai/pages/testing/unit-tests.md): Write Bool and Expect tests for your Elci code, run them with elci test, read the results and choose which tests run.
+- [Transaction scenarios](https://elci-lang.dev/ai/pages/testing/scenarios.md): Test validators with whole transactions. Describe a spend, mint or withdrawal in Elci and elci test runs the deployed script in a complete ledger context.
+- [Property-based tests](https://elci-lang.dev/ai/pages/testing/properties.md): State a rule that must hold for every input, let elci test generate hundreds of inputs, and get the smallest counterexample when the rule breaks.
+- [Testing from Java](https://elci-lang.dev/ai/pages/testing/java.md): Load the scripts elci build publishes into JUnit, build ledger contexts with julc-testkit and run jqwik property tests with datums generated from the validator's ABI.
+- [Debugging and budgets](https://elci-lang.dev/ai/pages/testing/debugging.md): Read elci test failures, find out why a validator rejects a transaction with Debug.trace, and keep execution budgets in check with Scenario.withinBudget.
+
+## Tutorials
+
+- [Build a vesting contract](https://elci-lang.dev/ai/pages/tutorials/vesting.md): Build a vesting validator from an empty directory, with a typed datum and redeemer, a deadline checked against the validity range, a signature check, scenarios and a property test.
+- [A treasury and its badge policy](https://elci-lang.dev/ai/pages/tutorials/treasury.md): Build two cooperating scripts from an empty directory, a treasury that spends payouts and withdraws staking rewards and a badge minting policy, both parameterized by an admin key.
+- [A one-shot minting policy](https://elci-lang.dev/ai/pages/tutorials/one-shot-policy.md): Build a minting policy that can mint only once, by tying it to a seed output that the minting transaction must spend, and prove the accept and reject cases with scenarios and properties.
+
+## Advanced
+
+- [Java libraries](https://elci-lang.dev/ai/pages/advanced/java-libraries.md): Import Julc's on-chain Java libraries and your own library JARs into Elci, and learn how Java types, generic methods and imported records map to Elci.
+- [Standard library](https://elci-lang.dev/ai/pages/advanced/standard-library.md): What ships with Elci — Elm's core modules, written in Elci, and Julc's verified Java libraries as gap fillers — how to import them, and the most useful functions of each.
+- [Bytes, hashes and bits](https://elci-lang.dev/ai/pages/advanced/bytes-and-crypto.md): Build, slice and compare byte strings, convert integers, use bit operations and hashes, verify signatures and print bytes as hex in Elci.
+- [Costs and performance](https://elci-lang.dev/ai/pages/advanced/costs.md): Measure execution budgets and script size, understand how strictness and top-level values affect cost, choose between lists, arrays, dictionaries and maps, and know what values cost.
+- [How Elci compiles](https://elci-lang.dev/ai/pages/advanced/how-it-works.md): The path from .elm source to a Plutus V3 script — Elci's frontend stages, the boundary with Julc's backend, strict data boundaries and the native executable.
+
+## Reference
+
+- [CLI](https://elci-lang.dev/ai/pages/reference/cli.md): Every elci command and option — init, check, build, eval, test, apply and explain — with outputs, exit codes and error formats.
+- [elci.toml](https://elci-lang.dev/ai/pages/reference/configuration.md): Every table and key of elci.toml — project settings, validators, entrypoints, Java modules and tests — with the rules the parser enforces and complete examples.
+- [Core modules](https://elci-lang.dev/ai/pages/reference/core-modules.md): Exact signatures and semantics of Elci's core library, imported by default as in Elm, and of the Dict, Map, Array, Value, Interval, Tx, Bytes, Julc.Data and Debug modules.
+- [Test library](https://elci-lang.dev/ai/pages/reference/test-library.md): Complete API of the Expect, Scenario and Property modules that elci test provides to test modules.
+- [Language reference](https://elci-lang.dev/ai/pages/reference/language.md): Elci's feature matrix, syntax, imports and reserved names, operators and precedence, equality and ordering, constrained type variables, evaluation order and Plutus Data encoding rules.
+- [Grammar](https://elci-lang.dev/ai/pages/reference/grammar.md): Elci's formal grammar in EBNF — the lexical grammar, the exact layout rules, the syntactic grammar, operator precedence, the adjacency rules for `.` and `-`, and the Elm syntax Elci rejects.
+- [Diagnostics](https://elci-lang.dev/ai/pages/reference/diagnostics.md): How to read an Elci error, how a run reports several errors, elci explain, the JSON report for tools, and every ELCI error code with real messages and fixes.
+- [Example projects](https://elci-lang.dev/ai/pages/reference/examples.md): The example projects in the Elci repository, what each one demonstrates and how to check, build, test or evaluate it.

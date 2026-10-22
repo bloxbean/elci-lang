@@ -1,0 +1,393 @@
+# Java libraries
+
+> Import Julc's on-chain Java libraries and your own library JARs into Elci, and learn how Java types, generic methods and imported records map to Elci.
+
+Source: https://elci-lang.dev/advanced/java-libraries/
+
+Elci can call on-chain libraries written in Java for Julc. They complement Elci's
+[core library](https://elci-lang.dev/reference/core-modules/): reach for them when the core has no equivalent, such as floor
+division, validity intervals or signature checks. This page shows how to map a Java library to an Elm-style
+module, how to package your own library as a JAR, how Java types appear in Elci, and which signatures are
+rejected and why.
+
+## How Java imports work
+
+A Julc on-chain library is a Java class annotated with `@OnchainLibrary` whose public static methods
+use a restricted, on-chain subset of Java. Elci never runs that Java on the JVM. Julc parses the library's
+**source code**, compiles each method you use to typed PIR (Plutus IR) and hands it to Elci, which
+type-checks your calls and links the compiled code into your script.
+
+Two consequences follow:
+
+- A library must be available as **source**. Compiled `.class` files alone are not enough.
+- A library call is compiled code, not a builtin. It costs whatever its Java implementation costs on-chain.
+
+## Map a library to a module
+
+Pick a module name and map it to the Java class in the `[java-modules]` table of `elci.toml`:
+
+```toml title="elci.toml"
+[java-modules]
+"Julc.Math" = "org.julclang.stdlib.lib.MathLib"
+```
+
+Then import it like any Elci module. This spend validator, configured as `[validators.offer]` with
+`spend = "Example.Offer.validate"`, accepts an offer of at least the minimum number of whole ada:
+
+```elm title="src/Example/Offer.elm"
+module Example.Offer exposing (validate)
+
+import Julc.Ledger exposing (ScriptContext)
+import Julc.Math as Math
+
+validate : Int -> Int -> ScriptContext -> Bool
+validate minimumAda offeredLovelace _ =
+    Math.floorDiv offeredLovelace 1000000 >= minimumAda
+```
+
+```text
+$ elci check
+validator offer (spend): checked; 264 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+```
+
+The rules:
+
+- **You choose the module name.** `Julc.Math` is a convention, not a built-in name. Nothing is mapped
+  automatically, except `Julc.TypedMap` and `Julc.TypedArray`, which the core `Map` and `Array` modules
+  use and which you may not remap.
+- **Mappings load on import.** An unused mapping is never read. Importing a module that is neither a
+  source module nor mapped fails with `ELCI2101: Missing source module: Julc.Nope; add Julc/Nope.elm under
+  a source directory, or map a Java library to it under [java-modules]`.
+- **Expose names explicitly.** `import Julc.Math exposing (floorDiv)` works; `exposing (..)` is rejected
+  for Java modules (`ELCI2104`). Qualified use through the alias always works. A name you expose
+  explicitly takes precedence over a prelude name, so `import Julc.Math exposing (max)` replaces the
+  prelude's `max` in that module.
+- **Core module names are taken.** A `[java-modules]` key can't be `Basics`, `List`, `Maybe`, `Result`,
+  `String`, `Tuple`, `Map`, `Array`, `Dict`, `Value`, `Interval`, `Tx`, `Set` or `Elci`, or start with
+  `Elci.`.
+- **Names are checked where you use them.** A misspelled export is reported as
+  `ELCI2005: Unknown name 'Math.maximum'; check that the imported module exports it`.
+
+## Bundled libraries
+
+The compiler ships Julc's standard libraries as source, including inside the native executable. Each
+class is in the `org.julclang.stdlib.lib` package:
+
+| Class | Use it for |
+| --- | --- |
+| `MathLib` | `expMod`, `sign`, floor division and modulus (`max`, `min`, `abs` and `pow` are in the prelude as `max`, `min`, `abs` and `^`) |
+| `IntervalLib` | building validity intervals; for deadline checks, use the core [`Interval`](https://elci-lang.dev/reference/core-modules/#interval) module, which has no `-1` sentinel |
+| `ContextsLib` | reading the script context; the core [`Tx`](https://elci-lang.dev/reference/core-modules/#tx) module covers signers, own input and continuing outputs |
+| `OutputLib` | finding outputs and amounts paid to an exact address, staking part included |
+| `ValuesLib` | a few `Value` queries; the core [`Value`](https://elci-lang.dev/reference/core-modules/#value) module covers the rest, and exports that return a `Value` are rejected |
+| `AddressLib` | address and credential helpers |
+| `CryptoLib` | hashes and Ed25519/ECDSA/Schnorr signature checks |
+| `ByteStringLib` | hex and decimal conversion, CBOR serialization |
+| `BitwiseLib` | bitwise operations on byte strings |
+| `ListsLib` | list helpers over `List Data`, plus generic `map`, `filter`, `any`, `all`, `find`, `foldl` |
+| `MapLib` | map helpers over `Map Data Data` |
+
+The [standard library](https://elci-lang.dev/advanced/standard-library/) page lists the verified exports of each library with
+their Elci types.
+
+## Use your own library JAR
+
+You can package your own `@OnchainLibrary` classes and use them the same way. The JAR carries the Java
+source under `META-INF/plutus-sources/`; Elci reads it but never loads or runs its classes.
+
+1. Write the library. Put the source where the JAR expects it: `java/META-INF/plutus-sources/acme/Pricing.java`.
+
+   ```java title="java/META-INF/plutus-sources/acme/Pricing.java"
+   package acme;
+
+   import java.math.BigInteger;
+   import org.julclang.core.types.JulcList;
+   import org.julclang.stdlib.annotation.OnchainLibrary;
+
+   @OnchainLibrary
+   public class Pricing {
+       public record Quote(BigInteger amount, boolean approved) {}
+
+       public sealed interface Action {
+           record Buy(BigInteger amount) implements Action {}
+           record Cancel() implements Action {}
+       }
+
+       public static Quote quote(BigInteger amount) {
+           return new Quote(amount, true);
+       }
+
+       public static BigInteger fee(BigInteger amount, BigInteger basisPoints) {
+           return amount.multiply(basisPoints).divide(BigInteger.valueOf(10000));
+       }
+
+       public static <T> T firstOr(JulcList<T> items, T fallback) {
+           if (items.isEmpty()) return fallback;
+           return items.head();
+       }
+   }
+   ```
+
+2. Package the source into a JAR:
+
+   ```sh
+   mkdir -p libs
+   jar --create --file libs/pricing.jar -C java .
+   ```
+
+3. Add the JAR and the module mapping to `elci.toml`. JAR paths are relative to the project directory:
+
+   ```toml title="elci.toml"
+   [project]
+   source-directories = ["src"]
+   target = "plutus-v3-pv11-uplc-1.1.0"
+   julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+   library-jars = ["libs/pricing.jar"]
+
+   [entrypoint]
+   module = "Main"
+   function = "main"
+   purpose = "function"
+
+   [java-modules]
+   "Acme.Pricing" = "acme.Pricing"
+   ```
+
+4. Import the module and use its functions and types:
+
+   ```elm title="src/Main.elm"
+   module Main exposing (main)
+
+   import Acme.Pricing as Pricing exposing (Action(..), Quote)
+
+   type alias Order =
+       { amount : Int, open : Bool }
+
+   amount : Action -> Int
+   amount action =
+       case action of
+           Buy value ->
+               value
+
+           Cancel ->
+               0
+
+   firstOrder : Order
+   firstOrder =
+       Pricing.firstOr [ { amount = 7, open = True } ] { amount = 0, open = False }
+
+   main : Int
+   main =
+       let
+           quote =
+               Pricing.Quote 250 True
+       in
+       Pricing.fee quote.amount 200
+           + amount (Buy 3)
+           + Pricing.firstOr [ 10, 20 ] 0
+           + firstOrder.amount
+   ```
+
+5. Run it:
+
+   ```text
+   $ elci eval
+   25
+   cpu 7620971, mem 29645
+   ```
+
+The project now looks like this:
+
+- elci.toml
+- java/
+  - META-INF/
+    - plutus-sources/
+      - acme/
+        - Pricing.java
+- libs/
+  - pricing.jar
+- src/
+  - Main.elm
+
+Rules for library JARs:
+
+- **Bundle every source the library needs**, including records and other libraries it calls, even when
+  they live in another JAR. Files are read in a deterministic order.
+- **No duplicates.** Two JARs providing the same class, or a JAR providing a class the compiler already
+  bundles, is an error: `Custom library conflicts with bundled source: org.julclang.stdlib.lib.MathLib`.
+- **A JAR must contain sources.** Otherwise the build stops with `No on-chain Java sources in
+  .../libs/pricing.jar; bundle sources under META-INF/plutus-sources/`.
+- **A normal library JAR works** if it also bundles its sources under `META-INF/plutus-sources/`.
+- **The native executable supports JARs too**, because it reads them as source files.
+
+The runnable version of this pattern is the
+[custom-library example](https://github.com/bloxbean/elci-lang/tree/main/examples/custom-library).
+
+## Java types in Elci
+
+Julc describes each Java parameter and result type, and Elci maps it to an Elci type:
+
+| Java type | Elci type |
+| --- | --- |
+| `BigInteger`, `Integer`, `Long`, `int`, `long`, `short`, `byte`, `char` | `Int` |
+| `boolean`, `Boolean` | `Bool` |
+| `String` | `String` |
+| `byte[]` | `Bytes` |
+| `PlutusData` | `Data` |
+| `List<T>`, `JulcList<T>` | `List t` |
+| `Map<K, V>`, `JulcMap<K, V>` | `Map k v` |
+| `Optional<T>` | `JulcOptional t` (convert with `Julc.Data.fromOptional`) |
+| `JulcArray<T>` | `Array t` |
+| `void` | `()` |
+| A record or sealed interface in library source | a nominal type, such as `Pricing.Quote` |
+| A ledger type such as `PubKeyHash` or `TxOut` | the matching `Julc.Ledger` type |
+| An unbounded type parameter `T` | a type variable, specialized at each use |
+
+Imported types stay **nominal**. `Pricing.Quote` is not interchangeable with an Elci record of the same
+shape, and a `PubKeyHash` is not `Bytes` even though both are byte strings on-chain. Java's `Optional`
+is not Elci's `Maybe` either: their Data tags differ, so you convert explicitly with
+`Julc.Data.fromOptional` and `Julc.Data.toOptional` (see [core modules](https://elci-lang.dev/reference/core-modules/)).
+
+Records and sealed interfaces declared in the library class, or at the top level of its package, can
+be named through the module alias (`Pricing.Quote`) or exposed (`exposing (Quote)`). Two exposed types
+with the same name are rejected as ambiguous; map the other package to a second module name.
+
+## Imported records and sum types
+
+Julc approves a set of operations for each imported type it has verified, and Elci enables exactly those:
+
+| Operation | What you can write |
+| --- | --- |
+| Construct | `Pricing.Quote 250 True`, `Buy 3`. Record fields are in Java declaration order. |
+| Match | Exhaustive `case` over a sealed interface's records, such as `Buy value` and `Cancel`. |
+| Project | Field access: `quote.amount`. |
+| Equality | `==` and `/=`, with Java `equals` semantics. |
+| Encode and decode | `Julc.Data.encode` and `Julc.Data.decode`. |
+| Boundary | Use as a validator's datum, redeemer or parameter type. |
+
+To expose a sum's constructors unqualified, write `exposing (Action(..))`. Types with special layouts
+get fewer operations. The ledger's `Value` is the core [`Value`](https://elci-lang.dev/reference/core-modules/#value) type,
+with its own module and `==`. Apart from Julc's context accessors, no Java library may return one
+(below). Types that contain it, such as `TxOut`, keep field access and matching but have no equality,
+decoding or boundary use.
+
+Here the Java types form a validator's datum and redeemer:
+
+```elm title="src/Shop.elm"
+module Shop exposing (spend)
+
+import Acme.Pricing as Pricing exposing (Action(..), Quote)
+import Julc.Ledger exposing (ScriptContext)
+
+spend : Int -> Quote -> Action -> ScriptContext -> Bool
+spend maximum quote action _ =
+    case action of
+        Buy amount ->
+            quote.approved && amount + Pricing.fee amount 200 <= maximum
+
+        Cancel ->
+            True
+```
+
+```text
+$ elci test
+PASS ShopTest.buysWithinTheMaximum (cpu 11503887, mem 45868)
+PASS ShopTest.overpaymentIsRejected (cpu 11487887, mem 45768)
+2 passed, 0 failed
+```
+
+The record encodes as a constructor with tag 0 and its fields in declaration order. The sealed
+interface's records take tags in declaration order: `Buy` is 0 and `Cancel` is 1. The build's `abi.json`
+records this.
+
+## Generic methods
+
+A generic Java method such as `firstOr` is a **template**. Elci imports it as a generic function and
+asks Julc to compile a separate copy for each concrete type you use it at. In the example above,
+`Pricing.firstOr [ 10, 20 ] 0` compiles a copy for `Int`, and `firstOrder` compiles another for the
+Elci record `Order`. Elci's own records, tuples and unions are valid type arguments.
+
+Every type parameter must have a Plutus Data encoding: an integer, bytes, string, `Bool`, `Data`, a
+record or union (Elci or imported), or a list, map or `JulcOptional` of these. A function or `()` is
+rejected before anything is compiled:
+
+```text
+src/Main.elm:8:5: ELCI3003: Type argument T = Unit of firstOr must have a Plutus Data encoding (DATA_ENCODABLE); functions, unit and native values do not
+```
+
+A type that contains a `Dict` is rejected too. A `Dict` must keep its keys in ascending order, and a library
+could build one that doesn't, so pass it a `Map` or a `List` and build the dictionary with `Dict.fromList`:
+
+```text
+src/Main.elm:14:18: ELCI3003: Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; pass a Map or a List and build the Dict with Dict.fromList
+```
+
+A type that holds a `Value` is rejected for the same reason: every value must stay in the ledger's
+canonical order, and a library could build one that isn't.
+
+```text
+src/Main.elm:9:5: ELCI3003: Type argument a = Value of filter contains a Value, which a Java library does not keep in the ledger's canonical order; build it with the Value module
+```
+
+Calls are strict and curried, in Java argument order: each argument is evaluated once, even under
+partial application.
+
+:::caution[Equality inside a template]
+A template that compares values of its type parameter uses Data equality, whatever the type. For a type
+without equality, such as a `Map` or a type containing one, that comparison is sensitive to map order.
+Avoid instantiating such templates at those types.
+:::
+
+## Programmatic list exports
+
+`ListsLib` also offers `map`, `filter`, `any`, `all`, `find` and `foldl` as generic functions built
+directly in PIR. As in Java, the list comes first:
+
+```toml title="elci.toml"
+[java-modules]
+"Julc.Lists" = "org.julclang.stdlib.lib.ListsLib"
+```
+
+```elm
+openTotal : List Order -> Int
+openTotal items =
+    Lists.filter items (\order -> order.open)
+        |> Lists.foldl (\sum order -> sum + order.amount) 0
+```
+
+The function argument is evaluated once, strictly, even for an empty list. You rarely need these: the
+built-in `List` module needs no configuration, and the same computation written with `List.filter` and
+`List.foldl` was cheaper in our measurement (11.4 million CPU and 288 bytes, against 15.0 million CPU and
+354 bytes).
+
+## What is rejected, and why
+
+Elci never pretends an unsupported Java type is plain `Data`. A signature it cannot represent faithfully
+is rejected when you use it, with the reason:
+
+| Java signature | Result |
+| --- | --- |
+| A type Julc cannot map, such as `Tuple2`, `PlutusData.ListData`, `JulcValue` or BLS points | `ELCI2105: org.julclang.stdlib.lib.MathLib.divMod: Unsupported on-chain source type: Tuple2<BigInteger, BigInteger>` |
+| A result that can hold a ledger `Value`, directly or in a record or union field, except in `ContextsLib` and `OutputLib` | `ELCI2105: org.julclang.stdlib.lib.ValuesLib.add: returns a Value, which Java libraries do not keep in the ledger's canonical order; use the core Value module` |
+| A bounded type parameter, such as `<T extends Comparable<T>>` | `ELCI2105: acme.Pricing.largest: Type parameter T extends Comparable<T> has a bound; generic library methods support only unbounded type parameters` |
+| A raw container, such as `List` without a type argument | `ELCI2105: acme.Pricing.count: Raw or invalid container signature: List` |
+| Overloads with different signatures | `ELCI2105: acme.Pricing.scale: Ambiguous overloaded library export acme.Pricing.scale: overloads with different signatures cannot be told apart on-chain; give them distinct names` |
+| A function, `()` or a type containing a `Dict` or a `Value` as a generic type argument | `ELCI3003` (above) |
+| `exposing (..)` on a Java module | `ELCI2104: Java modules cannot be imported with exposing (..); list the exported names you use` |
+
+Some library shapes stop the whole library from loading, so no export of it can be used:
+
+- A wildcard type such as `JulcList<?>` fails with `Cannot resolve type: ?`.
+- A parameterized record such as `record Box<T>(T value)` fails with `Unknown type: T`.
+
+While a class has an ambiguous overload, Elci reports that overload for every export of the class. Give
+overloads distinct names. Overloads with identical Elci signatures, such as `ByteStringLib`'s two
+`integerToByteString` methods, are exported once.
+
+## Linking and cost
+
+In a validator, each library function and each generic specialization is linked **once per script** and
+shared by all handlers. Zero-argument library values are evaluated once when the script starts, like
+top-level values. In function programs (`elci eval` and each test), a closed copy is inlined at each use.
+A library import therefore adds its compiled size to your script; see
+[costs and performance](https://elci-lang.dev/advanced/costs/) for how to measure it.

@@ -1,0 +1,321 @@
+{
+  "schemaVersion": 1,
+  "site": "https://elci-lang.dev",
+  "elciVersion": "0.1.0-dev",
+  "julcVersion": "0.1.0-pre20-ebaf028-SNAPSHOT",
+  "sourceRevision": "d256614982fad46ce949dadfd7c34857b5c22f0b",
+  "sourceRepository": "https://github.com/bloxbean/elci-lang",
+  "note": "Generated at build time from the documentation and the repository at sourceRevision.",
+  "pages": [
+    {
+      "title": "Why Elci",
+      "description": "What Elci is, who it is for, how it turns Elm-syntax source into Plutus V3 scripts, and what you get from it today.",
+      "url": "https://elci-lang.dev/start/introduction/",
+      "markdown": "https://elci-lang.dev/ai/pages/start/introduction.md",
+      "sha256": "63211f58f9bda48f108f4f6fa20891703314de0e0c8e6edd6ab337629398c31d"
+    },
+    {
+      "title": "Installation",
+      "description": "Build the elci compiler from source with Java 25, optionally as a native executable, and put it on your PATH.",
+      "url": "https://elci-lang.dev/start/installation/",
+      "markdown": "https://elci-lang.dev/ai/pages/start/installation.md",
+      "sha256": "6d81f76d5b8e9f0144cb7e7ad63909f31b8bdfd369f187474653add1a4ede490"
+    },
+    {
+      "title": "Your first validator",
+      "description": "Create a validator with elci init, read every generated file, check, test and build it, then change it to require a second signature.",
+      "url": "https://elci-lang.dev/start/first-validator/",
+      "markdown": "https://elci-lang.dev/ai/pages/start/first-validator.md",
+      "sha256": "a60a03d5df5f6236501c66fafe55e6aeaa2e6ab0fb8318ebe69af39c0cabcd72"
+    },
+    {
+      "title": "Anatomy of a project",
+      "description": "What each file and directory in an Elci project is for, from elci.toml and src/ to tests/ and the build outputs.",
+      "url": "https://elci-lang.dev/start/project-tour/",
+      "markdown": "https://elci-lang.dev/ai/pages/start/project-tour.md",
+      "sha256": "e57451821f4bac07892f67aa40ebbcfeb98acf7d06d540fb3ee0eef32984614a"
+    },
+    {
+      "title": "Build with AI",
+      "description": "Point Claude Code, Codex, Cursor, Copilot or any coding agent at Elci's AI resources, and let it write, check and test Elci contracts.",
+      "url": "https://elci-lang.dev/ai/",
+      "markdown": "https://elci-lang.dev/ai/pages/ai.md",
+      "sha256": "31311a0669b27108e45df3c940fabb6968d64b9d4113646ee97f18b7e473e3ae"
+    },
+    {
+      "title": "Elci AI starter pack",
+      "description": "Everything an AI agent needs to write correct Elci on the first try. Ingest this page before generating Elci code.",
+      "url": "https://elci-lang.dev/ai/starter-pack/",
+      "markdown": "https://elci-lang.dev/ai/pages/ai/starter-pack.md",
+      "sha256": "ec87a421bad4a3bdfb36d90d080211ba26b10841b40a768331d52872d75cdba3"
+    },
+    {
+      "title": "Agent instructions",
+      "description": "A compact ruleset for AI coding agents working in an Elci project. Save it as AGENTS.md, CLAUDE.md or a Cursor rule.",
+      "url": "https://elci-lang.dev/ai/agent-instructions/",
+      "markdown": "https://elci-lang.dev/ai/pages/ai/agent-instructions.md",
+      "sha256": "d43fd81f9b799198d24b97ff1870ce299183527acb6b51167920ec95ff50697a"
+    },
+    {
+      "title": "Values, functions and types",
+      "description": "Elci's basic types, operators, functions with type signatures, lambdas, currying and generic functions, with examples you can run.",
+      "url": "https://elci-lang.dev/learn/basics/",
+      "markdown": "https://elci-lang.dev/ai/pages/learn/basics.md",
+      "sha256": "3ac3ba382f4d89fa5cfb4d30fbc8dd4ff9139df61f480a11e24e43d28798b346"
+    },
+    {
+      "title": "Conditionals, let and pipelines",
+      "description": "Make decisions with if and case, name intermediate values with let, chain calls with pipelines, and understand Elci's strict evaluation.",
+      "url": "https://elci-lang.dev/learn/control-flow/",
+      "markdown": "https://elci-lang.dev/ai/pages/learn/control-flow.md",
+      "sha256": "a070822430c6a7cf15f729eedeaff08f0760dfb9c97d945776ffdb1235779780"
+    },
+    {
+      "title": "Records and tuples",
+      "description": "Group values with records and tuples, update and destructure them, and see how they are encoded as on-chain data.",
+      "url": "https://elci-lang.dev/learn/records-and-tuples/",
+      "markdown": "https://elci-lang.dev/ai/pages/learn/records-and-tuples.md",
+      "sha256": "444e6cf306dbf44f33e229b6f48cfc754d4a65a74f9b2e68846f2de392442d46"
+    },
+    {
+      "title": "Custom types and pattern matching",
+      "description": "Define custom types, match on them exhaustively with case, use Maybe and Result, nest patterns, and see how constructors are encoded on-chain.",
+      "url": "https://elci-lang.dev/learn/custom-types/",
+      "markdown": "https://elci-lang.dev/ai/pages/learn/custom-types.md",
+      "sha256": "5a42a2d3228833ceb2f83f4eadb10d71779bcab900226b1103fa8b9686a9330c"
+    },
+    {
+      "title": "Lists, dictionaries, maps and arrays",
+      "description": "Work with Elci's collections, List, Dict, Map and Array, write your own list functions with recursion, and choose the right one for on-chain cost.",
+      "url": "https://elci-lang.dev/learn/collections/",
+      "markdown": "https://elci-lang.dev/ai/pages/learn/collections.md",
+      "sha256": "1a474115ec9805d866cfaf3aa7983a0fb469fbb10ec4bde3e9b31770cc2786f5"
+    },
+    {
+      "title": "Modules and imports",
+      "description": "Split code into modules, control what each module exposes, import Elci modules and Julc Java libraries, and share code between projects.",
+      "url": "https://elci-lang.dev/learn/modules/",
+      "markdown": "https://elci-lang.dev/ai/pages/learn/modules.md",
+      "sha256": "4c42c226bb08f59259278bb838e22720769cc21ef59aab91b4f6302cf9961a48"
+    },
+    {
+      "title": "Coming from Elm",
+      "description": "What carries over from Elm 0.19 to Elci and what changes, from the program model and the core library to Data encoding, Dict, Map and strict decoding.",
+      "url": "https://elci-lang.dev/learn/coming-from-elm/",
+      "markdown": "https://elci-lang.dev/ai/pages/learn/coming-from-elm.md",
+      "sha256": "eedb7dee7455939f6a6cfec35c58bb95c2e8d2beb26507d7a04661726df25df6"
+    },
+    {
+      "title": "Validators and purposes",
+      "description": "Declare validators in elci.toml, give each purpose a handler with the right signature, and let one script serve several purposes.",
+      "url": "https://elci-lang.dev/contracts/validators/",
+      "markdown": "https://elci-lang.dev/ai/pages/contracts/validators.md",
+      "sha256": "bdaa053507b98433945f37fabf127e4501d2156a5fc7bb22c61f33864a149a6d"
+    },
+    {
+      "title": "Reading the transaction",
+      "description": "What a handler can read from the ScriptContext, the ledger types behind it, and verified recipes with the Tx and Interval modules for signers, validity ranges, inputs, payments, datums and minting, including the defence against double satisfaction.",
+      "url": "https://elci-lang.dev/contracts/reading-the-transaction/",
+      "markdown": "https://elci-lang.dev/ai/pages/contracts/reading-the-transaction.md",
+      "sha256": "5660254ca0260b8144440a4fd527cf29b1e25034e9cbbd735051caa3716f4900"
+    },
+    {
+      "title": "Datums and redeemers",
+      "description": "Which types can be datums, redeemers and parameters, how strict decoding protects a validator, the three spending-datum profiles, and exactly how Elci values are encoded as Plutus Data.",
+      "url": "https://elci-lang.dev/contracts/datums-and-redeemers/",
+      "markdown": "https://elci-lang.dev/ai/pages/contracts/datums-and-redeemers.md",
+      "sha256": "de5c09e20cd2305de3d0de7cfb6a0069433e5fac0801f24ac52492b251376dc2"
+    },
+    {
+      "title": "Parameterized validators",
+      "description": "Declare deployment parameters, test them with scenarios, and apply them to a built script with elci apply and cardano-cli's detailed Data JSON.",
+      "url": "https://elci-lang.dev/contracts/parameters/",
+      "markdown": "https://elci-lang.dev/ai/pages/contracts/parameters.md",
+      "sha256": "b1a4c12062f64cb847069c13b54318c2149d80331711dd3257e689f3ca199a1f"
+    },
+    {
+      "title": "Build and deploy",
+      "description": "What elci build writes, how abi.json and expected-abi guard your data layout, where script hashes come from, and how to load an artifact in Java with Cardano Client Lib.",
+      "url": "https://elci-lang.dev/contracts/build-and-deploy/",
+      "markdown": "https://elci-lang.dev/ai/pages/contracts/build-and-deploy.md",
+      "sha256": "6f9e2610183bf5ee92e4e4a5c564c562a0b82dfa9fcf1544784e789b5ca629e4"
+    },
+    {
+      "title": "Unit tests",
+      "description": "Write Bool and Expect tests for your Elci code, run them with elci test, read the results and choose which tests run.",
+      "url": "https://elci-lang.dev/testing/unit-tests/",
+      "markdown": "https://elci-lang.dev/ai/pages/testing/unit-tests.md",
+      "sha256": "c428665bf0c3550afd34dca5e0352c66cbc9a67b16f6eee24536ad170c941b9b"
+    },
+    {
+      "title": "Transaction scenarios",
+      "description": "Test validators with whole transactions. Describe a spend, mint or withdrawal in Elci and elci test runs the deployed script in a complete ledger context.",
+      "url": "https://elci-lang.dev/testing/scenarios/",
+      "markdown": "https://elci-lang.dev/ai/pages/testing/scenarios.md",
+      "sha256": "dc42faaad408608e3c45512bf6974e0fac017a536a12101c7e87e7db5167fcee"
+    },
+    {
+      "title": "Property-based tests",
+      "description": "State a rule that must hold for every input, let elci test generate hundreds of inputs, and get the smallest counterexample when the rule breaks.",
+      "url": "https://elci-lang.dev/testing/properties/",
+      "markdown": "https://elci-lang.dev/ai/pages/testing/properties.md",
+      "sha256": "a68659e29a258d6a4984ac614cb81adb0b00aa344064636bc3d48a51cbc4e8dd"
+    },
+    {
+      "title": "Testing from Java",
+      "description": "Load the scripts elci build publishes into JUnit, build ledger contexts with julc-testkit and run jqwik property tests with datums generated from the validator's ABI.",
+      "url": "https://elci-lang.dev/testing/java/",
+      "markdown": "https://elci-lang.dev/ai/pages/testing/java.md",
+      "sha256": "e0d3424bac905f19248db9adf2c4c832f4420b94c0fdbb5dfbd3f907be63edb6"
+    },
+    {
+      "title": "Debugging and budgets",
+      "description": "Read elci test failures, find out why a validator rejects a transaction with Debug.trace, and keep execution budgets in check with Scenario.withinBudget.",
+      "url": "https://elci-lang.dev/testing/debugging/",
+      "markdown": "https://elci-lang.dev/ai/pages/testing/debugging.md",
+      "sha256": "645b8d45f9a9d3adad3b9989123bea3c63d6493f643b3228ddfbc83bb8767de8"
+    },
+    {
+      "title": "Build a vesting contract",
+      "description": "Build a vesting validator from an empty directory, with a typed datum and redeemer, a deadline checked against the validity range, a signature check, scenarios and a property test.",
+      "url": "https://elci-lang.dev/tutorials/vesting/",
+      "markdown": "https://elci-lang.dev/ai/pages/tutorials/vesting.md",
+      "sha256": "92ff38e97ea55272d63217c121a5022ed3017c07ed04881bdfdf0009cdd3d9e4"
+    },
+    {
+      "title": "A treasury and its badge policy",
+      "description": "Build two cooperating scripts from an empty directory, a treasury that spends payouts and withdraws staking rewards and a badge minting policy, both parameterized by an admin key.",
+      "url": "https://elci-lang.dev/tutorials/treasury/",
+      "markdown": "https://elci-lang.dev/ai/pages/tutorials/treasury.md",
+      "sha256": "4b91204f39b5082a01a1c6346ef9109b1eb8942345ffe831ba88173fbb723c6c"
+    },
+    {
+      "title": "A one-shot minting policy",
+      "description": "Build a minting policy that can mint only once, by tying it to a seed output that the minting transaction must spend, and prove the accept and reject cases with scenarios and properties.",
+      "url": "https://elci-lang.dev/tutorials/one-shot-policy/",
+      "markdown": "https://elci-lang.dev/ai/pages/tutorials/one-shot-policy.md",
+      "sha256": "ce4e59cf4d13d3868aa759c8bb445e06adb18a65e4023847bdb27ae9f38c8747"
+    },
+    {
+      "title": "Java libraries",
+      "description": "Import Julc's on-chain Java libraries and your own library JARs into Elci, and learn how Java types, generic methods and imported records map to Elci.",
+      "url": "https://elci-lang.dev/advanced/java-libraries/",
+      "markdown": "https://elci-lang.dev/ai/pages/advanced/java-libraries.md",
+      "sha256": "a48fa061038441ffb669790b3bc6a3f72d47de348cef007c458acd04c6f99b2c"
+    },
+    {
+      "title": "Standard library",
+      "description": "What ships with Elci — Elm's core modules, written in Elci, and Julc's verified Java libraries as gap fillers — how to import them, and the most useful functions of each.",
+      "url": "https://elci-lang.dev/advanced/standard-library/",
+      "markdown": "https://elci-lang.dev/ai/pages/advanced/standard-library.md",
+      "sha256": "4598e6412e4182121935ec7c90923952985146d9fc00448c906b7f125700e271"
+    },
+    {
+      "title": "Bytes, hashes and bits",
+      "description": "Build, slice and compare byte strings, convert integers, use bit operations and hashes, verify signatures and print bytes as hex in Elci.",
+      "url": "https://elci-lang.dev/advanced/bytes-and-crypto/",
+      "markdown": "https://elci-lang.dev/ai/pages/advanced/bytes-and-crypto.md",
+      "sha256": "e9dc64608f4d52f5ed1f81dc5e30cc05fe91716e71629b31c05d9ff012f4395f"
+    },
+    {
+      "title": "Costs and performance",
+      "description": "Measure execution budgets and script size, understand how strictness and top-level values affect cost, choose between lists, arrays, dictionaries and maps, and know what values cost.",
+      "url": "https://elci-lang.dev/advanced/costs/",
+      "markdown": "https://elci-lang.dev/ai/pages/advanced/costs.md",
+      "sha256": "a384f85b0aa7e460c45ef53a6cfe826f90bcde1b2e9b3a4a9fa31c910a7cedfa"
+    },
+    {
+      "title": "How Elci compiles",
+      "description": "The path from .elm source to a Plutus V3 script — Elci's frontend stages, the boundary with Julc's backend, strict data boundaries and the native executable.",
+      "url": "https://elci-lang.dev/advanced/how-it-works/",
+      "markdown": "https://elci-lang.dev/ai/pages/advanced/how-it-works.md",
+      "sha256": "ccf2a37e9ac657c5011d2d75000241f07e44c599ec22f92a53b6f273dd32e6da"
+    },
+    {
+      "title": "CLI",
+      "description": "Every elci command and option — init, check, build, eval, test, apply and explain — with outputs, exit codes and error formats.",
+      "url": "https://elci-lang.dev/reference/cli/",
+      "markdown": "https://elci-lang.dev/ai/pages/reference/cli.md",
+      "sha256": "1146b322b56e2b72c6e4682037b08f3c7cb4f352cce7a8495882f998f537881e"
+    },
+    {
+      "title": "elci.toml",
+      "description": "Every table and key of elci.toml — project settings, validators, entrypoints, Java modules and tests — with the rules the parser enforces and complete examples.",
+      "url": "https://elci-lang.dev/reference/configuration/",
+      "markdown": "https://elci-lang.dev/ai/pages/reference/configuration.md",
+      "sha256": "e6427bb68f8d108381887563e889b5610b4f11577cde6c6835a084794f31eab3"
+    },
+    {
+      "title": "Core modules",
+      "description": "Exact signatures and semantics of Elci's core library, imported by default as in Elm, and of the Dict, Map, Array, Value, Interval, Tx, Bytes, Julc.Data and Debug modules.",
+      "url": "https://elci-lang.dev/reference/core-modules/",
+      "markdown": "https://elci-lang.dev/ai/pages/reference/core-modules.md",
+      "sha256": "05ee1cf30d3670d70d47124ded16b84af5820953234f7f556c071e30f68d5594"
+    },
+    {
+      "title": "Test library",
+      "description": "Complete API of the Expect, Scenario and Property modules that elci test provides to test modules.",
+      "url": "https://elci-lang.dev/reference/test-library/",
+      "markdown": "https://elci-lang.dev/ai/pages/reference/test-library.md",
+      "sha256": "08eaf5ef0932acc28543186f6e5417acf140550ec01e91245071b7527cf6d192"
+    },
+    {
+      "title": "Language reference",
+      "description": "Elci's feature matrix, syntax, imports and reserved names, operators and precedence, equality and ordering, constrained type variables, evaluation order and Plutus Data encoding rules.",
+      "url": "https://elci-lang.dev/reference/language/",
+      "markdown": "https://elci-lang.dev/ai/pages/reference/language.md",
+      "sha256": "99a40bdd1eee20a825e45c15d1bf774b698665029500db9209b046e66e5f6b1d"
+    },
+    {
+      "title": "Grammar",
+      "description": "Elci's formal grammar in EBNF — the lexical grammar, the exact layout rules, the syntactic grammar, operator precedence, the adjacency rules for `.` and `-`, and the Elm syntax Elci rejects.",
+      "url": "https://elci-lang.dev/reference/grammar/",
+      "markdown": "https://elci-lang.dev/ai/pages/reference/grammar.md",
+      "sha256": "6d971c12bfa0b039dbfa7267d1830cef731ff0d79bf4f36611bbd5262fc6d550"
+    },
+    {
+      "title": "Diagnostics",
+      "description": "How to read an Elci error, how a run reports several errors, elci explain, the JSON report for tools, and every ELCI error code with real messages and fixes.",
+      "url": "https://elci-lang.dev/reference/diagnostics/",
+      "markdown": "https://elci-lang.dev/ai/pages/reference/diagnostics.md",
+      "sha256": "79c93b39f00bb831158eed5c7693239aab5f750078d8d57921be1dd9d82e1275"
+    },
+    {
+      "title": "Example projects",
+      "description": "The example projects in the Elci repository, what each one demonstrates and how to check, build, test or evaluate it.",
+      "url": "https://elci-lang.dev/reference/examples/",
+      "markdown": "https://elci-lang.dev/ai/pages/reference/examples.md",
+      "sha256": "73cc6973efd3b3c3255ef1a480990deeb28d7f8fd060ef7506b5a77d2b84f23c"
+    }
+  ],
+  "artifacts": [
+    {
+      "url": "https://elci-lang.dev/ai/starter-pack.md",
+      "sha256": "ec87a421bad4a3bdfb36d90d080211ba26b10841b40a768331d52872d75cdba3"
+    },
+    {
+      "url": "https://elci-lang.dev/ai/agent-instructions.md",
+      "sha256": "d43fd81f9b799198d24b97ff1870ce299183527acb6b51167920ec95ff50697a"
+    },
+    {
+      "url": "https://elci-lang.dev/ai/catalog.json",
+      "sha256": "d7f5e5123e550584199c35f1dae54382b202da8dac9a2aa411ab2a15f230cd98"
+    },
+    {
+      "url": "https://elci-lang.dev/ai/diagnostics.json",
+      "sha256": "9ce71e8d11f4b7367960d0daa98fca072966a9816ff32b6bc3ac330da778ea7c"
+    },
+    {
+      "url": "https://elci-lang.dev/ai/examples.json",
+      "sha256": "3aad6f11eea4add9452363f8baa64cae37ee3192dd8f567b602706f850e1a9ba"
+    },
+    {
+      "url": "https://elci-lang.dev/llms-full.txt",
+      "sha256": "248e68f39e266298c8124a0d2fedd57883fcb1dac6cde03666241454ce82bf9d"
+    },
+    {
+      "url": "https://elci-lang.dev/llms.txt",
+      "sha256": "2c501779a16be257f8edc6ecd0e7105df760f4db5701fd41d7fe1b237575144c"
+    }
+  ]
+}

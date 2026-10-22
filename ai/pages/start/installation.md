@@ -1,0 +1,163 @@
+# Installation
+
+> Build the elci compiler from source with Java 25, optionally as a native executable, and put it on your PATH.
+
+Source: https://elci-lang.dev/start/installation/
+
+On this page you build the `elci` command-line compiler from source and put it on your `PATH`. You need
+Java 25. GraalVM is only needed if you also want the native executable.
+
+:::note[Development preview]
+Elci depends on a development snapshot of [Julc](https://github.com/bloxbean/julc) that is not on Maven
+Central. Gradle downloads that exact version from the BloxBean Maven repository
+(`https://repo.bloxbean.org/maven/snapshots`), so you don't need to build Julc yourself.
+:::
+
+## Prerequisites
+
+| Tool | Needed for | Notes |
+| --- | --- | --- |
+| JDK 25 | Building Elci and running the JVM `elci` | Set `JAVA_HOME` to it |
+| Git | Cloning Elci | |
+| GraalVM 25 with `native-image` | Only the native `elci` executable | Also needs your platform's C toolchain |
+| Node.js and npm | Only formatting with elm-format | Optional |
+
+You don't need to install Gradle: the project includes the Gradle wrapper (`./gradlew`). The commands
+below are for macOS and Linux shells.
+
+## Build from source
+
+1. **Check your Java version.** Gradle builds Elci with Java 25:
+
+   ```sh
+   java -version
+   ```
+
+   The first line of the output should report version 25. If it doesn't, install a JDK 25 and point
+   `JAVA_HOME` at it.
+
+2. **Clone Elci.**
+
+   ```sh
+   git clone https://github.com/bloxbean/elci-lang.git
+   ```
+
+3. **Check the pinned Julc version.** Elci's `gradle.properties` names the Julc snapshot it was built
+   and tested with, and the Julc commit it was built from:
+
+   ```sh
+   grep '^julc' elci-lang/gradle.properties
+   ```
+
+   ```text
+   julcVersion=0.1.0-pre20-ebaf028-SNAPSHOT
+   julcRevision=ebaf028c982479906a1f9449b9fef68fa7836301
+   ```
+
+   The first build downloads that version from the BloxBean Maven repository.
+
+4. **Build the Elci CLI.**
+
+   ```sh
+   cd elci-lang
+   ./gradlew installDist
+   ```
+
+   This creates `build/install/elci/bin/elci`, a launcher script that runs the compiler on your Java 25.
+   To run Elci's own test suite first, use `./gradlew test installDist`.
+
+5. **Optional: build the native executable.** Point `GRAALVM_HOME` at a GraalVM 25 installation that
+   contains `bin/native-image`, then run:
+
+   ```sh
+   export GRAALVM_HOME=/path/to/graalvm
+   ./gradlew nativeCompile
+   ```
+
+   This creates `build/native/elci`. It starts fast and doesn't need Java at runtime, but it only runs on
+   the platform you built it on.
+
+6. **Put `elci` on your `PATH`.** From the `elci-lang` directory, add one of the two builds:
+
+   ```sh
+   # The JVM build
+   export PATH="$PWD/build/install/elci/bin:$PATH"
+
+   # Or the native build
+   export PATH="$PWD/build/native:$PATH"
+   ```
+
+   Add the same line, with the absolute path, to your shell profile (for example `~/.zshrc` or
+   `~/.bashrc`) to keep it in new terminals.
+
+7. **Check the installation.**
+
+   ```sh
+   elci --version
+   ```
+
+   ```text
+   elci 0.1.0-dev / julc 0.1.0-pre20-ebaf028-SNAPSHOT
+   ```
+
+   The first part is the Elci version and the second is the Julc version the compiler is pinned to.
+
+:::tip[Prebuilt binaries]
+Elci's release workflow builds native archives for Linux (x64 and arm64) and macOS (Apple Silicon) from
+version tags. When a release is published for your platform, you can download the archive, check it
+against `SHA256SUMS`, and put the `elci` executable on your `PATH` without installing Java or Julc.
+:::
+
+## The Julc version in your projects
+
+Every project's `elci.toml` records the Julc version it expects:
+
+```toml
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+```
+
+It must equal the version that `elci --version` prints. `elci init` writes the right value for you. If they
+differ, for example after you upgrade Elci, every command stops with:
+
+```text
+elci: ELCI4001: Julc version does not match this compiler; expected julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+```
+
+Update `julc-version` in `elci.toml`, then rebuild and re-run your tests. A new Julc version can change
+the generated scripts and their hashes.
+
+## Editor setup
+
+- **Syntax highlighting:** Elci source files use the `.elm` extension, so any Elm syntax-highlighting
+  extension works.
+- **Formatting:** Elci code follows [elm-format](https://github.com/avh4/elm-format) 0.8.8 style. To check your
+  files without installing anything globally:
+
+  ```sh
+  npm exec --yes --package elm-format@0.8.8 -- elm-format src tests --validate
+  ```
+
+- **Diagnostics:** the Elm language server doesn't know Elci's modules (`Julc.Ledger`, `Map`, `Array`,
+  `Bytes`, your Java library imports), so its errors aren't reliable for Elci code. Use `elci check`, which
+  reports every error as `file:line:column: ELCIxxxx: message`, followed by the source line and any hints.
+  With `--report=json` it prints each error as one JSON object on its own line instead, for editor
+  integrations. `elci explain <code>` explains a code.
+
+:::caution
+elm-format silently changes integer literals larger than about 9.2 × 10¹⁸, because it stores them as 64-bit
+numbers. See [Coming from Elm](https://elci-lang.dev/learn/coming-from-elm/).
+:::
+
+## Troubleshooting
+
+- **Could not resolve `org.julclang:...` while building Elci.** Gradle could not download the pinned Julc
+  snapshot. Check that `https://repo.bloxbean.org/maven/snapshots` is reachable from your machine (a proxy or
+  firewall can block it), and that `julcVersion` in `gradle.properties` is unchanged.
+- **Gradle reports a Java toolchain problem.** Elci and Julc need Java 25. Check `java -version` and
+  `JAVA_HOME`.
+- **`GRAALVM_HOME must point to a GraalVM installation containing native-image`.** `nativeCompile` needs
+  `GRAALVM_HOME` set to a GraalVM installation that contains `bin/native-image`.
+- **`elci: command not found`.** The build directory is not on your `PATH`. Run the binary by its full path
+  to confirm the build worked, then fix your `PATH`.
+
+Next, create your first project: [Your first validator](https://elci-lang.dev/start/first-validator/).

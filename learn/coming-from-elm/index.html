@@ -1,0 +1,496 @@
+<!DOCTYPE html><html lang="en" dir="ltr" data-theme="dark" data-has-toc data-has-sidebar class="astro-g5ptsecz"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Coming from Elm | Elci</title><link rel="canonical" href="https://elci-lang.dev/learn/coming-from-elm/"/><link rel="sitemap" href="/sitemap-index.xml"/><link rel="alternate" type="text/plain" href="/llms.txt" title="Elci docs for AI agents"/><link rel="shortcut icon" href="/favicon.svg" type="image/svg+xml"/><meta name="generator" content="Astro v7.3.5"/><meta name="generator" content="Starlight v0.42.0"/><meta property="og:title" content="Coming from Elm"/><meta property="og:type" content="article"/><meta property="og:url" content="https://elci-lang.dev/learn/coming-from-elm/"/><meta property="og:locale" content="en"/><meta property="og:description" content="What carries over from Elm 0.19 to Elci and what changes, from the program model and the core library to Data encoding, Dict, Map and strict decoding."/><meta property="og:site_name" content="Elci"/><meta name="twitter:card" content="summary_large_image"/><meta name="description" content="What carries over from Elm 0.19 to Elci and what changes, from the program model and the core library to Data encoding, Dict, Map and strict decoding."/><meta name="theme-color" content="#fafaf9"/><script>
+	window.StarlightThemeProvider = (() => {
+		const storedTheme =
+			typeof localStorage !== 'undefined' && localStorage.getItem('starlight-theme');
+		const theme =
+			storedTheme ||
+			(window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+		document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
+		return {
+			updatePickers(theme = storedTheme || 'auto') {
+				document.querySelectorAll('starlight-theme-select').forEach((picker) => {
+					const select = picker.querySelector('select');
+					if (select) select.value = theme;
+					/** @type {HTMLTemplateElement | null} */
+					const tmpl = document.querySelector(`#theme-icons`);
+					const newIcon = tmpl && tmpl.content.querySelector('.' + theme);
+					if (newIcon) {
+						const oldIcon = picker.querySelector('svg.label-icon');
+						if (oldIcon) {
+							oldIcon.replaceChildren(...newIcon.cloneNode(true).childNodes);
+						}
+					}
+				});
+			},
+		};
+	})();
+</script><template id="theme-icons"><svg aria-hidden="true" class="light astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M5 12a1 1 0 0 0-1-1H3a1 1 0 0 0 0 2h1a1 1 0 0 0 1-1Zm.64 5-.71.71a1 1 0 0 0 0 1.41 1 1 0 0 0 1.41 0l.71-.71A1 1 0 0 0 5.64 17ZM12 5a1 1 0 0 0 1-1V3a1 1 0 0 0-2 0v1a1 1 0 0 0 1 1Zm5.66 2.34a1 1 0 0 0 .7-.29l.71-.71a1 1 0 1 0-1.41-1.41l-.66.71a1 1 0 0 0 0 1.41 1 1 0 0 0 .66.29Zm-12-.29a1 1 0 0 0 1.41 0 1 1 0 0 0 0-1.41l-.71-.71a1.004 1.004 0 1 0-1.43 1.41l.73.71ZM21 11h-1a1 1 0 0 0 0 2h1a1 1 0 0 0 0-2Zm-2.64 6A1 1 0 0 0 17 18.36l.71.71a1 1 0 0 0 1.41 0 1 1 0 0 0 0-1.41l-.76-.66ZM12 6.5a5.5 5.5 0 1 0 5.5 5.5A5.51 5.51 0 0 0 12 6.5Zm0 9a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm0 3.5a1 1 0 0 0-1 1v1a1 1 0 0 0 2 0v-1a1 1 0 0 0-1-1Z"/></svg><svg aria-hidden="true" class="dark astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21.64 13a1 1 0 0 0-1.05-.14 8.049 8.049 0 0 1-3.37.73 8.15 8.15 0 0 1-8.14-8.1 8.59 8.59 0 0 1 .25-2A1 1 0 0 0 8 2.36a10.14 10.14 0 1 0 14 11.69 1 1 0 0 0-.36-1.05Zm-9.5 6.69A8.14 8.14 0 0 1 7.08 5.22v.27a10.15 10.15 0 0 0 10.14 10.14 9.784 9.784 0 0 0 2.1-.22 8.11 8.11 0 0 1-7.18 4.32v-.04Z"/></svg><svg aria-hidden="true" class="auto astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg></template><link rel="stylesheet" href="/_astro/print.ehPL0gv-.css" media="print"><link rel="stylesheet" href="/_astro/common.DQykWaaM.css"><style>@layer starlight.components{.card-grid:where(.astro-7qmvx3iy){grid-template-columns:100%;gap:1rem;display:grid}.card-grid:where(.astro-7qmvx3iy)>*{margin-top:0!important}@media (width>=50rem){.card-grid:where(.astro-7qmvx3iy){grid-template-columns:1fr 1fr;gap:1.5rem}.stagger:where(.astro-7qmvx3iy){--stagger-height:5rem;padding-bottom:var(--stagger-height)}.stagger:where(.astro-7qmvx3iy)>:nth-child(2n){transform:translateY(var(--stagger-height))}}.sl-link-card:where(.astro-zaaezwya){border:1px solid var(--sl-color-gray-5);box-shadow:var(--sl-shadow-sm);border-radius:.5rem;grid-template-columns:1fr auto;gap:.5rem;padding:1rem;display:grid;position:relative}a:where(.astro-zaaezwya){line-height:var(--sl-line-height-headings);text-decoration:none}a:where(.astro-zaaezwya):before{content:"";position:absolute;inset:0}.stack:where(.astro-zaaezwya){flex-direction:column;gap:.5rem}.title:where(.astro-zaaezwya){color:var(--sl-color-white);font-weight:600;font-size:var(--sl-text-lg)}.description:where(.astro-zaaezwya){color:var(--sl-color-gray-3);line-height:1.5}.icon:where(.astro-zaaezwya){color:var(--sl-color-gray-3)}.sl-link-card:where(.astro-zaaezwya):hover{background:var(--sl-color-gray-7,var(--sl-color-gray-6));border-color:var(--sl-color-gray-2)}.sl-link-card:where(.astro-zaaezwya):hover .icon:where(.astro-zaaezwya){color:var(--sl-color-white)}}
+@layer starlight.components{svg:where(.astro-hkc32dio){color:var(--sl-icon-color);font-size:var(--sl-icon-size,1em);width:1em;height:1em}}
+@layer starlight.components{starlight-tabs:where(.astro-scn3uvmv){display:block}.tablist-wrapper:where(.astro-scn3uvmv){overflow-x:auto}:where(.astro-scn3uvmv)[role=tablist]{border-bottom:2px solid var(--sl-color-gray-5);padding:0;list-style:none;display:flex}.tab:where(.astro-scn3uvmv){display:flex}.tab:where(.astro-scn3uvmv)>:where(.astro-scn3uvmv)[role=tab]{--sl-tab-color-border:var(--sl-color-gray-5);line-height:var(--sl-line-height-headings);box-shadow:0 2px 0 var(--sl-tab-color-border);color:var(--sl-color-gray-3);outline-offset:var(--sl-outline-offset-inside);overflow-wrap:initial;align-items:center;gap:.5rem;padding:.275rem 1.25rem;text-decoration:none;display:flex}.tab:where(.astro-scn3uvmv) :where(.astro-scn3uvmv)[role=tab][aria-selected=true]{--sl-tab-color-border:var(--sl-color-text-accent);color:var(--sl-color-white);font-weight:600}.tablist-wrapper:where(.astro-scn3uvmv)~[role=tabpanel]{margin-top:1rem}}
+@layer starlight.components{.sl-steps{--bullet-size:calc(var(--sl-line-height) * 1rem);--bullet-margin:.375rem;counter-reset:steps-counter var(--sl-steps-start,0);padding-inline-start:0;list-style:none}.sl-steps>li{counter-increment:steps-counter;padding-inline-start:calc(var(--bullet-size) + 1rem);min-height:calc(var(--bullet-size) + var(--bullet-margin));padding-bottom:1px;position:relative}.sl-steps>li+li{margin-top:0}.sl-steps>li:before{content:counter(steps-counter);top:0;width:var(--bullet-size);height:var(--bullet-size);line-height:var(--bullet-size);font-size:var(--sl-text-xs);text-align:center;color:var(--sl-color-white);background-color:var(--sl-color-gray-6);box-shadow:inset 0 0 0 1px var(--sl-color-gray-5);border-radius:99rem;font-weight:600;position:absolute;inset-inline-start:0}.sl-steps>li:after{--guide-width:1px;content:"";top:calc(var(--bullet-size) + var(--bullet-margin));bottom:var(--bullet-margin);width:var(--guide-width);background-color:var(--sl-color-hairline-light);position:absolute;inset-inline-start:calc((var(--bullet-size) - var(--guide-width)) / 2)}}@layer starlight.content{.sl-steps>li>:first-child{--lh:calc(1em * var(--sl-line-height));--shift-y:calc(.5 * (var(--bullet-size) - var(--lh)));transform:translateY(var(--shift-y));margin-bottom:var(--shift-y)}.sl-steps>li>:first-child:where(h1,h2,h3,h4,h5,h6){--lh:calc(1em * var(--sl-line-height-headings))}@supports (--prop:1lh){.sl-steps>li>:first-child{--lh:1lh}}}
+@layer starlight.components{starlight-file-tree:where(.astro-a2hqddox){--x-space:1.5rem;--y-space:.125rem;--y-pad:0;border:1px solid var(--sl-color-gray-5);background-color:var(--sl-color-gray-6);font-size:var(--sl-text-xs);font-family:var(--__sl-font-mono);padding:1rem;display:block;overflow-x:auto}starlight-file-tree:where(.astro-a2hqddox) .directory>details{padding:0;background:0 0;border:0;padding-inline-start:var(--x-space)}starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary{padding:var(--y-pad) .625rem;color:var(--sl-color-white);border:0;max-width:100%;margin-inline-start:calc(-1 * var(--x-space));font-weight:400}starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary::marker,starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary::-webkit-details-marker{color:var(--sl-color-gray-3)}starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary:hover,starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary:hover .tree-icon{cursor:pointer;color:var(--sl-color-text-accent);fill:currentColor}starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary:hover~ul{border-color:var(--sl-color-gray-4)}starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary:hover .highlight .tree-icon{color:var(--sl-color-text-invert);fill:currentColor}starlight-file-tree:where(.astro-a2hqddox) ul{border-inline-start:1px solid var(--sl-color-gray-5);margin-inline-start:.5rem;padding:0;padding-inline-start:.125rem;list-style:none}starlight-file-tree:where(.astro-a2hqddox)>ul{border:0;margin:0;padding:0}starlight-file-tree:where(.astro-a2hqddox) li{margin:var(--y-space) 0;padding:var(--y-pad) 0}starlight-file-tree:where(.astro-a2hqddox) .file{color:var(--sl-color-white);margin-inline-start:calc(var(--x-space) - .125rem)}starlight-file-tree:where(.astro-a2hqddox) .tree-entry{flex-wrap:wrap;align-items:flex-start;max-width:calc(100% - 1rem);display:inline-flex}@media (width>=30em){starlight-file-tree:where(.astro-a2hqddox) .tree-entry{flex-wrap:nowrap}}starlight-file-tree:where(.astro-a2hqddox) .tree-entry>:first-child{flex-shrink:0}starlight-file-tree:where(.astro-a2hqddox) .empty{color:var(--sl-color-gray-3);padding-inline-start:.375rem}starlight-file-tree:where(.astro-a2hqddox) .comment{color:var(--sl-color-gray-3);min-width:12rem;max-width:24rem;padding-inline-start:1.625rem}starlight-file-tree:where(.astro-a2hqddox) .highlight{color:var(--sl-color-text-invert);background-color:var(--sl-color-text-accent);border-radius:.25rem;padding-inline-end:.5rem;display:inline-block}starlight-file-tree:where(.astro-a2hqddox) svg{fill:var(--sl-color-gray-3);vertical-align:middle;width:.875rem;height:.875rem;margin-inline:.25rem .375rem;display:inline}starlight-file-tree:where(.astro-a2hqddox) .highlight svg.tree-icon{fill:currentColor}}
+</style><script type="module" src="/_astro/page.Dwipeu-R.js"></script></head><body class="astro-g5ptsecz"><a class="sl-skip-link astro-qb7clj6f" href="#_top">Skip to content</a><div class="page sl-flex astro-yntsjkba"><header class="header astro-yntsjkba"><div class="header astro-by6fddyj"><div class="title-wrapper sl-flex astro-by6fddyj"><a href="/" class="site-title sl-flex astro-6rvad3va"><img class="astro-6rvad3va" alt src="/_astro/logo.DiLict2W.svg" width="64" height="64"><span class="astro-6rvad3va" translate="no">Elci</span></a></div><div class="sl-flex print:hidden astro-by6fddyj"><site-search class="astro-by6fddyj astro-b5kgnn7o" data-translations="{&quot;placeholder&quot;:&quot;Search&quot;}"><button data-open-modal disabled aria-label="Search" aria-keyshortcuts="Control+K" class="astro-b5kgnn7o"><svg aria-hidden="true" class="astro-b5kgnn7o astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21.71 20.29 18 16.61A9 9 0 1 0 16.61 18l3.68 3.68a.999.999 0 0 0 1.42 0 1 1 0 0 0 0-1.39ZM11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z"/></svg><span class="sl-hidden md:sl-block astro-b5kgnn7o" aria-hidden="true">Search</span><kbd class="sl-hidden md:sl-flex astro-b5kgnn7o" style="display: none;"><kbd class="astro-b5kgnn7o">Ctrl</kbd><kbd class="astro-b5kgnn7o">K</kbd></kbd></button><dialog style="padding:0" aria-label="Search" class="astro-b5kgnn7o"><div class="dialog-frame sl-flex astro-b5kgnn7o"><button data-close-modal class="sl-flex md:sl-hidden astro-b5kgnn7o">Cancel</button><div class="search-container astro-b5kgnn7o"><div id="starlight__search" class="astro-b5kgnn7o"></div></div></div></dialog></site-search><script>
+	(() => {
+		const openBtn = document.querySelector('button[data-open-modal]');
+		const shortcut = openBtn?.querySelector('kbd');
+		if (!openBtn || !(shortcut instanceof HTMLElement)) return;
+		const platformKey = shortcut.querySelector('kbd');
+		if (platformKey && /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform)) {
+			platformKey.textContent = '⌘';
+			openBtn.setAttribute('aria-keyshortcuts', 'Meta+K');
+		}
+		shortcut.style.display = '';
+	})();
+</script><script type="module" src="/_astro/Search.astro_astro_type_script_index_0_lang.DZqJ8Bdf.js"></script></div><div class="sl-hidden md:sl-flex print:hidden right-group astro-by6fddyj"><div class="sl-flex social-icons astro-by6fddyj"><a href="https://github.com/bloxbean/elci-lang" rel="me" class="sl-flex astro-n2mnl6yq"><span class="sr-only astro-n2mnl6yq">GitHub</span><svg aria-hidden="true" class="astro-n2mnl6yq astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg></a></div><starlight-theme-select><label style="--sl-select-width: 6.25em" class="astro-2z5xp7gb"><span class="sr-only astro-2z5xp7gb">Select theme</span><svg aria-hidden="true" class="icon label-icon astro-2z5xp7gb astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg><select autocomplete="off" class="astro-2z5xp7gb"><option value="dark" class="astro-2z5xp7gb">Dark</option><option value="light" class="astro-2z5xp7gb">Light</option><option value="auto" selected class="astro-2z5xp7gb">Auto</option></select><svg aria-hidden="true" class="icon caret astro-2z5xp7gb astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg></label></starlight-theme-select><script>
+	StarlightThemeProvider.updatePickers();
+</script><script type="module">var e=`starlight-theme`,t=e=>e===`auto`||e===`dark`||e===`light`?e:`auto`,n=()=>t(typeof localStorage<`u`&&localStorage.getItem(e));function r(t){typeof localStorage<`u`&&localStorage.setItem(e,t===`light`||t===`dark`?t:``)}var i=()=>matchMedia(`(prefers-color-scheme: light)`).matches?`light`:`dark`;function a(e){StarlightThemeProvider.updatePickers(e),document.documentElement.dataset.theme=e===`auto`?i():e,r(e)}matchMedia(`(prefers-color-scheme: light)`).addEventListener(`change`,()=>{n()===`auto`&&a(`auto`)});var o=class extends HTMLElement{constructor(){super(),a(n()),this.querySelector(`select`)?.addEventListener(`change`,e=>{e.currentTarget instanceof HTMLSelectElement&&a(t(e.currentTarget.value))})}};customElements.define(`starlight-theme-select`,o);</script><script type="module">var e=class extends HTMLElement{constructor(){super();let e=this.querySelector(`select`);e&&(e.addEventListener(`change`,e=>{e.currentTarget instanceof HTMLSelectElement&&(window.location.pathname=e.currentTarget.value)}),window.addEventListener(`pageshow`,t=>{if(!t.persisted)return;let n=e.querySelector(`option[selected]`)?.index;n!==e.selectedIndex&&(e.selectedIndex=n??0)}))}};customElements.define(`starlight-lang-select`,e);</script></div></div></header><nav class="sidebar print:hidden astro-yntsjkba" aria-label="Main"><button popovertarget="starlight__sidebar" class="sl-menu-button sl-flex md:sl-hidden print:hidden astro-r2osgdlg"><svg aria-hidden="true" class="open-menu astro-r2osgdlg astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M3 8h18a1 1 0 1 0 0-2H3a1 1 0 0 0 0 2Zm18 8H3a1 1 0 0 0 0 2h18a1 1 0 0 0 0-2Zm0-5H3a1 1 0 0 0 0 2h18a1 1 0 0 0 0-2Z"/></svg><svg aria-hidden="true" class="close-menu astro-r2osgdlg astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="m13.41 12 6.3-6.29a1.004 1.004 0 1 0-1.42-1.42L12 10.59l-6.29-6.3a1.004 1.004 0 0 0-1.42 1.42l6.3 6.29-6.3 6.29a1 1 0 0 0 0 1.42.998.998 0 0 0 1.42 0l6.29-6.3 6.29 6.3a.999.999 0 0 0 1.42 0 1 1 0 0 0 0-1.42L13.41 12Z"/></svg><span class="sr-only astro-r2osgdlg">Menu</span></button><script type="module">var e=class extends HTMLElement{constructor(){super(),matchMedia(`(min-width: 50em)`).addEventListener(`change`,()=>this.hidePopover()),this.addEventListener(`toggle`,({newState:e})=>this.trapFocus(e===`open`))}trapFocus(e){document.querySelectorAll(`.main-frame, .sl-skip-link`).forEach(t=>{t.toggleAttribute(`inert`,e)})}};customElements.define(`sl-sidebar-pane`,e);</script><sl-sidebar-pane popover id="starlight__sidebar" class="sidebar-pane astro-yntsjkba"><div class="sidebar-content sl-flex astro-yntsjkba"><sl-sidebar-state-persist data-hash="0u9tf68" class="astro-ipdry5cl"><script aria-hidden="true">
+		(() => {
+			try {
+				if (!matchMedia('(min-width: 50em)').matches) return;
+				/** @type {HTMLElement | null} */
+				const target = document.querySelector('sl-sidebar-state-persist');
+				const state = JSON.parse(sessionStorage.getItem('sl-sidebar-state') || '0');
+				if (!target || !state || target.dataset.hash !== state.hash) return;
+				window._starlightScrollRestore = state.scroll;
+				customElements.define(
+					'sl-sidebar-restore',
+					class SidebarRestore extends HTMLElement {
+						connectedCallback() {
+							try {
+								const idx = parseInt(this.dataset.index || '');
+								const details = this.closest('details');
+								if (details && typeof state.open[idx] === 'boolean') details.open = state.open[idx];
+							} catch {}
+						}
+					}
+				);
+			} catch {}
+		})();
+	</script><ul class="top-level astro-rmhv4bp6"><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Start here</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="0"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/start/introduction/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Why Elci</span></a></li><li class="astro-rmhv4bp6"><a href="/start/installation/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Installation</span></a></li><li class="astro-rmhv4bp6"><a href="/start/first-validator/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Your first validator</span></a></li><li class="astro-rmhv4bp6"><a href="/start/project-tour/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Anatomy of a project</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Build with AI</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="1"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/ai/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Build with AI</span></a></li><li class="astro-rmhv4bp6"><a href="/ai/starter-pack/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Elci AI starter pack</span></a></li><li class="astro-rmhv4bp6"><a href="/ai/agent-instructions/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Agent instructions</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Learn the language</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="2"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/learn/basics/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Values, functions and types</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/control-flow/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Conditionals, let and pipelines</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/records-and-tuples/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Records and tuples</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/custom-types/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Custom types and pattern matching</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/collections/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Lists, dictionaries, maps and arrays</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/modules/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Modules and imports</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/coming-from-elm/" aria-current="page" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Coming from Elm</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Write contracts</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="3"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/contracts/validators/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Validators and purposes</span></a></li><li class="astro-rmhv4bp6"><a href="/contracts/reading-the-transaction/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Reading the transaction</span></a></li><li class="astro-rmhv4bp6"><a href="/contracts/datums-and-redeemers/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Datums and redeemers</span></a></li><li class="astro-rmhv4bp6"><a href="/contracts/parameters/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Parameterized validators</span></a></li><li class="astro-rmhv4bp6"><a href="/contracts/build-and-deploy/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Build and deploy</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Test your contracts</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="4"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/testing/unit-tests/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Unit tests</span></a></li><li class="astro-rmhv4bp6"><a href="/testing/scenarios/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Transaction scenarios</span></a></li><li class="astro-rmhv4bp6"><a href="/testing/properties/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Property-based tests</span></a></li><li class="astro-rmhv4bp6"><a href="/testing/java/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Testing from Java</span></a></li><li class="astro-rmhv4bp6"><a href="/testing/debugging/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Debugging and budgets</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Tutorials</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="5"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/tutorials/vesting/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Build a vesting contract</span></a></li><li class="astro-rmhv4bp6"><a href="/tutorials/treasury/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">A treasury and its badge policy</span></a></li><li class="astro-rmhv4bp6"><a href="/tutorials/one-shot-policy/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">A one-shot minting policy</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Advanced</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="6"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/advanced/java-libraries/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Java libraries</span></a></li><li class="astro-rmhv4bp6"><a href="/advanced/standard-library/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Standard library</span></a></li><li class="astro-rmhv4bp6"><a href="/advanced/bytes-and-crypto/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Bytes, hashes and bits</span></a></li><li class="astro-rmhv4bp6"><a href="/advanced/costs/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Costs and performance</span></a></li><li class="astro-rmhv4bp6"><a href="/advanced/how-it-works/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">How Elci compiles</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Reference</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="7"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/reference/cli/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">CLI</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/configuration/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">elci.toml</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/core-modules/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Core modules</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/test-library/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Test library</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/language/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Language reference</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/grammar/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Grammar</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/diagnostics/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Diagnostics</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/examples/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Example projects</span></a></li></ul></details></li></ul><script aria-hidden="true">
+		(() => {
+			const scroller = document.getElementById('starlight__sidebar');
+			if (!window._starlightScrollRestore || !scroller) return;
+			scroller.scrollTop = window._starlightScrollRestore;
+			delete window._starlightScrollRestore;
+		})();
+	</script></sl-sidebar-state-persist><div class="md:sl-hidden"><div class="mobile-preferences sl-flex astro-p4azlveh"><div class="social-icons astro-p4azlveh"><a href="https://github.com/bloxbean/elci-lang" rel="me" class="sl-flex astro-n2mnl6yq"><span class="sr-only astro-n2mnl6yq">GitHub</span><svg aria-hidden="true" class="astro-n2mnl6yq astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg></a></div><starlight-theme-select><label style="--sl-select-width: 6.25em" class="astro-2z5xp7gb"><span class="sr-only astro-2z5xp7gb">Select theme</span><svg aria-hidden="true" class="icon label-icon astro-2z5xp7gb astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg><select autocomplete="off" class="astro-2z5xp7gb"><option value="dark" class="astro-2z5xp7gb">Dark</option><option value="light" class="astro-2z5xp7gb">Light</option><option value="auto" selected class="astro-2z5xp7gb">Auto</option></select><svg aria-hidden="true" class="icon caret astro-2z5xp7gb astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg></label></starlight-theme-select><script>
+	StarlightThemeProvider.updatePickers();
+</script></div></div></div></sl-sidebar-pane></nav><div class="main-frame astro-yntsjkba"><script type="module">var e=document.getElementById(`starlight__sidebar`),t=e?.querySelector(`sl-sidebar-state-persist`),n=`sl-sidebar-state`,r=()=>{let r=[],i=t?.dataset.hash||``;try{let e=sessionStorage.getItem(n),t=JSON.parse(e||`{}`);Array.isArray(t.open)&&t.hash===i&&(r=t.open)}catch{}return{hash:i,open:r,scroll:e?.scrollTop||0}},i=e=>{try{sessionStorage.setItem(n,JSON.stringify(e))}catch{}},a=()=>i(r()),o=(e,t)=>{let n=r();n.open[t]=e,i(n)};t?.addEventListener(`click`,e=>{if(!(e.target instanceof Element))return;let t=e.target.closest(`summary`)?.closest(`details`);if(!t)return;let n=t.querySelector(`sl-sidebar-restore`),r=parseInt(n?.dataset.index||``);isNaN(r)||o(!t.open,r)}),addEventListener(`visibilitychange`,()=>{document.visibilityState===`hidden`&&a()});</script><div class="lg:sl-flex astro-lrzkfocr"><aside class="right-sidebar-container print:hidden astro-lrzkfocr"><div class="right-sidebar astro-lrzkfocr"><div class="lg:sl-hidden astro-qok35upx"><mobile-starlight-toc data-min-h="2" data-max-h="3" class="astro-66cqc7ze"><nav aria-labelledby="starlight__on-this-page--mobile" class="astro-66cqc7ze"><details id="starlight__mobile-toc" class="astro-66cqc7ze"><summary id="starlight__on-this-page--mobile" class="sl-flex astro-66cqc7ze"><span class="toggle sl-flex astro-66cqc7ze">On this page<svg aria-hidden="true" class="caret astro-66cqc7ze astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></span><span class="display-current astro-66cqc7ze"></span></summary><div class="dropdown astro-66cqc7ze"><ul class="isMobile astro-jugkfwgx" style="--depth: 0;"><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#_top" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Overview</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#what-stays-the-same" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">What stays the same</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#the-program-model" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">The program model</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#types-and-values" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Types and values</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#the-core-library" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">The core library</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#dict-map-and-array" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Dict, Map and Array</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#your-data-is-plutus-data" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Your data is Plutus Data</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#error-messages" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Error messages</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#an-elm-format-pitfall" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">An elm-format pitfall</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#tooling" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Tooling</span></a></li></ul></div></details></nav></mobile-starlight-toc><script type="module" src="/_astro/MobileTableOfContents.astro_astro_type_script_index_0_lang.BcSo_yiZ.js"></script></div><div class="right-sidebar-panel sl-hidden lg:sl-block astro-qok35upx"><div class="sl-container astro-qok35upx"><starlight-toc data-min-h="2" data-max-h="3"><nav aria-labelledby="starlight__on-this-page"><h2 id="starlight__on-this-page">On this page</h2><ul class="astro-jugkfwgx" style="--depth: 0;"><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#_top" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Overview</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#what-stays-the-same" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">What stays the same</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#the-program-model" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">The program model</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#types-and-values" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Types and values</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#the-core-library" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">The core library</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#dict-map-and-array" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Dict, Map and Array</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#your-data-is-plutus-data" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Your data is Plutus Data</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#error-messages" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Error messages</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#an-elm-format-pitfall" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">An elm-format pitfall</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#tooling" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Tooling</span></a></li></ul></nav></starlight-toc><script type="module" src="/_astro/TableOfContents.astro_astro_type_script_index_0_lang.Csloo1VZ.js"></script></div></div></div></aside><div class="main-pane astro-lrzkfocr"><main data-pagefind-body class="astro-g5ptsecz" lang="en" dir="ltr"><div class="content-panel astro-a7po4psb"><div class="sl-container astro-a7po4psb"><h1 id="_top" class="astro-bebwqqxs">Coming from Elm</h1></div></div><div class="content-panel astro-a7po4psb"><div class="sl-container astro-a7po4psb"><div class="sl-markdown-content"><p>If you know Elm 0.19, you already know most of Elci’s syntax. This page lists what carries over and every
+difference that matters, so you can skip the parts of the Learn section you don’t need.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="what-stays-the-same">What stays the same</h2><a class="sl-anchor-link" href="#what-stays-the-same"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “What stays the same”</span></a></div>
+<ul>
+<li>The syntax of Elm 0.19.1: modules and <code dir="auto">exposing</code>, <code dir="auto">import … as … exposing</code>, <code dir="auto">type</code> and <code dir="auto">type alias</code>,
+<code dir="auto">case</code>, <code dir="auto">let</code>, <code dir="auto">if</code>, lambdas, records, tuples of two or three elements, <code dir="auto">|></code>, <code dir="auto">&#x3C;|</code>, <code dir="auto">>></code> and <code dir="auto">&#x3C;&#x3C;</code>.
+The <a href="/reference/grammar/">grammar</a> defines it exactly and lists
+<a href="/reference/grammar/#elm-syntax-that-elci-does-not-support">the Elm syntax Elci rejects</a>.</li>
+<li>Immutable values and pure functions. Evaluation is strict, as in Elm: arguments and <code dir="auto">let</code> values are
+evaluated before use, and only the chosen branch of <code dir="auto">if</code> and <code dir="auto">case</code> runs.</li>
+<li>Hindley–Milner type inference, generic functions (<code dir="auto">a -> a</code>), and generic type aliases and custom types.</li>
+<li>Exhaustive <code dir="auto">case</code> checking. Redundant patterns are errors.</li>
+<li>Local type annotations in <code dir="auto">let</code>.</li>
+<li>Records: field access, updates, destructuring and accessor functions such as <code dir="auto">.price</code>, as in
+<code dir="auto">List.map .price items</code>. A field of a value from another module reads as in Elm: <code dir="auto">Config.settings.fee</code>.</li>
+<li>The core library’s default imports: <code dir="auto">Basics</code> with <code dir="auto">exposing (..)</code>, <code dir="auto">List</code>, <code dir="auto">Maybe</code> with <code dir="auto">Maybe(..)</code>,
+<code dir="auto">Result</code> with <code dir="auto">Result(..)</code>, <code dir="auto">String</code>, <code dir="auto">Tuple</code> and <code dir="auto">Debug</code>. Their functions have Elm’s names, argument
+orders and edge cases: <code dir="auto">max</code>, <code dir="auto">compare</code>, <code dir="auto">identity</code>, <code dir="auto">Maybe.withDefault</code>, <code dir="auto">List.head</code>, <code dir="auto">List.range</code>,
+<code dir="auto">List.sortBy</code>, <code dir="auto">Result.andThen</code>, <code dir="auto">Tuple.first</code>, <code dir="auto">String.fromInt</code> and more.</li>
+<li>Elm’s name rules: your own declarations shadow imports, and two imports exposing one name make it
+ambiguous where you use it.</li>
+<li>No typeclasses, with Elm’s constrained type variables <code dir="auto">comparable</code>, <code dir="auto">appendable</code> and <code dir="auto">compappend</code>.</li>
+<li>Operators as functions, such as <code dir="auto">List.foldl (+) 0</code>, and <code dir="auto">^</code> for powers.</li>
+<li>Types that nothing determines, as in <code dir="auto">[] == []</code> or <code dir="auto">Result.withDefault 0 (Ok 5)</code>, need no annotation.</li>
+<li><code dir="auto">//</code> truncates toward zero, and <code dir="auto">modBy</code> and <code dir="auto">remainderBy</code> follow Elm’s sign rules: <code dir="auto">modBy</code> takes the sign
+of the divisor, <code dir="auto">remainderBy</code> the sign of the dividend.</li>
+<li>Negative arguments: <code dir="auto">modBy 3 -7</code> passes <code dir="auto">-7</code>, while <code dir="auto">a - 1</code> and <code dir="auto">a-1</code> subtract.</li>
+<li>elm-format 0.8.8 style, apart from one pitfall described below.</li>
+</ul>
+<div class="sl-heading-wrapper level-h2"><h2 id="the-program-model">The program model</h2><a class="sl-anchor-link" href="#the-program-model"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “The program model”</span></a></div>
+<p>Elm programs run in a browser. Elci programs are scripts that the Cardano ledger runs when it validates a
+transaction.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Elm</th><th>Elci</th></tr></thead><tbody><tr><td><code dir="auto">main : Program flags model msg</code></td><td>A handler function that returns <code dir="auto">Bool</code>, named in a <code dir="auto">[validators.&#x3C;name>]</code> table of <code dir="auto">elci.toml</code></td></tr><tr><td><code dir="auto">Html</code>, <code dir="auto">Browser</code>, <code dir="auto">Cmd</code>, <code dir="auto">Sub</code>, <code dir="auto">Task</code>, ports</td><td>None. A script has no effects: it reads its inputs and approves or rejects</td></tr><tr><td><code dir="auto">elm.json</code> and the package registry</td><td><code dir="auto">elci.toml</code>. No Elm packages; share code as source directories</td></tr><tr><td><code dir="auto">elm make</code>, <code dir="auto">elm repl</code>, <code dir="auto">elm reactor</code></td><td><code dir="auto">elci check</code>, <code dir="auto">elci build</code>, <code dir="auto">elci test</code>, and <code dir="auto">elci eval</code> for a function project</td></tr><tr><td>Runtime exceptions are rare</td><td>Failing is normal: any failure rejects the transaction</td></tr></tbody></table>
+<p>That last row changes how you think about errors. On-chain, failing is often the right answer: a malformed
+datum, a missing signature or a division by zero all reject the transaction, and nothing else happens. In
+Elm, <code dir="auto">n // 0</code> evaluates to <code dir="auto">0</code>. In Elci, it fails the script, as do <code dir="auto">modBy 0</code> and <code dir="auto">remainderBy 0</code>.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="types-and-values">Types and values</h2><a class="sl-anchor-link" href="#types-and-values"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Types and values”</span></a></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Topic</th><th>Elm</th><th>Elci</th></tr></thead><tbody><tr><td>Top-level signatures</td><td>Optional</td><td><strong>Required</strong> on every top-level declaration (<code dir="auto">ELCI2004</code>)</td></tr><tr><td><code dir="auto">Int</code></td><td>JavaScript number</td><td>Arbitrary precision, exact</td></tr><tr><td><code dir="auto">Float</code>, <code dir="auto">/</code>, <code dir="auto">toFloat</code>, <code dir="auto">round</code></td><td>Available</td><td><strong>Not available.</strong> Use <code dir="auto">Int</code> with an explicit scale, such as lovelace or basis points</td></tr><tr><td><code dir="auto">Char</code>, <code dir="auto">'a'</code></td><td>Available</td><td>Not available</td></tr><tr><td>Hex literals (<code dir="auto">0xFF</code>)</td><td>Available</td><td>Not available</td></tr><tr><td>String escapes</td><td>Including <code dir="auto">\u{…}</code>, and <code dir="auto">"""</code> for multi-line</td><td><code dir="auto">\n</code>, <code dir="auto">\r</code>, <code dir="auto">\t</code>, <code dir="auto">\"</code>, <code dir="auto">\\</code> only</td></tr><tr><td><code dir="auto">String</code> module</td><td>Full module</td><td><code dir="auto">fromInt</code>, <code dir="auto">isEmpty</code>, <code dir="auto">append</code>, <code dir="auto">concat</code> and <code dir="auto">join</code>. Use <code dir="auto">Bytes.fromString</code> and <code dir="auto">Bytes.toString</code> for bytes</td></tr><tr><td><code dir="auto">String</code> order</td><td>By UTF-16 code units</td><td>By UTF-8 bytes, which is code point order. They differ only for characters outside the Basic Multilingual Plane</td></tr><tr><td><code dir="auto">comparable</code>, <code dir="auto">appendable</code>, <code dir="auto">compappend</code></td><td>Constrained type variables</td><td>The same. <code dir="auto">Bytes</code> and ledger hashes such as <code dir="auto">PubKeyHash</code> are also comparable</td></tr><tr><td><code dir="auto">number</code></td><td><code dir="auto">Int</code> or <code dir="auto">Float</code></td><td>Not available: write <code dir="auto">Int</code></td></tr><tr><td><code dir="auto">2 ^ -1</code></td><td><code dir="auto">0.5</code></td><td>Fails the script</td></tr><tr><td><code dir="auto">==</code> on functions</td><td>Runtime crash</td><td>Compile error, as for <code dir="auto">Map</code>. <code dir="auto">==</code> on <code dir="auto">Data</code> compares structure</td></tr><tr><td>Extensible records <code dir="auto">{ r | x : Int }</code></td><td>Available</td><td>Not available. Records are closed</td></tr><tr><td>Let-polymorphism</td><td>Values and functions</td><td>Only for non-expansive bindings (functions, lambdas, plain values)</td></tr><tr><td>Undetermined type variables</td><td>Allowed</td><td>Allowed, except where a value of the type is created: <code dir="auto">Julc.Data.decode</code> and generic Java library functions need an annotation</td></tr></tbody></table>
+<p>Constrained type variables follow Elm’s rule, strictly: a signature variable whose values are compared
+must be named <code dir="auto">comparable…</code>, and one whose values are appended <code dir="auto">appendable…</code>. Elci reports the missing
+name:</p>
+<div class="expressive-code"><link rel="stylesheet" href="/_astro/ec.brvln.css"><script type="module" src="/_astro/ec.0vx5m.js"></script><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="elm"><code><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">joinTwo</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#EBBCBA;--0fs:italic;--1:#925856;--1fs:italic">a</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">-></span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#EBBCBA;--0fs:italic;--1:#925856;--1fs:italic">a</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">-></span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#EBBCBA;--0fs:italic;--1:#925856;--1fs:italic">a</span></div></div><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">joinTwo</span><span style="--0:#E0DEF4;--1:#575279"> left right </span><span style="--0:#6093A8;--1:#286983">=</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#E0DEF4;--1:#575279">    </span></span><span style="--0:#E0DEF4;--1:#575279">left </span><span style="--0:#6093A8;--1:#286983">++</span><span style="--0:#E0DEF4;--1:#575279"> right</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="joinTwo : a -> a -> ajoinTwo left right =    left ++ right"><div></div></button></div></figure></div>
+<div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">.../src/Main.elm:6:10: ELCI2003: The operator ++ appends values of type `a`, but the annotation of `joinTwo` says `a` can be any type. Rename it `appendable` (as in Elm) to require String or List values</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">6|     left ++ right</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#e0def4;--1:#575279">            </span></span><span style="--0:#e0def4;--1:#575279">^^</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code=".../src/Main.elm:6:10: ELCI2003: The operator ++ appends values of type &#x60;a&#x60;, but the annotation of &#x60;joinTwo&#x60; says &#x60;a&#x60; can be any type. Rename it &#x60;appendable&#x60; (as in Elm) to require String or List values6|     left ++ right            ^^"><div></div></button></div></figure></div>
+<p>With <code dir="auto">joinTwo : appendable -> appendable -> appendable</code>, both <code dir="auto">joinTwo "a" "b"</code> and <code dir="auto">joinTwo [ 1 ] [ 2 ]</code>
+compile, and <code dir="auto">joinTwo 1 2</code> doesn’t.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="the-core-library">The core library</h2><a class="sl-anchor-link" href="#the-core-library"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “The core library”</span></a></div>
+<p>Elci’s core library is Elm’s, imported by default in every module:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Module</th><th>What Elci has</th></tr></thead><tbody><tr><td><code dir="auto">Basics</code></td><td><code dir="auto">negate</code>, <code dir="auto">abs</code>, <code dir="auto">min</code>, <code dir="auto">max</code>, <code dir="auto">clamp</code>, <code dir="auto">compare</code> and <code dir="auto">Order</code>, <code dir="auto">identity</code>, <code dir="auto">always</code>, <code dir="auto">not</code>, <code dir="auto">xor</code>, <code dir="auto">modBy</code>, <code dir="auto">remainderBy</code>, <code dir="auto">^</code></td></tr><tr><td><code dir="auto">List</code></td><td>all of Elm’s <code dir="auto">List</code> except <code dir="auto">map4</code> and <code dir="auto">map5</code></td></tr><tr><td><code dir="auto">Maybe</code></td><td><code dir="auto">withDefault</code>, <code dir="auto">map</code>, <code dir="auto">map2</code>, <code dir="auto">map3</code>, <code dir="auto">andThen</code></td></tr><tr><td><code dir="auto">Result</code></td><td><code dir="auto">Ok</code>, <code dir="auto">Err</code>, <code dir="auto">map</code>, <code dir="auto">map2</code>, <code dir="auto">map3</code>, <code dir="auto">andThen</code>, <code dir="auto">withDefault</code>, <code dir="auto">toMaybe</code>, <code dir="auto">fromMaybe</code>, <code dir="auto">mapError</code></td></tr><tr><td><code dir="auto">Tuple</code></td><td>all of Elm’s <code dir="auto">Tuple</code></td></tr><tr><td><code dir="auto">String</code></td><td><code dir="auto">fromInt</code>, <code dir="auto">isEmpty</code>, <code dir="auto">append</code>, <code dir="auto">concat</code>, <code dir="auto">join</code></td></tr><tr><td><code dir="auto">Debug</code></td><td><code dir="auto">trace</code></td></tr></tbody></table>
+<p><a href="/reference/core-modules/">Core modules</a> has every signature. What is still missing:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Elm</th><th>In Elci</th></tr></thead><tbody><tr><td><code dir="auto">toFloat</code>, <code dir="auto">round</code>, <code dir="auto">sqrt</code>, <code dir="auto">pi</code> and the other <code dir="auto">Float</code> functions</td><td>Not available: there is no <code dir="auto">Float</code></td></tr><tr><td><code dir="auto">map4</code> and <code dir="auto">map5</code> in <code dir="auto">List</code>, <code dir="auto">Maybe</code> and <code dir="auto">Result</code></td><td>Not available. Nest <code dir="auto">map3</code>, or use <code dir="auto">case</code></td></tr><tr><td><code dir="auto">String.length</code>, <code dir="auto">toInt</code>, <code dir="auto">split</code>, <code dir="auto">slice</code>, <code dir="auto">fromFloat</code>…</td><td>Not available. <code dir="auto">Bytes.length (Bytes.fromString s)</code> is the byte length</td></tr><tr><td><code dir="auto">Char</code></td><td>Not available</td></tr><tr><td><code dir="auto">Set</code></td><td>Not available. Use a <code dir="auto">Dict k Bool</code> or a <code dir="auto">List</code></td></tr><tr><td><code dir="auto">Debug.log</code>, <code dir="auto">Debug.todo</code>, <code dir="auto">Debug.toString</code></td><td><code dir="auto">Debug.trace : String -> a -> a</code>, and <code dir="auto">String.fromInt</code> for numbers</td></tr></tbody></table>
+<p>A name Elci lacks is an error that says what to use or lists what the module has:</p>
+<div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">.../src/Main.elm:6:5: ELCI2104: Elci has no Debug.log; use Debug.trace message value, which returns value</span></div></div><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">.../src/Main.elm:6:5: ELCI2104: Elci's String module has no toInt. It has append, concat, fromInt, isEmpty, join</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code=".../src/Main.elm:6:5: ELCI2104: Elci has no Debug.log; use Debug.trace message value, which returns value.../src/Main.elm:6:5: ELCI2104: Elci&#x27;s String module has no toInt. It has append, concat, fromInt, isEmpty, join"><div></div></button></div></figure></div>
+<p>One import rule differs from Elm: a name you list explicitly, as in <code dir="auto">import Utils exposing (clamp)</code>,
+takes precedence over the default import of <code dir="auto">Basics.clamp</code> instead of being ambiguous. Modules outside the
+default imports, <code dir="auto">Bytes</code>, <code dir="auto">Dict</code>, <code dir="auto">Map</code>, <code dir="auto">Array</code>, <code dir="auto">Value</code> and <code dir="auto">Julc.Data</code>, need their own imports, as <code dir="auto">Dict</code>
+and <code dir="auto">Array</code> do in Elm.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="dict-map-and-array">Dict, Map and Array</h2><a class="sl-anchor-link" href="#dict-map-and-array"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Dict, Map and Array”</span></a></div>
+<p><code dir="auto">Dict</code> has all of Elm’s <code dir="auto">Dict</code> API, but it is stored differently:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th></th><th>Elm <code dir="auto">Dict</code></th><th>Elci <code dir="auto">Dict</code></th></tr></thead><tbody><tr><td>Import</td><td><code dir="auto">import Dict exposing (Dict)</code></td><td>The same; the type <code dir="auto">Dict k v</code> is always in scope</td></tr><tr><td>Keys</td><td><code dir="auto">comparable</code></td><td><code dir="auto">comparable</code>, which includes <code dir="auto">Bytes</code> and ledger hashes such as <code dir="auto">PubKeyHash</code></td></tr><tr><td>Structure</td><td>Balanced tree</td><td>A Plutus map with its keys in ascending order</td></tr><tr><td><code dir="auto">get</code>, <code dir="auto">insert</code>, <code dir="auto">remove</code></td><td>O(log n)</td><td>O(n): they stop at the first key that isn’t smaller</td></tr><tr><td><code dir="auto">fromList</code></td><td>O(n log n)</td><td>O(n log n), and O(n) for sorted input</td></tr><tr><td>Order of <code dir="auto">keys</code>, <code dir="auto">toList</code> and the folds</td><td>Ascending keys</td><td>The same</td></tr><tr><td><code dir="auto">==</code></td><td>Compares bindings</td><td>The same</td></tr></tbody></table>
+<p>In a datum, redeemer or parameter, a <code dir="auto">Dict</code> is a Plutus map with sorted keys, and a map whose keys are out
+of order or repeated fails to decode.</p>
+<p>Elci also has <code dir="auto">Map</code>, which Elm doesn’t. A <code dir="auto">Map k v</code> is the ledger’s own map: an unsorted association list
+whose keys may be any type with a Data encoding, such as <code dir="auto">Credential</code>. The transaction’s maps, such as
+<code dir="auto">txInfo.withdrawals</code> and <code dir="auto">txInfo.redeemers</code>, are <code dir="auto">Map</code>s. A map keeps its own order (<code dir="auto">insert</code> puts a key
+first), has no <code dir="auto">==</code>, and <code dir="auto">Map.fromList</code> is O(n²). Use <code dir="auto">Dict</code> for keyed data of your own, and <code dir="auto">Map</code> where the
+ledger or a key that isn’t comparable requires it.</p>
+<p><code dir="auto">Array</code> resembles Elm’s <code dir="auto">Array</code>: <code dir="auto">get</code> returns a <code dir="auto">Maybe</code> and <code dir="auto">slice</code> accepts negative indexes. It has no <code dir="auto">set</code>,
+<code dir="auto">push</code> or <code dir="auto">append</code>, and an array can’t be stored in data (datums, redeemers, records, lists and so on).
+Build a <code dir="auto">List</code> and convert it once with <code dir="auto">Array.fromList</code>.</p>
+<p>Elci also has a <code dir="auto">Value</code> module, for the ledger’s amounts of ada and native tokens, such as an output’s
+value and the transaction’s mint. It has no Elm counterpart; see
+<a href="/reference/core-modules/#value"><code dir="auto">Value</code></a>.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="your-data-is-plutus-data">Your data is Plutus Data</h2><a class="sl-anchor-link" href="#your-data-is-plutus-data"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Your data is Plutus Data”</span></a></div>
+<p>In Elm, you convert values to JSON with hand-written encoders and decoders. In Elci, every datum, redeemer and
+parameter is <strong>Plutus Data</strong>, and the encoding is derived from your types:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Type</th><th>Encoding</th></tr></thead><tbody><tr><td>Record</td><td>Constructor 0, fields <strong>sorted by field name</strong></td></tr><tr><td>Custom type</td><td>Constructor numbered by declaration order (first is 0), with its values as fields</td></tr><tr><td>Tuple</td><td>Constructor 0, fields in position order</td></tr><tr><td><code dir="auto">Bool</code></td><td><code dir="auto">False</code> is constructor 0, <code dir="auto">True</code> is constructor 1</td></tr><tr><td><code dir="auto">Maybe a</code></td><td><code dir="auto">Nothing</code> is constructor 0, <code dir="auto">Just</code> is constructor 1</td></tr><tr><td><code dir="auto">Result e a</code></td><td><code dir="auto">Ok</code> is constructor 0, <code dir="auto">Err</code> is constructor 1: the reverse of PlutusTx’s <code dir="auto">Either</code></td></tr><tr><td><code dir="auto">List a</code></td><td>A Data list</td></tr><tr><td><code dir="auto">Dict k v</code></td><td>A Data map with its keys in ascending order</td></tr><tr><td><code dir="auto">Map k v</code></td><td>A Data map, in the map’s order</td></tr><tr><td><code dir="auto">Int</code>, <code dir="auto">Bytes</code>, <code dir="auto">String</code></td><td>An integer, a byte string, and UTF-8 bytes</td></tr></tbody></table>
+<p><code dir="auto">Maybe</code>’s tags are the reverse of those used by Julc’s Java <code dir="auto">Optional</code> and the ledger’s own optional values,
+where the present value is constructor 0. They aren’t interchangeable: <code dir="auto">Julc.Data.fromOptional</code> and
+<code dir="auto">toOptional</code> convert between them. You can see Elci’s tags by encoding a list of <code dir="auto">Maybe</code> values:</p>
+<div class="expressive-code"><figure class="frame has-title not-content"><figcaption class="header"><span class="title">src/Main.elm</span></figcaption><pre data-language="elm"><code><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">module</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#9CCFD8;--1:#416F77">Main</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">exposing</span><span style="--0:#908CAA;--1:#68657E"> (</span><span style="--0:#EBBCBA;--1:#925856">main</span><span style="--0:#908CAA;--1:#68657E">)</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">import </span><span style="--0:#9CCFD8;--1:#416F77">Julc</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#9CCFD8;--1:#416F77">Data</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">as</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#9CCFD8;--1:#416F77">Data</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">main</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Data</span></div></div><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">main</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">=</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#9CCFD8;--1:#416F77">Data</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">encode </span><span style="--0:#908CAA;--1:#68657E">[</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">Nothing</span><span style="--0:#908CAA;--1:#68657E">,</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">Just</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#EBBCBA;--1:#925856">7</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">]</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="module Main exposing (main)import Julc.Data as Datamain : Datamain =    Data.encode [ Nothing, Just 7 ]"><div></div></button></div></figure></div>
+<div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">[Constr 0, Constr 1 [7]]</span></div></div><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">cpu 924368, mem 4120</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="[Constr 0, Constr 1 [7]]cpu 924368, mem 4120"><div></div></button></div></figure></div>
+<p>Handlers receive their datum and redeemer already decoded. When you hold raw <code dir="auto">Data</code>, such as an inline datum
+in a transaction output, convert it explicitly with <code dir="auto">Julc.Data</code>:</p>
+<div class="expressive-code"><figure class="frame has-title not-content"><figcaption class="header"><span class="title">src/Main.elm</span></figcaption><pre data-language="elm"><code><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">module</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#9CCFD8;--1:#416F77">Main</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">exposing</span><span style="--0:#908CAA;--1:#68657E"> (</span><span style="--0:#EBBCBA;--1:#925856">main</span><span style="--0:#908CAA;--1:#68657E">)</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">import </span><span style="--0:#9CCFD8;--1:#416F77">Julc</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#9CCFD8;--1:#416F77">Data</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">as</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#9CCFD8;--1:#416F77">Data</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">type alias Payout</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">=</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#908CAA;--1:#68657E">{ </span><span style="--0:#EBBCBA;--1:#925856">beneficiary</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">String</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#908CAA;--1:#68657E">    </span></span><span style="--0:#908CAA;--1:#68657E">, </span><span style="--0:#EBBCBA;--1:#925856">amount</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Int</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#908CAA;--1:#68657E">    </span></span><span style="--0:#908CAA;--1:#68657E">}</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">main</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Int</span></div></div><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">main</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">=</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#6093A8;--1:#286983">let</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#E0DEF4;--1:#575279">        </span></span><span style="--0:#E0DEF4;--1:#575279">raw </span><span style="--0:#6093A8;--1:#286983">=</span></div></div><div class="ec-line"><div class="code"><span class="indent">            </span><span style="--0:#9CCFD8;--1:#416F77">Data</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">encode </span><span style="--0:#908CAA;--1:#68657E">(</span><span style="--0:#6093A8;--1:#286983">Payout</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"alice"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#EBBCBA;--1:#925856">50</span><span style="--0:#908CAA;--1:#68657E">)</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#E0DEF4;--1:#575279">        </span></span><span style="--0:#E0DEF4;--1:#575279">decoded </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">Payout</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#E0DEF4;--1:#575279">        </span></span><span style="--0:#E0DEF4;--1:#575279">decoded </span><span style="--0:#6093A8;--1:#286983">=</span></div></div><div class="ec-line"><div class="code"><span class="indent">            </span><span style="--0:#9CCFD8;--1:#416F77">Data</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">decode raw</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#6093A8;--1:#286983">in</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#E0DEF4;--1:#575279">    </span></span><span style="--0:#E0DEF4;--1:#575279">decoded</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#EBBCBA;--1:#925856">amount</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="module Main exposing (main)import Julc.Data as Datatype alias Payout =    { beneficiary : String    , amount : Int    }main : Intmain =    let        raw =            Data.encode (Payout &#x22;alice&#x22; 50)        decoded : Payout        decoded =            Data.decode raw    in    decoded.amount"><div></div></button></div></figure></div>
+<div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">50</span></div></div><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">cpu 4820844, mem 21097</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="50cpu 4820844, mem 21097"><div></div></button></div></figure></div>
+<p>Unlike <code dir="auto">Json.Decode.decodeValue</code>, <code dir="auto">Data.decode</code> doesn’t return a <code dir="auto">Result</code>. Malformed data fails the script,
+which rejects the transaction. Annotate the target type (<code dir="auto">decoded : Payout</code>) when inference can’t tell what to
+decode. <a href="/contracts/datums-and-redeemers/">Datums and redeemers</a> covers the rules.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="error-messages">Error messages</h2><a class="sl-anchor-link" href="#error-messages"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Error messages”</span></a></div>
+<p>Elci’s error messages follow Elm’s: they quote the line of source, say what is wrong in terms of your
+program and suggest a fix.</p>
+<div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="elm"><code><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">label</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Int</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">-></span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">String</span></div></div><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">label</span><span style="--0:#E0DEF4;--1:#575279"> count </span><span style="--0:#6093A8;--1:#286983">=</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#6093A8;--1:#286983">case </span><span style="--0:#E0DEF4;--1:#575279">count </span><span style="--0:#6093A8;--1:#286983">of</span></div></div><div class="ec-line"><div class="code"><span class="indent">        </span><span style="--0:#EBBCBA;--1:#925856">0</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">-></span></div></div><div class="ec-line"><div class="code"><span class="indent">            </span><span style="--0:#F6C177;--1:#8D5E1F">"none"</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span class="indent">        </span><span style="--0:#EBBCBA;--1:#925856">1</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">-></span></div></div><div class="ec-line"><div class="code"><span class="indent">            </span><span style="--0:#F6C177;--1:#8D5E1F">"one"</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span class="indent">        </span><span style="--0:#6093A8;--1:#286983">_</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">-></span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#E0DEF4;--1:#575279">            </span></span><span style="--0:#E0DEF4;--1:#575279">count</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="label : Int -> Stringlabel count =    case count of        0 ->            &#x22;none&#x22;        1 ->            &#x22;one&#x22;        _ ->            count"><div></div></button></div></figure></div>
+<div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">.../src/Main.elm:14:13: ELCI2002: The 3rd branch of this case is `Int`, but the branches before it are `String`</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">14|             count</span></div></div><div class="ec-line"><div class="code"><span class="indent"><span style="--0:#e0def4;--1:#575279">                </span></span><span style="--0:#e0def4;--1:#575279">^^^^^</span></div></div><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">Hint: `String.fromInt` turns an Int into a String</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code=".../src/Main.elm:14:13: ELCI2002: The 3rd branch of this case is &#x60;Int&#x60;, but the branches before it are &#x60;String&#x60;14|             count                ^^^^^Hint: &#x60;String.fromInt&#x60; turns an Int into a String"><div></div></button></div></figure></div>
+<p>As in Elm:</p>
+<ul>
+<li>A type mismatch names the argument, branch, list element, operator side, annotation or field whose
+type differs, and writes types as in source.</li>
+<li>A <code dir="auto">case</code> that doesn’t cover every value lists the missing patterns, such as <code dir="auto">Nothing</code> and
+<code dir="auto">Just (Err _)</code>.</li>
+<li>A misspelt name gets a suggestion, such as <code dir="auto">did you mean `List.length`?</code>.</li>
+<li>A run reports every error it finds, one per top-level declaration, in source order. Type errors are
+reported once there are no syntax, import or qualified-name errors.</li>
+</ul>
+<p>What differs:</p>
+<ul>
+<li>The first line is <code dir="auto">path:line:column: ELCIxxxx: message</code>, not a <code dir="auto">-- TYPE MISMATCH --</code> banner. Editors and
+scripts parse this line, and each code keeps its meaning between releases.</li>
+<li><code dir="auto">--report=json</code> prints each error as one JSON object on its own line, and its fields are Elci’s own:
+<code dir="auto">code</code>, <code dir="auto">path</code>, <code dir="auto">line</code>, <code dir="auto">column</code>, <code dir="auto">message</code>, <code dir="auto">hints</code>, <code dir="auto">excerpt</code> and <code dir="auto">context</code>. See
+<a href="/reference/diagnostics/#json-reports-for-tools">diagnostics</a>.</li>
+<li><code dir="auto">elci explain ELCI2002</code> prints a longer explanation of a code, with an example and its fix.</li>
+</ul>
+<div class="sl-heading-wrapper level-h2"><h2 id="an-elm-format-pitfall">An elm-format pitfall</h2><a class="sl-anchor-link" href="#an-elm-format-pitfall"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “An elm-format pitfall”</span></a></div>
+<p>elm-format 0.8.8 is Elci’s formatter, but it stores integer literals as 64-bit numbers. It silently changes
+a literal larger than about 9.2 × 10¹⁸ into a different number. Elci’s <code dir="auto">Int</code> has no limit, so compute such
+values instead, for example <code dir="auto">1000000000 * 1000000000 * 1000000000</code>.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="tooling">Tooling</h2><a class="sl-anchor-link" href="#tooling"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Tooling”</span></a></div>
+<ul>
+<li>The repository has a <a href="https://github.com/bloxbean/elci-lang/tree/main/tree-sitter-elci">tree-sitter grammar</a>
+for highlighting, folding and indentation in Neovim, Helix and Zed.</li>
+<li>There is no Elci language server. The Elm language server doesn’t know Elci’s modules, so trust
+<code dir="auto">elci check</code> over its diagnostics. An editor integration can run <code dir="auto">elci check --report=json</code> and read
+each error’s location, message and hints.</li>
+<li><code dir="auto">elci eval</code> runs a function project and shows the result and its cost, which is the closest thing to
+<code dir="auto">elm repl</code>. <a href="/learn/basics/">Values, functions and types</a> shows how to set one up.</li>
+<li><code dir="auto">elci test</code> replaces elm-test, and adds transaction scenarios and property tests. See
+<a href="/testing/unit-tests/">Unit tests</a>.</li>
+</ul></div><footer class="sl-flex astro-ddtxxk7k"><div class="meta sl-flex astro-ddtxxk7k"><a href="https://github.com/bloxbean/elci-lang/edit/main/www/src/content/docs/learn/coming-from-elm.md" class="sl-flex print:hidden astro-qlekgd3o"><svg aria-hidden="true" class="astro-qlekgd3o astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.2em;"><path d="M22 7.24a1 1 0 0 0-.29-.71l-4.24-4.24a1 1 0 0 0-1.1-.22 1 1 0 0 0-.32.22l-2.83 2.83L2.29 16.05a1 1 0 0 0-.29.71V21a1 1 0 0 0 1 1h4.24a1 1 0 0 0 .76-.29l10.87-10.93L21.71 8c.1-.1.17-.2.22-.33a1 1 0 0 0 0-.24v-.14l.07-.05ZM6.83 20H4v-2.83l9.93-9.93 2.83 2.83L6.83 20ZM18.17 8.66l-2.83-2.83 1.42-1.41 2.82 2.82-1.41 1.42Z"/></svg>Edit page</a></div><div class="pagination-links print:hidden astro-b5raizh3" dir="ltr"><a href="/learn/modules/" rel="prev" class="astro-b5raizh3"><svg aria-hidden="true" class="astro-b5raizh3 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg><span class="astro-b5raizh3">Previous<br class="astro-b5raizh3"><span class="link-title astro-b5raizh3">Modules and imports</span></span></a><a href="/contracts/validators/" rel="next" class="astro-b5raizh3"><svg aria-hidden="true" class="astro-b5raizh3 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17.92 11.62a1.001 1.001 0 0 0-.21-.33l-5-5a1.003 1.003 0 1 0-1.42 1.42l3.3 3.29H7a1 1 0 0 0 0 2h7.59l-3.3 3.29a1.002 1.002 0 0 0 .325 1.639 1 1 0 0 0 1.095-.219l5-5a1 1 0 0 0 .21-.33 1 1 0 0 0 0-.76Z"/></svg><span class="astro-b5raizh3">Next<br class="astro-b5raizh3"><span class="link-title astro-b5raizh3">Validators and purposes</span></span></a></div></footer></div></div></main></div></div></div></div></body></html>

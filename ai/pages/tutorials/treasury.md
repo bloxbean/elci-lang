@@ -1,0 +1,502 @@
+# A treasury and its badge policy
+
+> Build two cooperating scripts from an empty directory, a treasury that spends payouts and withdraws staking rewards and a badge minting policy, both parameterized by an admin key.
+
+Source: https://elci-lang.dev/tutorials/treasury/
+
+In this tutorial you build a project with two validators. The first, a treasury, is one script with two purposes: it releases payouts and withdraws its own staking rewards. The second is a separate minting policy for badges. Both take an `admin` key as a deployment parameter. Along the way you share code between scripts, test every purpose, read the minted quantity from the transaction, and apply the parameter for deployment.
+
+You should be comfortable with the [vesting tutorial](https://elci-lang.dev/tutorials/vesting/). The finished project is close to the [treasury example](https://github.com/bloxbean/elci-lang/tree/main/examples/treasury) in the repository; the badge policy here also checks the minted tokens.
+
+## What you'll build
+
+- **`treasury`**, one script with two handlers:
+  - `spend`: each locked output holds a `Payout` datum naming a beneficiary and an amount. The redeemer `Release` lets the beneficiary take a payout with a positive amount; `Cancel` lets the admin take it back.
+  - `withdraw`: only the admin may withdraw the staking rewards earned by the treasury's stake credential.
+- **`badge`**, a separate minting policy: only the admin may mint `BADGE` tokens, and only a positive number of them.
+
+Both scripts are parameterized by the same `admin` key hash, but they are independent scripts with different hashes.
+
+## Create the project
+
+```sh
+elci init treasury --validator treasury
+cd treasury
+rm src/Main.elm tests/MainTest.elm
+```
+
+```text
+Created Elci project at .../treasury with initial spend handler in validator treasury.
+Run: elci check .../treasury
+```
+
+## Share the signature check
+
+Both scripts check signatures, so put the check in its own module. Create `src/Auth.elm`:
+
+```elm title="src/Auth.elm"
+module Auth exposing (signedBy)
+
+import Julc.Ledger exposing (PubKeyHash, ScriptContext)
+
+signedBy : PubKeyHash -> ScriptContext -> Bool
+signedBy key ctx =
+    List.any (\signer -> signer == key) ctx.txInfo.signatories
+```
+
+A module is plain source. Each script includes only the functions its handlers reach, so sharing a module costs nothing. The core `Tx` module has the same check as `Tx.signedBy`; this project keeps its own to show a shared module.
+
+## Write the spend handler
+
+1. **Configure the treasury.** Replace the validator table in `elci.toml`. The table declares the `admin` parameter and the spend handler:
+
+   ```toml title="elci.toml"
+   [project]
+   source-directories = ["src"]
+   target = "plutus-v3-pv11-uplc-1.1.0"
+   julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+
+   [validators.treasury]
+   boundary = "julc-strict-v1"
+   parameters = ["admin"]
+   spend = "Treasury.spend"
+   ```
+
+2. **Write the handler.** Create `src/Treasury.elm`:
+
+   ```elm title="src/Treasury.elm"
+   module Treasury exposing (Action(..), Payout, spend)
+
+   import Auth exposing (signedBy)
+   import Julc.Ledger exposing (PubKeyHash, ScriptContext)
+
+   type alias Payout =
+       { beneficiary : PubKeyHash
+       , amount : Int
+       }
+
+   type Action
+       = Release
+       | Cancel
+
+   spend : PubKeyHash -> Payout -> Action -> ScriptContext -> Bool
+   spend admin payout action ctx =
+       case action of
+           Release ->
+               payout.amount > 0 && signedBy payout.beneficiary ctx
+
+           Cancel ->
+               signedBy admin ctx
+   ```
+
+   The parameter comes first, then the datum (`Payout`), the redeemer (`Action`) and the context.
+
+3. **Check it.**
+
+   ```sh
+   elci check .
+   ```
+
+   ```text
+   validator treasury (spend): checked; 458 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+   ```
+
+4. **Test it.** Create `tests/TreasuryTest.elm`. The helper `claim` builds a spend of a payout with a given action. Parameters are passed as `Data` in the declared order:
+
+   ```elm title="tests/TreasuryTest.elm"
+   module TreasuryTest exposing (adminCancels, adminCannotRelease, beneficiaryReleases)
+
+   import Julc.Data as Data
+   import Julc.Ledger exposing (PubKeyHash)
+   import Scenario exposing (Scenario)
+   import Treasury exposing (Action(..), Payout)
+
+   admin : PubKeyHash
+   admin =
+       Scenario.key "admin"
+
+   beneficiary : PubKeyHash
+   beneficiary =
+       Scenario.key "beneficiary"
+
+   payout : Payout
+   payout =
+       { beneficiary = beneficiary, amount = 50 }
+
+   claim : Action -> Scenario
+   claim action =
+       Scenario.spend "treasury" (Scenario.outRef "treasury" 0) (Data.encode payout)
+           |> Scenario.parameters [ Data.encode admin ]
+           |> Scenario.redeemer (Data.encode action)
+
+   beneficiaryReleases : Scenario
+   beneficiaryReleases =
+       claim Release
+           |> Scenario.signedBy beneficiary
+
+   adminCannotRelease : Scenario
+   adminCannotRelease =
+       claim Release
+           |> Scenario.signedBy admin
+           |> Scenario.expectFailure
+
+   adminCancels : Scenario
+   adminCancels =
+       claim Cancel
+           |> Scenario.signedBy admin
+   ```
+
+   ```sh
+   elci test .
+   ```
+
+   ```text
+   PASS TreasuryTest.beneficiaryReleases (cpu 11698810, mem 46679)
+   PASS TreasuryTest.adminCannotRelease (cpu 12077243, mem 48611)
+   PASS TreasuryTest.adminCancels (cpu 11310693, mem 45520)
+   3 passed, 0 failed
+   ```
+
+## Add the withdraw handler
+
+A script's hash can also serve as a stake credential. If the treasury's address uses the script's hash for its staking part too, the staking rewards of the funds it holds accrue to that credential, and withdrawing them runs the script with the `withdraw` purpose. Adding a handler to the same table keeps it **one script**, so the address that holds the payouts and the credential that earns the rewards share one hash.
+
+1. **Add the handler key.**
+
+   ```toml title="elci.toml" ins={6,11}
+   [project]
+   source-directories = ["src"]
+   target = "plutus-v3-pv11-uplc-1.1.0"
+   julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+
+   # One script: the treasury address spends payouts and withdraws its staking rewards.
+   [validators.treasury]
+   boundary = "julc-strict-v1"
+   parameters = ["admin"]
+   spend = "Treasury.spend"
+   withdraw = "Treasury.withdraw"
+   ```
+
+2. **Write the handler.** Expose `withdraw` from `src/Treasury.elm` and add it at the end:
+
+   ```elm title="src/Treasury.elm"
+   module Treasury exposing (Action(..), Payout, spend, withdraw)
+   ```
+
+   ```elm title="src/Treasury.elm (at the end)"
+   withdraw : PubKeyHash -> () -> ScriptContext -> Bool
+   withdraw admin _ ctx =
+       signedBy admin ctx
+   ```
+
+   A withdraw handler has no datum: parameters, redeemer, context. It receives the same `admin` parameter as `spend`; every handler of a validator receives all of its parameters.
+
+3. **Check it.** The check line now lists both purposes:
+
+   ```sh
+   elci check .
+   ```
+
+   ```text
+   validator treasury (spend, withdraw): checked; 540 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+   ```
+
+4. **Test it.** Add two scenarios to `tests/TreasuryTest.elm`, and to its `exposing` list. `Scenario.withdraw "treasury"` withdraws rewards from the script's own stake credential:
+
+   ```elm title="tests/TreasuryTest.elm"
+   module TreasuryTest exposing (adminCancels, adminCannotRelease, adminWithdrawsRewards, beneficiaryReleases, rewardsNeedTheAdmin)
+   ```
+
+   ```elm title="tests/TreasuryTest.elm (at the end)"
+   adminWithdrawsRewards : Scenario
+   adminWithdrawsRewards =
+       Scenario.withdraw "treasury"
+           |> Scenario.parameters [ Data.encode admin ]
+           |> Scenario.signedBy admin
+
+   rewardsNeedTheAdmin : Scenario
+   rewardsNeedTheAdmin =
+       Scenario.withdraw "treasury"
+           |> Scenario.parameters [ Data.encode admin ]
+           |> Scenario.signedBy beneficiary
+           |> Scenario.expectFailure
+   ```
+
+   ```sh
+   elci test .
+   ```
+
+   ```text
+   PASS TreasuryTest.beneficiaryReleases (cpu 11746810, mem 46979)
+   PASS TreasuryTest.adminCannotRelease (cpu 12125243, mem 48911)
+   PASS TreasuryTest.adminCancels (cpu 11358693, mem 45820)
+   PASS TreasuryTest.adminWithdrawsRewards (cpu 6103274, mem 24333)
+   PASS TreasuryTest.rewardsNeedTheAdmin (cpu 6481707, mem 26265)
+   5 passed, 0 failed
+   ```
+
+   The spend scenarios cost a little more than before: the script now chooses between two purposes before it runs a handler.
+
+## Add the badge policy
+
+The badge policy is a separate script, so it gets its own table. It reads the minted quantity from the transaction's `mint` field. That field is a multi-asset `Value`, which the core [`Value`](https://elci-lang.dev/reference/core-modules/#value) module reads.
+
+:::caution[Don't trust the redeemer for amounts]
+The redeemer is whatever the transaction's builder puts there. A policy that only checked a quantity passed in the redeemer would approve a transaction whose redeemer says `3` while it mints a thousand tokens. Read what actually happens from `ctx.txInfo`.
+:::
+
+1. **Configure it.** Add the `badge` table:
+
+   ```toml title="elci.toml" ins={13-17}
+   [project]
+   source-directories = ["src"]
+   target = "plutus-v3-pv11-uplc-1.1.0"
+   julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+
+   # One script: the treasury address spends payouts and withdraws its staking rewards.
+   [validators.treasury]
+   boundary = "julc-strict-v1"
+   parameters = ["admin"]
+   spend = "Treasury.spend"
+   withdraw = "Treasury.withdraw"
+
+   # A separate script, and so a separate policy id.
+   [validators.badge]
+   boundary = "julc-strict-v1"
+   parameters = ["admin"]
+   mint = "Badge.mint"
+   ```
+
+2. **Write the policy.** Create `src/Badge.elm`:
+
+   ```elm title="src/Badge.elm"
+   module Badge exposing (mint)
+
+   import Auth
+   import Bytes
+   import Julc.Ledger exposing (PubKeyHash, ScriptContext, ScriptInfo(..), TokenName(..))
+   import Value
+
+   {-| The admin may mint badges. The quantity is read from the transaction's mint field,
+   never from the redeemer, which the transaction builder chooses freely.
+   -}
+   mint : PubKeyHash -> () -> ScriptContext -> Bool
+   mint admin _ ctx =
+       case ctx.scriptInfo of
+           MintingScript policy ->
+               (Value.quantityOf policy (TokenName (Bytes.fromString "BADGE")) ctx.txInfo.mint > 0)
+                   && Auth.signedBy admin ctx
+
+           _ ->
+               False
+   ```
+
+   - `ctx.scriptInfo` is `MintingScript policy` when the script runs as a minting policy. `policy` is the script's own policy id.
+   - `Value.quantityOf` returns how many tokens of that policy and name the transaction mints (negative for a burn, zero if none). `policy` is already a `PolicyId`, and `TokenName (Bytes.fromString "BADGE")` builds the token name from its bytes.
+   - The `_` branch never runs for a script with only a mint handler, but `case` must cover every constructor.
+
+3. **Check both validators.**
+
+   ```sh
+   elci check .
+   ```
+
+   ```text
+   validator badge (mint): checked; 341 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+   validator treasury (spend, withdraw): checked; 540 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+   ```
+
+4. **Test it.** Create `tests/BadgeTest.elm`, with a property that covers every quantity:
+
+   ```elm title="tests/BadgeTest.elm"
+   module BadgeTest exposing (adminMintsBadges, badgesNeedAPositiveQuantity, strangersCannotMint)
+
+   import Bytes
+   import Julc.Data as Data
+   import Julc.Ledger exposing (PubKeyHash)
+   import Property exposing (Property)
+   import Scenario exposing (Scenario)
+
+   admin : PubKeyHash
+   admin =
+       Scenario.key "admin"
+
+   badges : Int -> Scenario
+   badges quantity =
+       Scenario.mint "badge"
+           |> Scenario.parameters [ Data.encode admin ]
+           |> Scenario.minting (Bytes.fromString "BADGE") quantity
+
+   adminMintsBadges : Scenario
+   adminMintsBadges =
+       badges 3
+           |> Scenario.signedBy admin
+
+   strangersCannotMint : Scenario
+   strangersCannotMint =
+       badges 3
+           |> Scenario.signedBy (Scenario.key "stranger")
+           |> Scenario.expectFailure
+
+   badgesNeedAPositiveQuantity : Int -> Property
+   badgesNeedAPositiveQuantity quantity =
+       let
+           signed =
+               badges quantity
+                   |> Scenario.signedBy admin
+       in
+       if quantity > 0 then
+           Property.scenario signed
+
+       else
+           Property.scenario (Scenario.expectFailure signed)
+   ```
+
+   `Scenario.minting` mints (or, with a negative quantity, burns) tokens under the validator's own policy. The property runs with generated quantities: positive ones must succeed, and zero and negative ones must be rejected.
+
+## Add a property and a budget to the treasury
+
+Two more checks for the treasury tests. Add `import Property exposing (Property)`, expose `onlyTheBeneficiaryReleases`, give `beneficiaryReleases` a budget, and add the property at the end:
+
+```elm title="tests/TreasuryTest.elm" ins={1,5}
+module TreasuryTest exposing (adminCancels, adminCannotRelease, adminWithdrawsRewards, beneficiaryReleases, onlyTheBeneficiaryReleases, rewardsNeedTheAdmin)
+
+import Julc.Data as Data
+import Julc.Ledger exposing (PubKeyHash)
+import Property exposing (Property)
+import Scenario exposing (Scenario)
+import Treasury exposing (Action(..), Payout)
+```
+
+```elm title="tests/TreasuryTest.elm" ins={5}
+beneficiaryReleases : Scenario
+beneficiaryReleases =
+    claim Release
+        |> Scenario.signedBy beneficiary
+        |> Scenario.withinBudget 20000000 100000
+```
+
+```elm title="tests/TreasuryTest.elm (at the end)"
+onlyTheBeneficiaryReleases : PubKeyHash -> Property
+onlyTheBeneficiaryReleases signer =
+    let
+        release =
+            claim Release
+                |> Scenario.signedBy signer
+    in
+    if signer == beneficiary then
+        Property.scenario release
+
+    else
+        Property.scenario (Scenario.expectFailure release)
+```
+
+- `Scenario.withinBudget cpu memory` fails the scenario if the script uses more than that budget, so a change that makes releases much more expensive can't slip through.
+- The property generates 28-byte key hashes and checks that a release signed by anyone else is rejected. Random keys essentially never equal the beneficiary, so in practice it checks "everyone else is rejected"; `beneficiaryReleases` covers the beneficiary.
+
+Run everything:
+
+```sh
+elci test . --seed 42
+```
+
+```text
+PASS BadgeTest.adminMintsBadges (cpu 10442084, mem 36669)
+PASS BadgeTest.strangersCannotMint (cpu 10820517, mem 38601)
+PASS BadgeTest.badgesNeedAPositiveQuantity (100 runs, max cpu 10442084, mem 36669)
+PASS TreasuryTest.beneficiaryReleases (cpu 11746810, mem 46979)
+PASS TreasuryTest.adminCannotRelease (cpu 12125243, mem 48911)
+PASS TreasuryTest.adminCancels (cpu 11358693, mem 45820)
+PASS TreasuryTest.adminWithdrawsRewards (cpu 6103274, mem 24333)
+PASS TreasuryTest.rewardsNeedTheAdmin (cpu 6481707, mem 26265)
+PASS TreasuryTest.onlyTheBeneficiaryReleases (100 runs, max cpu 12125243, mem 48911)
+9 passed, 0 failed (seed 42)
+```
+
+A mint costs about 10 million CPU units, against about 6 million for a withdrawal, which only checks a signature. Most of the difference is `Value.quantityOf` reading the mint value. That's affordable, but the budget is worth watching as a policy grows.
+
+## Build both scripts
+
+```sh
+elci build .
+```
+
+```text
+validator badge (mint): checked; 341 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+validator treasury (spend, withdraw): checked; 540 FLAT bytes; plutus-v3-pv11-uplc-1.1.0
+```
+
+- treasury/
+  - elci.toml
+  - src/
+    - Auth.elm
+    - Badge.elm
+    - Treasury.elm
+  - tests/
+    - BadgeTest.elm
+    - TreasuryTest.elm
+  - build/
+    - validators/
+      - elci-outputs.json
+      - badge/
+        - abi.json
+        - validator.flat
+        - validator.plutus
+        - validator.plutus.json
+      - treasury/
+        - abi.json
+        - validator.flat
+        - validator.plutus
+        - validator.plutus.json
+
+To rebuild only one script, select it: `elci build . --validator badge`. The treasury's artifact records its two purposes as `multi` and its pending parameter (`cborHex` shortened):
+
+```json title="build/validators/treasury/validator.plutus.json"
+{
+  "type": "PlutusScriptV3",
+  "purpose": "multi",
+  "description": "treasury",
+  "cborHex": "...",
+  "hash": "",
+  "params": "admin:PubKeyHash",
+  "sizeBytes": 540
+}
+```
+
+## Apply the admin key
+
+Both scripts need the admin's key hash before they can be deployed. Keep it in a file, as Plutus Data JSON:
+
+```json title="params/admin.json"
+{"bytes": "887d8fbb82ce756a9dac9210c3d1235e9d3ff2457a667d311d318142"}
+```
+
+Apply it to each script. `@params/admin.json` is read relative to the project directory:
+
+```sh
+elci apply . --validator treasury --param admin=@params/admin.json
+elci apply . --validator badge --param admin=@params/admin.json
+```
+
+```text
+validator treasury: applied 1 parameter; hash 16a075885ca1a8102d56e474815e720bf5d7c342f4bd2e225a87441e; wrote .../treasury/build/validators/treasury/applied.plutus.json
+validator badge: applied 1 parameter; hash 94e8ac9685e836de2886ca6411c97a1328aea45ac669f3fd05ae4949; wrote .../treasury/build/validators/badge/applied.plutus.json
+```
+
+The same admin gives two different hashes, because the scripts are different:
+
+- The **treasury** hash is the payment credential of the treasury's address, and the stake credential whose rewards `withdraw` guards.
+- The **badge** hash is the badge policy id.
+
+`elci apply` checked that the value is a well-formed `PubKeyHash` before applying it. Replace the example key with the real admin's key hash, and note that the next `elci build` removes both `applied.plutus.json` files; use `--output` to keep them elsewhere. See [Parameterized validators](https://elci-lang.dev/contracts/parameters/) and [Build and deploy](https://elci-lang.dev/contracts/build-and-deploy/).
+
+## Recap and next steps
+
+- One `[validators.<name>]` table is one script. Several handler keys make one script serve several purposes with one hash.
+- Separate tables make independent scripts. They can share modules and parameters but have their own hashes.
+- Every handler receives all of its validator's parameters, first and in the declared order.
+- Read amounts from the transaction, not from the redeemer.
+
+The treasury trusts the beneficiary to take the payout: `Release` checks the signature and that the amount is positive, not where the funds go. As an exercise, require that the transaction pays `payout.amount` lovelace to the beneficiary, using the output checks in [Reading the transaction](https://elci-lang.dev/contracts/reading-the-transaction/), and add scenarios with `Scenario.output`.
+
+Next, write a minting policy that can only ever run once in [A one-shot minting policy](https://elci-lang.dev/tutorials/one-shot-policy/).

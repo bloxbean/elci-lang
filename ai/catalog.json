@@ -1,0 +1,2280 @@
+{
+  "note": "Signatures of the modules an Elci program can use. Bundled Elci modules are parsed from their sources; Java libraries are the compile-verified exports, imported after mapping them under [java-modules], e.g. \"Julc.Math\" = \"org.julclang.stdlib.lib.MathLib\".",
+  "bundledModules": [
+    {
+      "module": "Array",
+      "types": [],
+      "functions": [
+        {
+          "name": "empty",
+          "signature": "Array a"
+        },
+        {
+          "name": "fromList",
+          "signature": "List a -> Array a"
+        },
+        {
+          "name": "length",
+          "signature": "Array a -> Int"
+        },
+        {
+          "name": "isEmpty",
+          "signature": "Array a -> Bool"
+        },
+        {
+          "name": "get",
+          "signature": "Int -> Array a -> Maybe a",
+          "summary": "The element at a 0-based index, or `Nothing` outside the array."
+        },
+        {
+          "name": "initialize",
+          "signature": "Int -> (Int -> a) -> Array a",
+          "summary": "`initialize n f` is `[ f 0, f 1, ..., f (n - 1) ]` as an array."
+        },
+        {
+          "name": "repeat",
+          "signature": "Int -> a -> Array a"
+        },
+        {
+          "name": "toList",
+          "signature": "Array a -> List a"
+        },
+        {
+          "name": "toIndexedList",
+          "signature": "Array a -> List ( Int, a )"
+        },
+        {
+          "name": "foldl",
+          "signature": "(a -> b -> b) -> b -> Array a -> b",
+          "summary": "Reduce from the first element."
+        },
+        {
+          "name": "foldr",
+          "signature": "(a -> b -> b) -> b -> Array a -> b",
+          "summary": "Reduce from the last element."
+        },
+        {
+          "name": "map",
+          "signature": "(a -> b) -> Array a -> Array b"
+        },
+        {
+          "name": "indexedMap",
+          "signature": "(Int -> a -> b) -> Array a -> Array b"
+        },
+        {
+          "name": "filter",
+          "signature": "(a -> Bool) -> Array a -> Array a"
+        },
+        {
+          "name": "slice",
+          "signature": "Int -> Int -> Array a -> Array a",
+          "summary": "The elements from `start` up to, but not including, `end`. A negative index counts from the end, as in Elm: `slice 0 -1` drops the last element."
+        }
+      ],
+      "kind": "core",
+      "import": "import Array",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "Basics",
+      "types": [
+        "Order"
+      ],
+      "functions": [
+        {
+          "name": "negate",
+          "signature": "Int -> Int",
+          "summary": "Negate an integer: `negate 42 == -42`."
+        },
+        {
+          "name": "abs",
+          "signature": "Int -> Int",
+          "summary": "The absolute value of an integer: `abs -4 == 4`."
+        },
+        {
+          "name": "min",
+          "signature": "comparable -> comparable -> comparable",
+          "summary": "The smaller of two comparable values: `min 3 7 == 3`."
+        },
+        {
+          "name": "max",
+          "signature": "comparable -> comparable -> comparable",
+          "summary": "The larger of two comparable values: `max 3 7 == 7`."
+        },
+        {
+          "name": "clamp",
+          "signature": "Int -> Int -> Int -> Int",
+          "summary": "Keep a number between two bounds: `clamp 0 100 x` is `0` when `x < 0`, `100` when `x > 100`, and `x` otherwise."
+        },
+        {
+          "name": "compare",
+          "signature": "comparable -> comparable -> Order",
+          "summary": "Compare two comparable values: `compare 3 7 == LT`."
+        },
+        {
+          "name": "identity",
+          "signature": "a -> a",
+          "summary": "Return the argument unchanged."
+        },
+        {
+          "name": "always",
+          "signature": "a -> b -> a",
+          "summary": "A function that ignores its second argument: `List.map (always 0) [ 1, 2 ] == [ 0, 0 ]`."
+        },
+        {
+          "name": "xor",
+          "signature": "Bool -> Bool -> Bool",
+          "summary": "Exclusive or: `True` when exactly one argument is `True`."
+        }
+      ],
+      "kind": "core",
+      "import": "(imported by default: import Basics exposing (..))",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "Dict",
+      "types": [
+        "Dict"
+      ],
+      "functions": [
+        {
+          "name": "empty",
+          "signature": "Dict k v",
+          "summary": "The empty dictionary."
+        },
+        {
+          "name": "singleton",
+          "signature": "comparable -> v -> Dict comparable v",
+          "summary": "A dictionary with one binding."
+        },
+        {
+          "name": "insert",
+          "signature": "comparable -> v -> Dict comparable v -> Dict comparable v",
+          "summary": "Bind a key to a value, replacing any existing binding."
+        },
+        {
+          "name": "update",
+          "signature": "comparable -> (Maybe v -> Maybe v) -> Dict comparable v -> Dict comparable v",
+          "summary": "Change the binding of a key: `Nothing` removes it."
+        },
+        {
+          "name": "remove",
+          "signature": "comparable -> Dict comparable v -> Dict comparable v",
+          "summary": "Remove a key's binding, if it has one."
+        },
+        {
+          "name": "isEmpty",
+          "signature": "Dict k v -> Bool",
+          "summary": "Whether the dictionary has no bindings."
+        },
+        {
+          "name": "member",
+          "signature": "comparable -> Dict comparable v -> Bool",
+          "summary": "Whether a key is bound."
+        },
+        {
+          "name": "get",
+          "signature": "comparable -> Dict comparable v -> Maybe v",
+          "summary": "The value bound to a key, if any."
+        },
+        {
+          "name": "size",
+          "signature": "Dict k v -> Int",
+          "summary": "The number of bindings."
+        },
+        {
+          "name": "keys",
+          "signature": "Dict k v -> List k",
+          "summary": "The keys, in ascending order."
+        },
+        {
+          "name": "values",
+          "signature": "Dict k v -> List v",
+          "summary": "The values, in the ascending order of their keys."
+        },
+        {
+          "name": "toList",
+          "signature": "Dict k v -> List ( k, v )",
+          "summary": "The bindings, in ascending key order."
+        },
+        {
+          "name": "fromList",
+          "signature": "List ( comparable, v ) -> Dict comparable v",
+          "summary": "A dictionary of the pairs; for a repeated key, the last pair wins. A stable merge sort of the input's ascending runs: O(n log n), and O(n) for sorted input."
+        },
+        {
+          "name": "map",
+          "signature": "(k -> a -> b) -> Dict k a -> Dict k b",
+          "summary": "Transform every value."
+        },
+        {
+          "name": "foldl",
+          "signature": "(k -> v -> b -> b) -> b -> Dict k v -> b",
+          "summary": "Fold over the bindings in ascending key order."
+        },
+        {
+          "name": "foldr",
+          "signature": "(k -> v -> b -> b) -> b -> Dict k v -> b",
+          "summary": "Fold over the bindings in descending key order."
+        },
+        {
+          "name": "filter",
+          "signature": "(comparable -> v -> Bool) -> Dict comparable v -> Dict comparable v",
+          "summary": "The bindings that pass the test."
+        },
+        {
+          "name": "partition",
+          "signature": "(comparable -> v -> Bool) -> Dict comparable v -> ( Dict comparable v, Dict comparable v )",
+          "summary": "Split into the bindings that pass the test and those that don't."
+        },
+        {
+          "name": "union",
+          "signature": "Dict comparable v -> Dict comparable v -> Dict comparable v",
+          "summary": "All bindings of both; for a key in both, the left dictionary's value wins."
+        },
+        {
+          "name": "intersect",
+          "signature": "Dict comparable v -> Dict comparable v -> Dict comparable v",
+          "summary": "The bindings of the left dictionary whose keys the right one also has."
+        },
+        {
+          "name": "diff",
+          "signature": "Dict comparable a -> Dict comparable b -> Dict comparable a",
+          "summary": "The bindings of the left dictionary whose keys the right one does not have."
+        },
+        {
+          "name": "merge",
+          "signature": "(comparable -> a -> result -> result) -> (comparable -> a -> b -> result -> result) -> (comparable -> b -> result -> result) -> Dict comparable a -> Dict comparable b -> result -> result"
+        }
+      ],
+      "kind": "core",
+      "import": "import Dict",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "Interval",
+      "types": [
+        "Interval"
+      ],
+      "functions": [
+        {
+          "name": "isEntirelyAfter",
+          "signature": "Int -> Interval -> Bool",
+          "summary": "Whether every time in the range is after `time`: `isEntirelyAfter deadline ctx.txInfo.validRange` holds only when the transaction cannot run at or before the deadline."
+        },
+        {
+          "name": "isEntirelyBefore",
+          "signature": "Int -> Interval -> Bool",
+          "summary": "Whether every time in the range is before `time`: `isEntirelyBefore deadline ctx.txInfo.validRange` holds only when the transaction cannot run at or after the deadline."
+        },
+        {
+          "name": "contains",
+          "signature": "Int -> Interval -> Bool",
+          "summary": "Whether `time` is in the range."
+        },
+        {
+          "name": "start",
+          "signature": "Interval -> Maybe Int",
+          "summary": "The range's finite start, or `Nothing` when it has none. Whether the start itself is included is in `range.from.isInclusive`; the checks above account for it."
+        },
+        {
+          "name": "end",
+          "signature": "Interval -> Maybe Int",
+          "summary": "The range's finite end, or `Nothing` when it has none. Whether the end itself is included is in `range.to.isInclusive`: a transaction's validity range excludes its end, so the end is the first time outside it."
+        },
+        {
+          "name": "after",
+          "signature": "Int -> Interval",
+          "summary": "From `time` on, inclusive."
+        },
+        {
+          "name": "before",
+          "signature": "Int -> Interval",
+          "summary": "Up to `time`, inclusive."
+        },
+        {
+          "name": "between",
+          "signature": "Int -> Int -> Interval",
+          "summary": "From `low` to `high`, both inclusive."
+        },
+        {
+          "name": "everything",
+          "signature": "Interval",
+          "summary": "All time."
+        }
+      ],
+      "kind": "core",
+      "import": "import Interval",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "List",
+      "types": [],
+      "functions": [
+        {
+          "name": "map",
+          "signature": "(a -> b) -> List a -> List b"
+        },
+        {
+          "name": "filter",
+          "signature": "(a -> Bool) -> List a -> List a"
+        },
+        {
+          "name": "foldl",
+          "signature": "(a -> b -> b) -> b -> List a -> b"
+        },
+        {
+          "name": "foldr",
+          "signature": "(a -> b -> b) -> b -> List a -> b"
+        },
+        {
+          "name": "all",
+          "signature": "(a -> Bool) -> List a -> Bool"
+        },
+        {
+          "name": "any",
+          "signature": "(a -> Bool) -> List a -> Bool"
+        },
+        {
+          "name": "length",
+          "signature": "List a -> Int"
+        },
+        {
+          "name": "reverse",
+          "signature": "List a -> List a"
+        },
+        {
+          "name": "append",
+          "signature": "List a -> List a -> List a"
+        },
+        {
+          "name": "concatMap",
+          "signature": "(a -> List b) -> List a -> List b"
+        },
+        {
+          "name": "singleton",
+          "signature": "a -> List a",
+          "summary": "A list of one element."
+        },
+        {
+          "name": "repeat",
+          "signature": "Int -> a -> List a",
+          "summary": "A list of `n` copies of a value; empty when `n <= 0`."
+        },
+        {
+          "name": "range",
+          "signature": "Int -> Int -> List Int",
+          "summary": "The integers from `low` to `high`, inclusive: `range 1 4 == [ 1, 2, 3, 4 ]`; empty when `low > high`."
+        },
+        {
+          "name": "isEmpty",
+          "signature": "List a -> Bool",
+          "summary": "Whether a list is empty."
+        },
+        {
+          "name": "head",
+          "signature": "List a -> Maybe a",
+          "summary": "The first element, or `Nothing` for an empty list."
+        },
+        {
+          "name": "tail",
+          "signature": "List a -> Maybe (List a)",
+          "summary": "Everything but the first element, or `Nothing` for an empty list."
+        },
+        {
+          "name": "take",
+          "signature": "Int -> List a -> List a",
+          "summary": "The first `n` elements; empty when `n <= 0`."
+        },
+        {
+          "name": "drop",
+          "signature": "Int -> List a -> List a",
+          "summary": "The list without its first `n` elements; unchanged when `n <= 0`."
+        },
+        {
+          "name": "member",
+          "signature": "a -> List a -> Bool",
+          "summary": "Whether a value is an element of the list."
+        },
+        {
+          "name": "sum",
+          "signature": "List Int -> Int",
+          "summary": "The sum of a list of integers; `0` for an empty list."
+        },
+        {
+          "name": "product",
+          "signature": "List Int -> Int",
+          "summary": "The product of a list of integers; `1` for an empty list."
+        },
+        {
+          "name": "maximum",
+          "signature": "List comparable -> Maybe comparable",
+          "summary": "The largest element, or `Nothing` for an empty list."
+        },
+        {
+          "name": "minimum",
+          "signature": "List comparable -> Maybe comparable",
+          "summary": "The smallest element, or `Nothing` for an empty list."
+        },
+        {
+          "name": "indexedMap",
+          "signature": "(Int -> a -> b) -> List a -> List b",
+          "summary": "Map with the index of each element, counting from 0."
+        },
+        {
+          "name": "filterMap",
+          "signature": "(a -> Maybe b) -> List a -> List b",
+          "summary": "Map, keeping only the `Just` results."
+        },
+        {
+          "name": "partition",
+          "signature": "(a -> Bool) -> List a -> ( List a, List a )",
+          "summary": "Split a list into the elements that satisfy a predicate and those that don't, keeping their order."
+        },
+        {
+          "name": "concat",
+          "signature": "List (List a) -> List a",
+          "summary": "Concatenate a list of lists."
+        },
+        {
+          "name": "intersperse",
+          "signature": "a -> List a -> List a",
+          "summary": "Put a separator between the elements: `intersperse 0 [ 1, 2, 3 ] == [ 1, 0, 2, 0, 3 ]`."
+        },
+        {
+          "name": "map2",
+          "signature": "(a -> b -> result) -> List a -> List b -> List result",
+          "summary": "Combine two lists element by element; the longer list's extra elements are dropped."
+        },
+        {
+          "name": "map3",
+          "signature": "(a -> b -> c -> result) -> List a -> List b -> List c -> List result",
+          "summary": "Combine three lists element by element, up to the shortest."
+        },
+        {
+          "name": "unzip",
+          "signature": "List ( a, b ) -> ( List a, List b )",
+          "summary": "Split a list of pairs into a pair of lists."
+        },
+        {
+          "name": "sort",
+          "signature": "List comparable -> List comparable",
+          "summary": "Sort from smallest to largest. The sort is stable: equal elements keep their order."
+        },
+        {
+          "name": "sortBy",
+          "signature": "(a -> comparable) -> List a -> List a",
+          "summary": "Sort by a derived comparable key, stably: `sortBy (\\person -> person.age) people`."
+        },
+        {
+          "name": "sortWith",
+          "signature": "(a -> a -> Order) -> List a -> List a",
+          "summary": "Sort with a comparison function, stably: `sortWith (\\a b -> compare b a)` sorts from largest to smallest."
+        }
+      ],
+      "kind": "core",
+      "import": "(imported by default: import List)",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "Map",
+      "types": [],
+      "functions": [
+        {
+          "name": "empty",
+          "signature": "Map k v"
+        },
+        {
+          "name": "singleton",
+          "signature": "k -> v -> Map k v"
+        },
+        {
+          "name": "get",
+          "signature": "k -> Map k v -> Maybe v"
+        },
+        {
+          "name": "member",
+          "signature": "k -> Map k v -> Bool"
+        },
+        {
+          "name": "insert",
+          "signature": "k -> v -> Map k v -> Map k v",
+          "summary": "Bind a key, replacing any binding; the key comes first in map order."
+        },
+        {
+          "name": "remove",
+          "signature": "k -> Map k v -> Map k v"
+        },
+        {
+          "name": "update",
+          "signature": "k -> (Maybe v -> Maybe v) -> Map k v -> Map k v",
+          "summary": "Change the binding of a key: `Nothing` removes it, `Just v` sets it."
+        },
+        {
+          "name": "size",
+          "signature": "Map k v -> Int"
+        },
+        {
+          "name": "isEmpty",
+          "signature": "Map k v -> Bool"
+        },
+        {
+          "name": "keys",
+          "signature": "Map k v -> List k",
+          "summary": "The keys, in map order."
+        },
+        {
+          "name": "values",
+          "signature": "Map k v -> List v",
+          "summary": "The values, in map order."
+        },
+        {
+          "name": "toList",
+          "signature": "Map k v -> List ( k, v )",
+          "summary": "The bindings, in map order."
+        },
+        {
+          "name": "fromList",
+          "signature": "List ( k, v ) -> Map k v",
+          "summary": "Insert the pairs in list order, so a repeated key takes its last value and the most recently inserted key comes first. Scanning from the end keeps the first pair seen for each key without deleting and rebuilding."
+        },
+        {
+          "name": "foldl",
+          "signature": "(k -> v -> b -> b) -> b -> Map k v -> b"
+        },
+        {
+          "name": "foldr",
+          "signature": "(k -> v -> b -> b) -> b -> Map k v -> b"
+        },
+        {
+          "name": "filter",
+          "signature": "(k -> v -> Bool) -> Map k v -> Map k v",
+          "summary": "The bindings that pass the test, in map order."
+        },
+        {
+          "name": "map",
+          "signature": "(k -> a -> b) -> Map k a -> Map k b",
+          "summary": "Transform every value, keeping map order."
+        }
+      ],
+      "kind": "core",
+      "import": "import Map",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "Maybe",
+      "types": [
+        "Maybe"
+      ],
+      "functions": [
+        {
+          "name": "withDefault",
+          "signature": "a -> Maybe a -> a",
+          "summary": "The value inside a `Just`, or a default: `withDefault 0 (Just 7) == 7`."
+        },
+        {
+          "name": "map",
+          "signature": "(a -> b) -> Maybe a -> Maybe b",
+          "summary": "Transform the value inside a `Just`."
+        },
+        {
+          "name": "map2",
+          "signature": "(a -> b -> value) -> Maybe a -> Maybe b -> Maybe value",
+          "summary": "Combine two optional values, when both are present."
+        },
+        {
+          "name": "map3",
+          "signature": "(a -> b -> c -> value) -> Maybe a -> Maybe b -> Maybe c -> Maybe value",
+          "summary": "Combine three optional values, when all are present."
+        },
+        {
+          "name": "andThen",
+          "signature": "(a -> Maybe b) -> Maybe a -> Maybe b",
+          "summary": "Chain computations that may produce nothing: `andThen List.head (Just [ 1 ]) == Just 1`."
+        }
+      ],
+      "kind": "core",
+      "import": "(imported by default: import Maybe exposing (Maybe(..)))",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "Result",
+      "types": [
+        "Result"
+      ],
+      "functions": [
+        {
+          "name": "map",
+          "signature": "(a -> value) -> Result x a -> Result x value",
+          "summary": "Transform an `Ok` value."
+        },
+        {
+          "name": "map2",
+          "signature": "(a -> b -> value) -> Result x a -> Result x b -> Result x value",
+          "summary": "Combine two results; the first error wins."
+        },
+        {
+          "name": "map3",
+          "signature": "(a -> b -> c -> value) -> Result x a -> Result x b -> Result x c -> Result x value",
+          "summary": "Combine three results; the first error wins."
+        },
+        {
+          "name": "andThen",
+          "signature": "(a -> Result x b) -> Result x a -> Result x b",
+          "summary": "Chain computations that may fail."
+        },
+        {
+          "name": "withDefault",
+          "signature": "a -> Result x a -> a",
+          "summary": "The `Ok` value, or a default."
+        },
+        {
+          "name": "toMaybe",
+          "signature": "Result x a -> Maybe a",
+          "summary": "`Just` the `Ok` value, or `Nothing`."
+        },
+        {
+          "name": "fromMaybe",
+          "signature": "x -> Maybe a -> Result x a",
+          "summary": "`Ok` with the value of a `Just`, or `Err` with the given error."
+        },
+        {
+          "name": "mapError",
+          "signature": "(x -> y) -> Result x a -> Result y a",
+          "summary": "Transform an `Err` error."
+        }
+      ],
+      "kind": "core",
+      "import": "(imported by default: import Result exposing (Result(..)))",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "String",
+      "types": [],
+      "functions": [
+        {
+          "name": "isEmpty",
+          "signature": "String -> Bool",
+          "summary": "Whether a string is empty: `isEmpty \"\" == True`."
+        },
+        {
+          "name": "append",
+          "signature": "String -> String -> String",
+          "summary": "Append two strings, the same as `++`."
+        },
+        {
+          "name": "concat",
+          "signature": "List String -> String",
+          "summary": "Concatenate a list of strings: `concat [ \"ab\", \"cd\" ] == \"abcd\"`."
+        },
+        {
+          "name": "join",
+          "signature": "String -> List String -> String",
+          "summary": "Concatenate strings with a separator between them: `join \", \" [ \"a\", \"b\" ] == \"a, b\"`."
+        },
+        {
+          "name": "fromInt",
+          "signature": "Int -> String",
+          "summary": "The decimal form of an integer: `fromInt -42 == \"-42\"`."
+        }
+      ],
+      "kind": "core",
+      "import": "(imported by default: import String)",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "Tuple",
+      "types": [],
+      "functions": [
+        {
+          "name": "pair",
+          "signature": "a -> b -> ( a, b )",
+          "summary": "Make a pair: `pair 1 \"one\" == ( 1, \"one\" )`."
+        },
+        {
+          "name": "first",
+          "signature": "( a, b ) -> a",
+          "summary": "The first component of a pair."
+        },
+        {
+          "name": "second",
+          "signature": "( a, b ) -> b",
+          "summary": "The second component of a pair."
+        },
+        {
+          "name": "mapFirst",
+          "signature": "(a -> x) -> ( a, b ) -> ( x, b )",
+          "summary": "Transform the first component of a pair."
+        },
+        {
+          "name": "mapSecond",
+          "signature": "(b -> y) -> ( a, b ) -> ( a, y )",
+          "summary": "Transform the second component of a pair."
+        },
+        {
+          "name": "mapBoth",
+          "signature": "(a -> x) -> (b -> y) -> ( a, b ) -> ( x, y )",
+          "summary": "Transform both components of a pair."
+        }
+      ],
+      "kind": "core",
+      "import": "(imported by default: import Tuple)",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "Tx",
+      "types": [],
+      "functions": [
+        {
+          "name": "signedBy",
+          "signature": "PubKeyHash -> ScriptContext -> Bool",
+          "summary": "Whether the key signed the transaction."
+        },
+        {
+          "name": "spends",
+          "signature": "TxOutRef -> ScriptContext -> Bool",
+          "summary": "Whether the transaction spends the output."
+        },
+        {
+          "name": "findInput",
+          "signature": "TxOutRef -> ScriptContext -> Maybe TxInInfo",
+          "summary": "A spent output, by reference."
+        },
+        {
+          "name": "ownRef",
+          "signature": "ScriptContext -> Maybe TxOutRef",
+          "summary": "When spending, the reference of the output being spent."
+        },
+        {
+          "name": "ownInput",
+          "signature": "ScriptContext -> Maybe TxInInfo",
+          "summary": "When spending, the output being spent, with its address, value and datum."
+        },
+        {
+          "name": "ownPolicy",
+          "signature": "ScriptContext -> Maybe PolicyId",
+          "summary": "When minting, the script's own policy id."
+        },
+        {
+          "name": "outputsTo",
+          "signature": "Credential -> ScriptContext -> List TxOut",
+          "summary": "The outputs paid to a payment credential, in order. Whoever builds the transaction chooses the payee's staking part. When two inputs of a script can each require a payment to the same party, one output can satisfy both: double satisfaction. Tag each payment, for example with the spent output's reference as its inline datum, and look for the tagged output here."
+        },
+        {
+          "name": "valuePaidTo",
+          "signature": "Credential -> ScriptContext -> Value",
+          "summary": "The total value of the outputs paid to a payment credential. On its own this is open to double satisfaction when two inputs of a script can each require a payment to the same party; see `outputsTo`."
+        },
+        {
+          "name": "continuingOutputs",
+          "signature": "ScriptContext -> List TxOut",
+          "summary": "When spending, the outputs paid back to the spent output's address; empty otherwise."
+        },
+        {
+          "name": "valueSpent",
+          "signature": "ScriptContext -> Value",
+          "summary": "The total value of the spent outputs."
+        },
+        {
+          "name": "valueProduced",
+          "signature": "ScriptContext -> Value",
+          "summary": "The total value of the outputs."
+        },
+        {
+          "name": "mintedOf",
+          "signature": "PolicyId -> ScriptContext -> Dict TokenName Int",
+          "summary": "The tokens a policy mints in this transaction; negative quantities burn."
+        },
+        {
+          "name": "inlineDatum",
+          "signature": "TxOut -> Maybe Data",
+          "summary": "An output's inline datum."
+        },
+        {
+          "name": "datumOf",
+          "signature": "TxOut -> ScriptContext -> Maybe Data",
+          "summary": "An output's datum: inline, or by its hash from the datums the transaction supplies."
+        }
+      ],
+      "kind": "core",
+      "import": "import Tx",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "Value",
+      "types": [
+        "Value"
+      ],
+      "functions": [
+        {
+          "name": "zero",
+          "signature": "Value",
+          "summary": "The empty value."
+        },
+        {
+          "name": "lovelace",
+          "signature": "Int -> Value",
+          "summary": "An amount of lovelace."
+        },
+        {
+          "name": "singleton",
+          "signature": "PolicyId -> TokenName -> Int -> Value",
+          "summary": "A quantity of one token."
+        },
+        {
+          "name": "insert",
+          "signature": "PolicyId -> TokenName -> Int -> Value -> Value",
+          "summary": "Set the quantity of one token, replacing what the value held; 0 removes the token."
+        },
+        {
+          "name": "fromList",
+          "signature": "List ( PolicyId, TokenName, Int ) -> Value",
+          "summary": "A value of the listed quantities; repeated tokens add up."
+        },
+        {
+          "name": "lovelaceOf",
+          "signature": "Value -> Int",
+          "summary": "The lovelace in a value; 0 when it has none, as in a minted value."
+        },
+        {
+          "name": "quantityOf",
+          "signature": "PolicyId -> TokenName -> Value -> Int",
+          "summary": "The quantity of one token; 0 when the value has none."
+        },
+        {
+          "name": "isZero",
+          "signature": "Value -> Bool",
+          "summary": "Whether the value holds nothing."
+        },
+        {
+          "name": "policies",
+          "signature": "Value -> List PolicyId",
+          "summary": "The policies in a value, in ascending order; the empty policy is ADA's."
+        },
+        {
+          "name": "tokens",
+          "signature": "PolicyId -> Value -> Dict TokenName Int",
+          "summary": "The tokens of one policy and their quantities."
+        },
+        {
+          "name": "toList",
+          "signature": "Value -> List ( PolicyId, TokenName, Int )",
+          "summary": "Every token and its quantity, in ascending order."
+        },
+        {
+          "name": "add",
+          "signature": "Value -> Value -> Value",
+          "summary": "The sum of two values."
+        },
+        {
+          "name": "subtract",
+          "signature": "Value -> Value -> Value",
+          "summary": "The first value minus the second."
+        },
+        {
+          "name": "negate",
+          "signature": "Value -> Value",
+          "summary": "The value with every quantity negated."
+        },
+        {
+          "name": "scale",
+          "signature": "Int -> Value -> Value",
+          "summary": "The value with every quantity multiplied."
+        },
+        {
+          "name": "sum",
+          "signature": "List Value -> Value",
+          "summary": "The sum of the values; each is converted once."
+        },
+        {
+          "name": "geq",
+          "signature": "Value -> Value -> Bool",
+          "summary": "`geq a b`: whether `a` holds at least as much of every token as `b`. Negative quantities count as less than none."
+        },
+        {
+          "name": "leq",
+          "signature": "Value -> Value -> Bool",
+          "summary": "`leq a b`: whether `a` holds at most as much of every token as `b`."
+        },
+        {
+          "name": "withoutLovelace",
+          "signature": "Value -> Value",
+          "summary": "The value without its lovelace."
+        },
+        {
+          "name": "restrictedTo",
+          "signature": "List PolicyId -> Value -> Value",
+          "summary": "Only the tokens of the given policies."
+        },
+        {
+          "name": "positive",
+          "signature": "Value -> Value",
+          "summary": "Only the positive quantities: in a minted value, what is minted."
+        },
+        {
+          "name": "negative",
+          "signature": "Value -> Value",
+          "summary": "Only the negative quantities: in a minted value, what is burned."
+        }
+      ],
+      "kind": "core",
+      "import": "import Value",
+      "availableIn": "all modules"
+    },
+    {
+      "module": "Expect",
+      "types": [
+        "Expectation"
+      ],
+      "functions": [
+        {
+          "name": "pass",
+          "signature": "Expectation"
+        },
+        {
+          "name": "fail",
+          "signature": "String -> Expectation"
+        },
+        {
+          "name": "onFail",
+          "signature": "String -> Expectation -> Expectation",
+          "summary": "Replace the message of a failing expectation."
+        },
+        {
+          "name": "equal",
+          "signature": "a -> a -> Expectation"
+        },
+        {
+          "name": "notEqual",
+          "signature": "a -> a -> Expectation"
+        },
+        {
+          "name": "atMost",
+          "signature": "comparable -> comparable -> Expectation",
+          "summary": "`atMost bound actual` passes when `actual <= bound`."
+        },
+        {
+          "name": "atLeast",
+          "signature": "comparable -> comparable -> Expectation",
+          "summary": "`atLeast bound actual` passes when `actual >= bound`."
+        },
+        {
+          "name": "lessThan",
+          "signature": "comparable -> comparable -> Expectation",
+          "summary": "`lessThan bound actual` passes when `actual < bound`."
+        },
+        {
+          "name": "greaterThan",
+          "signature": "comparable -> comparable -> Expectation",
+          "summary": "`greaterThan bound actual` passes when `actual > bound`."
+        },
+        {
+          "name": "every",
+          "signature": "List Expectation -> Expectation",
+          "summary": "Combine expectations; the first failure is the result. Elci lists hold data, not functions, so this takes evaluated expectations rather than elm-test's `all` checks."
+        }
+      ],
+      "kind": "test-library",
+      "import": "import Expect",
+      "availableIn": "test modules only"
+    },
+    {
+      "module": "Property",
+      "types": [
+        "Property"
+      ],
+      "functions": [
+        {
+          "name": "expect",
+          "signature": "Expectation -> Property",
+          "summary": "The property holds when the expectation passes."
+        },
+        {
+          "name": "holds",
+          "signature": "Bool -> Property",
+          "summary": "The property holds when the condition is `True`."
+        },
+        {
+          "name": "scenario",
+          "signature": "Scenario -> Property",
+          "summary": "The property holds when the scenario's transaction has the expected outcome: the validator accepts it, or rejects it after `Scenario.expectFailure`."
+        }
+      ],
+      "kind": "test-library",
+      "import": "import Property",
+      "availableIn": "test modules only"
+    },
+    {
+      "module": "Scenario",
+      "types": [
+        "Destination",
+        "Input",
+        "Output",
+        "Policy",
+        "Purpose",
+        "Scenario",
+        "Spec",
+        "Token"
+      ],
+      "functions": [
+        {
+          "name": "unit",
+          "signature": "Data",
+          "summary": "The Data of `()`: the default redeemer, and the datum of a `()`-datum spend."
+        },
+        {
+          "name": "spend",
+          "signature": "String -> TxOutRef -> Data -> Scenario",
+          "summary": "Spend `ref`, held at the validator's address with an inline `datum`."
+        },
+        {
+          "name": "spendWithoutDatum",
+          "signature": "String -> TxOutRef -> Scenario",
+          "summary": "Spend `ref`, held at the validator's address without a datum."
+        },
+        {
+          "name": "mint",
+          "signature": "String -> Scenario",
+          "summary": "Mint or burn under the validator's own policy; add tokens with `minting`."
+        },
+        {
+          "name": "withdraw",
+          "signature": "String -> Scenario",
+          "summary": "Withdraw the rewards of the validator's own staking credential."
+        },
+        {
+          "name": "certify",
+          "signature": "String -> Int -> TxCert -> Scenario"
+        },
+        {
+          "name": "vote",
+          "signature": "String -> Voter -> Scenario"
+        },
+        {
+          "name": "propose",
+          "signature": "String -> Int -> ProposalProcedure -> Scenario"
+        },
+        {
+          "name": "redeemer",
+          "signature": "Data -> Scenario -> Scenario"
+        },
+        {
+          "name": "parameters",
+          "signature": "List Data -> Scenario -> Scenario",
+          "summary": "Deployment parameters, in the validator's declared order."
+        },
+        {
+          "name": "signedBy",
+          "signature": "PubKeyHash -> Scenario -> Scenario"
+        },
+        {
+          "name": "input",
+          "signature": "TxOutRef -> Output -> Scenario -> Scenario"
+        },
+        {
+          "name": "referenceInput",
+          "signature": "TxOutRef -> Output -> Scenario -> Scenario"
+        },
+        {
+          "name": "output",
+          "signature": "Output -> Scenario -> Scenario"
+        },
+        {
+          "name": "minting",
+          "signature": "Bytes -> Int -> Scenario -> Scenario",
+          "summary": "Mint (positive) or burn (negative) `quantity` of `name` under the own policy."
+        },
+        {
+          "name": "fee",
+          "signature": "Int -> Scenario -> Scenario"
+        },
+        {
+          "name": "validFrom",
+          "signature": "Int -> Scenario -> Scenario",
+          "summary": "The transaction is valid from this time (inclusive)."
+        },
+        {
+          "name": "validBefore",
+          "signature": "Int -> Scenario -> Scenario",
+          "summary": "The transaction is valid before this time (exclusive)."
+        },
+        {
+          "name": "worth",
+          "signature": "Int -> Scenario -> Scenario",
+          "summary": "Lovelace held by the spent output (default 2 ADA)."
+        },
+        {
+          "name": "expectFailure",
+          "signature": "Scenario -> Scenario",
+          "summary": "The validator must reject this transaction."
+        },
+        {
+          "name": "withinBudget",
+          "signature": "Int -> Int -> Scenario -> Scenario",
+          "summary": "The execution must cost at most this CPU and memory."
+        },
+        {
+          "name": "toScript",
+          "signature": "Int -> Output"
+        },
+        {
+          "name": "toStakedScript",
+          "signature": "StakingCredential -> Int -> Output",
+          "summary": "An output to the validator's own payment credential with a staking part: a different address from `toScript`'s."
+        },
+        {
+          "name": "toAddress",
+          "signature": "Address -> Int -> Output"
+        },
+        {
+          "name": "toKey",
+          "signature": "PubKeyHash -> Int -> Output",
+          "summary": "An output paid to a key's address, without a staking part."
+        },
+        {
+          "name": "withDatum",
+          "signature": "Data -> Output -> Output"
+        },
+        {
+          "name": "withDatumHash",
+          "signature": "Data -> Output -> Output",
+          "summary": "Hold a datum by hash, as older contracts do: the output carries the datum's hash, and the transaction carries the datum among its witnesses."
+        },
+        {
+          "name": "withToken",
+          "signature": "Policy -> Bytes -> Int -> Output -> Output"
+        },
+        {
+          "name": "key",
+          "signature": "String -> PubKeyHash",
+          "summary": "A deterministic 28-byte test key hash derived from a name."
+        },
+        {
+          "name": "outRef",
+          "signature": "String -> Int -> TxOutRef",
+          "summary": "A deterministic test output reference derived from a name and index."
+        }
+      ],
+      "kind": "test-library",
+      "import": "import Scenario",
+      "availableIn": "test modules only"
+    }
+  ],
+  "compilerProvidedModules": [
+    {
+      "module": "Bytes",
+      "import": "import Bytes",
+      "summary": "Byte-string builtins; each function is a direct Plutus builtin call with the byte string as the last argument. The type Bytes is built in and needs no import. Compare byte strings with ==, and order them with <, <=, >, >=, compare, min and max (lexicographic by unsigned byte, a proper prefix first); there is no Bytes.lessThan.",
+      "functions": [
+        {
+          "name": "empty",
+          "signature": "Bytes",
+          "summary": "The empty byte string."
+        },
+        {
+          "name": "fromString",
+          "signature": "String -> Bytes",
+          "summary": "UTF-8 encoding of a string (builtin encodeUtf8)."
+        },
+        {
+          "name": "toString",
+          "signature": "Bytes -> String",
+          "summary": "UTF-8 decoding (builtin decodeUtf8); fails the script on invalid UTF-8."
+        },
+        {
+          "name": "length",
+          "signature": "Bytes -> Int",
+          "summary": "Number of bytes."
+        },
+        {
+          "name": "append",
+          "signature": "Bytes -> Bytes -> Bytes",
+          "summary": "append a b is a followed by b. In a pipeline, x |> Bytes.append p gives p followed by x."
+        },
+        {
+          "name": "slice",
+          "signature": "Int -> Int -> Bytes -> Bytes",
+          "summary": "slice start count bytes: count bytes from start (a length, not an end index); clamps to the available bytes."
+        },
+        {
+          "name": "take",
+          "signature": "Int -> Bytes -> Bytes",
+          "summary": "The first n bytes; clamps."
+        },
+        {
+          "name": "drop",
+          "signature": "Int -> Bytes -> Bytes",
+          "summary": "All but the first n bytes; clamps."
+        },
+        {
+          "name": "at",
+          "signature": "Int -> Bytes -> Int",
+          "summary": "The byte (0-255) at a 0-based index; fails the script outside the byte string."
+        },
+        {
+          "name": "cons",
+          "signature": "Int -> Bytes -> Bytes",
+          "summary": "Prepends one byte; fails the script outside 0-255."
+        },
+        {
+          "name": "replicate",
+          "signature": "Int -> Int -> Bytes",
+          "summary": "replicate count byte; fails outside 0-255 or above 8192 bytes."
+        },
+        {
+          "name": "fromIntBigEndian",
+          "signature": "Int -> Int -> Bytes",
+          "summary": "fromIntBigEndian width n: n in exactly width bytes, big-endian; width 0 means minimal; fails for negative n, if n does not fit, or width above 8192."
+        },
+        {
+          "name": "fromIntLittleEndian",
+          "signature": "Int -> Int -> Bytes",
+          "summary": "As fromIntBigEndian, little-endian."
+        },
+        {
+          "name": "toIntBigEndian",
+          "signature": "Bytes -> Int",
+          "summary": "Unsigned big-endian integer; the empty byte string is 0."
+        },
+        {
+          "name": "toIntLittleEndian",
+          "signature": "Bytes -> Int",
+          "summary": "Unsigned little-endian integer."
+        },
+        {
+          "name": "and",
+          "signature": "Bytes -> Bytes -> Bytes",
+          "summary": "Bitwise AND, truncated to the shorter operand."
+        },
+        {
+          "name": "or",
+          "signature": "Bytes -> Bytes -> Bytes",
+          "summary": "Bitwise OR, truncated to the shorter operand."
+        },
+        {
+          "name": "xor",
+          "signature": "Bytes -> Bytes -> Bytes",
+          "summary": "Bitwise XOR, truncated to the shorter operand."
+        },
+        {
+          "name": "complement",
+          "signature": "Bytes -> Bytes",
+          "summary": "Flips every bit."
+        },
+        {
+          "name": "shift",
+          "signature": "Int -> Bytes -> Bytes",
+          "summary": "Shifts bits towards the front for positive n, towards the end for negative n; same length, shifted-out bits are lost."
+        },
+        {
+          "name": "rotate",
+          "signature": "Int -> Bytes -> Bytes",
+          "summary": "Like shift, but bits wrap around."
+        },
+        {
+          "name": "testBit",
+          "signature": "Int -> Bytes -> Bool",
+          "summary": "Reads bit i; bit 0 is the least significant bit of the last byte."
+        },
+        {
+          "name": "countSetBits",
+          "signature": "Bytes -> Int",
+          "summary": "Number of 1 bits."
+        },
+        {
+          "name": "findFirstSetBit",
+          "signature": "Bytes -> Int",
+          "summary": "Index of the lowest set bit, or -1 when no bit is set."
+        },
+        {
+          "name": "blake2b224",
+          "signature": "Bytes -> Bytes",
+          "summary": "BLAKE2b-224 digest (28 bytes, the size of key and script hashes)."
+        },
+        {
+          "name": "blake2b256",
+          "signature": "Bytes -> Bytes",
+          "summary": "BLAKE2b-256 digest (32 bytes)."
+        },
+        {
+          "name": "sha256",
+          "signature": "Bytes -> Bytes",
+          "summary": "SHA2-256 digest (32 bytes)."
+        },
+        {
+          "name": "sha3_256",
+          "signature": "Bytes -> Bytes",
+          "summary": "SHA3-256 digest (32 bytes)."
+        },
+        {
+          "name": "keccak256",
+          "signature": "Bytes -> Bytes",
+          "summary": "Keccak-256 digest (32 bytes)."
+        },
+        {
+          "name": "ripemd160",
+          "signature": "Bytes -> Bytes",
+          "summary": "RIPEMD-160 digest (20 bytes)."
+        }
+      ]
+    },
+    {
+      "module": "Julc.Data",
+      "import": "import Julc.Data as Data",
+      "summary": "Explicit conversions between Elci values and Plutus Data, and adapters between Julc optionals and Maybe. The types Data and JulcOptional are built in.",
+      "functions": [
+        {
+          "name": "decode",
+          "signature": "Data -> a",
+          "summary": "Julc's strict decoder for the concrete type a: checks tags, arity and fields; malformed Data fails the script (never a Maybe), and so does a Dict whose keys are not strictly ascending or a Value that is not canonical. a must be known where it is used; annotate when inference cannot tell. Rejected (ELCI3003) for (), functions, Array, TxOut and types that contain a Value; a Value itself decodes."
+        },
+        {
+          "name": "encode",
+          "signature": "a -> Data",
+          "summary": "The Data encoding of a value: records are constructor 0 with fields sorted by name, union variants use declaration-order tags, Maybe is Nothing 0 / Just 1, tuples are constructor 0, lists are lists, maps are maps. Result is Ok 0 / Err 1. A Value is its own Data map, at no cost. Accepts a type nothing determines, such as that of Nothing or []. Rejected for (), functions, Array, and lists and tuples of Values."
+        },
+        {
+          "name": "fromOptional",
+          "signature": "JulcOptional a -> Maybe a",
+          "summary": "Re-tags a Julc optional (Some 0, None 1), as returned by Java libraries, into an Elci Maybe (Nothing 0, Just 1)."
+        },
+        {
+          "name": "toOptional",
+          "signature": "Maybe a -> JulcOptional a",
+          "summary": "The reverse adapter: Elci Maybe to Julc optional."
+        }
+      ]
+    },
+    {
+      "module": "Debug",
+      "import": "(imported by default: import Debug)",
+      "summary": "Tracing.",
+      "functions": [
+        {
+          "name": "trace",
+          "signature": "String -> a -> a",
+          "summary": "Emits the message as a Plutus trace and returns the second argument. Both arguments are evaluated first (strict), so a failing second argument emits nothing; costs budget and script bytes. There is no Debug.log, Debug.toString or Debug.todo."
+        }
+      ]
+    },
+    {
+      "module": "Basics",
+      "import": "(imported by default: import Basics exposing (..))",
+      "summary": "The compiler intrinsics of the Basics prelude. The rest of Basics (negate, abs, min, max, clamp, compare, Order(LT, EQ, GT), identity, always, xor) is Elci source, listed with the bundled modules. Every module imports Basics exposing (..), so these names need no qualifier; Basics.not and the like also work, and a module's own declaration of the same name shadows them.",
+      "functions": [
+        {
+          "name": "not",
+          "signature": "Bool -> Bool",
+          "summary": "Boolean negation."
+        },
+        {
+          "name": "modBy",
+          "signature": "Int -> Int -> Int",
+          "summary": "modBy divisor value: result has the divisor's sign (Elm semantics); modBy 3 -7 is 2. Fails the script for divisor 0."
+        },
+        {
+          "name": "remainderBy",
+          "signature": "Int -> Int -> Int",
+          "summary": "remainderBy divisor value: result has the value's sign (Elm semantics); remainderBy 3 -7 is -1. Fails the script for divisor 0."
+        },
+        {
+          "name": "(^)",
+          "signature": "Int -> Int -> Int",
+          "summary": "Integer power operator: 2 ^ 10 is 1024. Right-associative, binds tighter than * (precedence 8); a negative exponent fails the script. Usable as a function, (^) 2 10."
+        }
+      ]
+    },
+    {
+      "module": "(built in)",
+      "import": null,
+      "summary": "Constructors built into the compiler; Just and Nothing are exposed through the default import Maybe exposing (Maybe(..)). A module may not declare constructors with these names, or types named Int, Bool, String, Bytes, Data, List, Maybe, Dict, Map, Array or Float.",
+      "constructors": [
+        {
+          "name": "Just",
+          "signature": "a -> Maybe a",
+          "summary": "Maybe constructor, Data tag 1."
+        },
+        {
+          "name": "Nothing",
+          "signature": "Maybe a",
+          "summary": "Maybe constructor, Data tag 0."
+        },
+        {
+          "name": "True",
+          "signature": "Bool",
+          "summary": "Data constructor 1."
+        },
+        {
+          "name": "False",
+          "signature": "Bool",
+          "summary": "Data constructor 0."
+        }
+      ]
+    }
+  ],
+  "javaLibraries": [
+    {
+      "library": "AddressLib",
+      "class": "org.julclang.stdlib.lib.AddressLib",
+      "functions": [
+        {
+          "name": "credentialHash",
+          "signature": "Ledger.Address -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "isPubKeyAddress",
+          "signature": "Ledger.Address -> Bool",
+          "generic": false
+        },
+        {
+          "name": "isScriptAddress",
+          "signature": "Ledger.Address -> Bool",
+          "generic": false
+        },
+        {
+          "name": "paymentCredential",
+          "signature": "Ledger.Address -> Ledger.Credential",
+          "generic": false
+        }
+      ]
+    },
+    {
+      "library": "BitwiseLib",
+      "class": "org.julclang.stdlib.lib.BitwiseLib",
+      "functions": [
+        {
+          "name": "andByteString",
+          "signature": "Bool -> Bytes -> Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "complementByteString",
+          "signature": "Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "countSetBits",
+          "signature": "Bytes -> Int",
+          "generic": false
+        },
+        {
+          "name": "findFirstSetBit",
+          "signature": "Bytes -> Int",
+          "generic": false
+        },
+        {
+          "name": "orByteString",
+          "signature": "Bool -> Bytes -> Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "readBit",
+          "signature": "Bytes -> Int -> Bool",
+          "generic": false
+        },
+        {
+          "name": "rotateByteString",
+          "signature": "Bytes -> Int -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "shiftByteString",
+          "signature": "Bytes -> Int -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "xorByteString",
+          "signature": "Bool -> Bytes -> Bytes -> Bytes",
+          "generic": false
+        }
+      ]
+    },
+    {
+      "library": "ByteStringLib",
+      "class": "org.julclang.stdlib.lib.ByteStringLib",
+      "functions": [
+        {
+          "name": "append",
+          "signature": "Bytes -> Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "at",
+          "signature": "Bytes -> Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "byteStringToInteger",
+          "signature": "Bool -> Bytes -> Int",
+          "generic": false
+        },
+        {
+          "name": "cons",
+          "signature": "Int -> Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "decodeUtf8",
+          "signature": "Bytes -> Data",
+          "generic": false
+        },
+        {
+          "name": "drop",
+          "signature": "Bytes -> Int -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "empty",
+          "signature": "Bytes",
+          "generic": false
+        },
+        {
+          "name": "encodeUtf8",
+          "signature": "Data -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "equals",
+          "signature": "Bytes -> Bytes -> Bool",
+          "generic": false
+        },
+        {
+          "name": "hexNibble",
+          "signature": "Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "intToDecimalStep",
+          "signature": "Int -> Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "intToDecimalString",
+          "signature": "Int -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "integerToByteString",
+          "signature": "Bool -> Int -> Int -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "length",
+          "signature": "Bytes -> Int",
+          "generic": false
+        },
+        {
+          "name": "lessThan",
+          "signature": "Bytes -> Bytes -> Bool",
+          "generic": false
+        },
+        {
+          "name": "lessThanEquals",
+          "signature": "Bytes -> Bytes -> Bool",
+          "generic": false
+        },
+        {
+          "name": "serialiseData",
+          "signature": "Data -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "slice",
+          "signature": "Bytes -> Int -> Int -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "take",
+          "signature": "Bytes -> Int -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "toHex",
+          "signature": "Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "toHexStep",
+          "signature": "Bytes -> Int -> Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "utf8ToInteger",
+          "signature": "Bytes -> Int",
+          "generic": false
+        },
+        {
+          "name": "utf8ToIntegerStep",
+          "signature": "Bytes -> Int -> Int -> Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "zeros",
+          "signature": "Int -> Bytes",
+          "generic": false
+        }
+      ]
+    },
+    {
+      "library": "ContextsLib",
+      "class": "org.julclang.stdlib.lib.ContextsLib",
+      "functions": [
+        {
+          "name": "findDatum",
+          "signature": "Ledger.TxInfo -> Data -> (JulcOptional Data)",
+          "generic": false
+        },
+        {
+          "name": "findOwnInput",
+          "signature": "Ledger.ScriptContext -> (JulcOptional Ledger.TxInInfo)",
+          "generic": false
+        },
+        {
+          "name": "getContinuingOutputs",
+          "signature": "Ledger.ScriptContext -> (List Ledger.TxOut)",
+          "generic": false
+        },
+        {
+          "name": "getRedeemer",
+          "signature": "Ledger.ScriptContext -> Data",
+          "generic": false
+        },
+        {
+          "name": "getSpendingDatum",
+          "signature": "Ledger.ScriptContext -> (JulcOptional Data)",
+          "generic": false
+        },
+        {
+          "name": "getTxInfo",
+          "signature": "Ledger.ScriptContext -> Ledger.TxInfo",
+          "generic": false
+        },
+        {
+          "name": "ownHash",
+          "signature": "Ledger.ScriptContext -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "ownInputScriptHash",
+          "signature": "Ledger.ScriptContext -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "scriptOutputsAt",
+          "signature": "Ledger.TxInfo -> Bytes -> (List Ledger.TxOut)",
+          "generic": false
+        },
+        {
+          "name": "signedBy",
+          "signature": "Ledger.TxInfo -> Bytes -> Bool",
+          "generic": false
+        },
+        {
+          "name": "trace",
+          "signature": "String -> ()",
+          "generic": false
+        },
+        {
+          "name": "txInfoFee",
+          "signature": "Ledger.TxInfo -> Int",
+          "generic": false
+        },
+        {
+          "name": "txInfoId",
+          "signature": "Ledger.TxInfo -> Ledger.TxId",
+          "generic": false
+        },
+        {
+          "name": "txInfoInputs",
+          "signature": "Ledger.TxInfo -> (List Ledger.TxInInfo)",
+          "generic": false
+        },
+        {
+          "name": "txInfoMint",
+          "signature": "Ledger.TxInfo -> Ledger.Value",
+          "generic": false
+        },
+        {
+          "name": "txInfoOutputs",
+          "signature": "Ledger.TxInfo -> (List Ledger.TxOut)",
+          "generic": false
+        },
+        {
+          "name": "txInfoRedeemers",
+          "signature": "Ledger.TxInfo -> (Map Ledger.ScriptPurpose Data)",
+          "generic": false
+        },
+        {
+          "name": "txInfoRefInputs",
+          "signature": "Ledger.TxInfo -> (List Ledger.TxInInfo)",
+          "generic": false
+        },
+        {
+          "name": "txInfoSignatories",
+          "signature": "Ledger.TxInfo -> (List Ledger.PubKeyHash)",
+          "generic": false
+        },
+        {
+          "name": "txInfoValidRange",
+          "signature": "Ledger.TxInfo -> Ledger.Interval",
+          "generic": false
+        },
+        {
+          "name": "txInfoWithdrawals",
+          "signature": "Ledger.TxInfo -> (Map Ledger.Credential Int)",
+          "generic": false
+        },
+        {
+          "name": "valuePaid",
+          "signature": "Ledger.TxInfo -> Ledger.Address -> (List Ledger.Value)",
+          "generic": false
+        },
+        {
+          "name": "valueSpent",
+          "signature": "Ledger.TxInfo -> (List Ledger.Value)",
+          "generic": false
+        }
+      ]
+    },
+    {
+      "library": "CryptoLib",
+      "class": "org.julclang.stdlib.lib.CryptoLib",
+      "functions": [
+        {
+          "name": "blake2b_224",
+          "signature": "Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "blake2b_256",
+          "signature": "Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "keccak_256",
+          "signature": "Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "ripemd_160",
+          "signature": "Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "sha2_256",
+          "signature": "Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "sha3_256",
+          "signature": "Bytes -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "verifyEcdsaSecp256k1",
+          "signature": "Bytes -> Bytes -> Bytes -> Bool",
+          "generic": false
+        },
+        {
+          "name": "verifyEd25519Signature",
+          "signature": "Bytes -> Bytes -> Bytes -> Bool",
+          "generic": false
+        },
+        {
+          "name": "verifySchnorrSecp256k1",
+          "signature": "Bytes -> Bytes -> Bytes -> Bool",
+          "generic": false
+        }
+      ]
+    },
+    {
+      "library": "IntervalLib",
+      "class": "org.julclang.stdlib.lib.IntervalLib",
+      "functions": [
+        {
+          "name": "after",
+          "signature": "Int -> Ledger.Interval",
+          "generic": false
+        },
+        {
+          "name": "always",
+          "signature": "Ledger.Interval",
+          "generic": false
+        },
+        {
+          "name": "before",
+          "signature": "Int -> Ledger.Interval",
+          "generic": false
+        },
+        {
+          "name": "between",
+          "signature": "Int -> Int -> Ledger.Interval",
+          "generic": false
+        },
+        {
+          "name": "contains",
+          "signature": "Ledger.Interval -> Int -> Bool",
+          "generic": false
+        },
+        {
+          "name": "finiteLowerBound",
+          "signature": "Ledger.Interval -> Int",
+          "generic": false
+        },
+        {
+          "name": "finiteUpperBound",
+          "signature": "Ledger.Interval -> Int",
+          "generic": false
+        },
+        {
+          "name": "isEmpty",
+          "signature": "Ledger.Interval -> Bool",
+          "generic": false
+        },
+        {
+          "name": "never",
+          "signature": "Ledger.Interval",
+          "generic": false
+        }
+      ]
+    },
+    {
+      "library": "ListsLib",
+      "class": "org.julclang.stdlib.lib.ListsLib",
+      "functions": [
+        {
+          "name": "concat",
+          "signature": "(List Data) -> (List Data) -> (List Data)",
+          "generic": false
+        },
+        {
+          "name": "contains",
+          "signature": "(List Data) -> Data -> Bool",
+          "generic": false
+        },
+        {
+          "name": "containsBytes",
+          "signature": "(List Data) -> Bytes -> Bool",
+          "generic": false
+        },
+        {
+          "name": "containsInt",
+          "signature": "(List Data) -> Int -> Bool",
+          "generic": false
+        },
+        {
+          "name": "drop",
+          "signature": "(List Data) -> Int -> (List Data)",
+          "generic": false
+        },
+        {
+          "name": "empty",
+          "signature": "(List Data)",
+          "generic": false
+        },
+        {
+          "name": "hasDuplicateBytes",
+          "signature": "(List Data) -> Bool",
+          "generic": false
+        },
+        {
+          "name": "hasDuplicateInts",
+          "signature": "(List Data) -> Bool",
+          "generic": false
+        },
+        {
+          "name": "hasDuplicates",
+          "signature": "(List Data) -> Bool",
+          "generic": false
+        },
+        {
+          "name": "head",
+          "signature": "(List Data) -> Data",
+          "generic": false
+        },
+        {
+          "name": "isEmpty",
+          "signature": "(List Data) -> Bool",
+          "generic": false
+        },
+        {
+          "name": "length",
+          "signature": "(List Data) -> Int",
+          "generic": false
+        },
+        {
+          "name": "nth",
+          "signature": "(List Data) -> Int -> Data",
+          "generic": false
+        },
+        {
+          "name": "prepend",
+          "signature": "(List Data) -> Data -> (List Data)",
+          "generic": false
+        },
+        {
+          "name": "reverse",
+          "signature": "(List Data) -> (List Data)",
+          "generic": false
+        },
+        {
+          "name": "tail",
+          "signature": "(List Data) -> (List Data)",
+          "generic": false
+        },
+        {
+          "name": "take",
+          "signature": "(List Data) -> Int -> (List Data)",
+          "generic": false
+        }
+      ]
+    },
+    {
+      "library": "MapLib",
+      "class": "org.julclang.stdlib.lib.MapLib",
+      "functions": [
+        {
+          "name": "delete",
+          "signature": "(Map Data Data) -> Data -> (Map Data Data)",
+          "generic": false
+        },
+        {
+          "name": "empty",
+          "signature": "(Map Data Data)",
+          "generic": false
+        },
+        {
+          "name": "fromList",
+          "signature": "Data -> (Map Data Data)",
+          "generic": false
+        },
+        {
+          "name": "insert",
+          "signature": "(Map Data Data) -> Data -> Data -> (Map Data Data)",
+          "generic": false
+        },
+        {
+          "name": "keys",
+          "signature": "(Map Data Data) -> (List Data)",
+          "generic": false
+        },
+        {
+          "name": "lookup",
+          "signature": "(Map Data Data) -> Data -> (JulcOptional Data)",
+          "generic": false
+        },
+        {
+          "name": "member",
+          "signature": "(Map Data Data) -> Data -> Bool",
+          "generic": false
+        },
+        {
+          "name": "size",
+          "signature": "(Map Data Data) -> Int",
+          "generic": false
+        },
+        {
+          "name": "toList",
+          "signature": "(Map Data Data) -> (Map Data Data)",
+          "generic": false
+        },
+        {
+          "name": "values",
+          "signature": "(Map Data Data) -> (List Data)",
+          "generic": false
+        }
+      ]
+    },
+    {
+      "library": "MathLib",
+      "class": "org.julclang.stdlib.lib.MathLib",
+      "functions": [
+        {
+          "name": "abs",
+          "signature": "Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "expMod",
+          "signature": "Int -> Int -> Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "floorDiv",
+          "signature": "Int -> Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "floorMod",
+          "signature": "Int -> Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "max",
+          "signature": "Int -> Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "min",
+          "signature": "Int -> Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "pow",
+          "signature": "Int -> Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "sign",
+          "signature": "Int -> Int",
+          "generic": false
+        }
+      ]
+    },
+    {
+      "library": "OutputLib",
+      "class": "org.julclang.stdlib.lib.OutputLib",
+      "functions": [
+        {
+          "name": "countOutputsAt",
+          "signature": "(List Ledger.TxOut) -> Ledger.Address -> Int",
+          "generic": false
+        },
+        {
+          "name": "findInputWithToken",
+          "signature": "(List Ledger.TxInInfo) -> Bytes -> Bytes -> Bytes -> Ledger.TxInInfo",
+          "generic": false
+        },
+        {
+          "name": "findOutputWithToken",
+          "signature": "(List Ledger.TxOut) -> Bytes -> Bytes -> Bytes -> Ledger.TxOut",
+          "generic": false
+        },
+        {
+          "name": "getInlineDatum",
+          "signature": "Ledger.TxOut -> Data",
+          "generic": false
+        },
+        {
+          "name": "lovelacePaidTo",
+          "signature": "(List Ledger.TxOut) -> Ledger.Address -> Int",
+          "generic": false
+        },
+        {
+          "name": "outputsAt",
+          "signature": "(List Ledger.TxOut) -> Ledger.Address -> (List Ledger.TxOut)",
+          "generic": false
+        },
+        {
+          "name": "outputsWithToken",
+          "signature": "(List Ledger.TxOut) -> Bytes -> Bytes -> (List Ledger.TxOut)",
+          "generic": false
+        },
+        {
+          "name": "paidAtLeast",
+          "signature": "(List Ledger.TxOut) -> Ledger.Address -> Int -> Bool",
+          "generic": false
+        },
+        {
+          "name": "resolveDatum",
+          "signature": "Ledger.TxOut -> (Map Data Data) -> Data",
+          "generic": false
+        },
+        {
+          "name": "txOutAddress",
+          "signature": "Ledger.TxOut -> Ledger.Address",
+          "generic": false
+        },
+        {
+          "name": "txOutDatum",
+          "signature": "Ledger.TxOut -> Ledger.OutputDatum",
+          "generic": false
+        },
+        {
+          "name": "txOutValue",
+          "signature": "Ledger.TxOut -> Ledger.Value",
+          "generic": false
+        },
+        {
+          "name": "uniqueOutputAt",
+          "signature": "(List Ledger.TxOut) -> Ledger.Address -> Ledger.TxOut",
+          "generic": false
+        },
+        {
+          "name": "valueHasToken",
+          "signature": "Ledger.Value -> Bytes -> Bytes -> Bool",
+          "generic": false
+        }
+      ]
+    },
+    {
+      "library": "TypedArrayLib",
+      "class": "org.julclang.stdlib.lib.TypedArrayLib",
+      "functions": [
+        {
+          "name": "fromList",
+          "signature": "<T>(List['T])Array['T]",
+          "generic": true
+        },
+        {
+          "name": "get",
+          "signature": "<T>(Array['T],Int)'T",
+          "generic": true
+        },
+        {
+          "name": "length",
+          "signature": "<T>(Array['T])Int",
+          "generic": true
+        }
+      ]
+    },
+    {
+      "library": "TypedMapLib",
+      "class": "org.julclang.stdlib.lib.TypedMapLib",
+      "functions": [
+        {
+          "name": "empty",
+          "signature": "<K,V>()Map['K,'V]",
+          "generic": true
+        },
+        {
+          "name": "insert",
+          "signature": "<K,V>(Map['K,'V],'K,'V)Map['K,'V]",
+          "generic": true
+        },
+        {
+          "name": "isEmpty",
+          "signature": "<K,V>(Map['K,'V])Bool",
+          "generic": true
+        },
+        {
+          "name": "keys",
+          "signature": "<K,V>(Map['K,'V])List['K]",
+          "generic": true
+        },
+        {
+          "name": "lookup",
+          "signature": "<K,V>(Map['K,'V],'K)JulcOptional['V]",
+          "generic": true
+        },
+        {
+          "name": "member",
+          "signature": "<K,V>(Map['K,'V],'K)Bool",
+          "generic": true
+        },
+        {
+          "name": "remove",
+          "signature": "<K,V>(Map['K,'V],'K)Map['K,'V]",
+          "generic": true
+        },
+        {
+          "name": "size",
+          "signature": "<K,V>(Map['K,'V])Int",
+          "generic": true
+        },
+        {
+          "name": "values",
+          "signature": "<K,V>(Map['K,'V])List['V]",
+          "generic": true
+        }
+      ]
+    },
+    {
+      "library": "ValuesLib",
+      "class": "org.julclang.stdlib.lib.ValuesLib",
+      "functions": [
+        {
+          "name": "_containsPolicy",
+          "signature": "Ledger.Value -> Data -> Bool",
+          "generic": false
+        },
+        {
+          "name": "_countTokensWithQty",
+          "signature": "Ledger.Value -> Data -> Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "_findTokenName",
+          "signature": "Ledger.Value -> Data -> Int -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "assetOf",
+          "signature": "Ledger.Value -> Bytes -> Bytes -> Int",
+          "generic": false
+        },
+        {
+          "name": "checkPolicyGeq",
+          "signature": "Ledger.Value -> Data -> Bool",
+          "generic": false
+        },
+        {
+          "name": "containsPolicy",
+          "signature": "Ledger.Value -> Bytes -> Bool",
+          "generic": false
+        },
+        {
+          "name": "countTokensWithQty",
+          "signature": "Ledger.Value -> Bytes -> Int -> Int",
+          "generic": false
+        },
+        {
+          "name": "eq",
+          "signature": "Ledger.Value -> Ledger.Value -> Bool",
+          "generic": false
+        },
+        {
+          "name": "findTokenName",
+          "signature": "Ledger.Value -> Bytes -> Int -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "flatten",
+          "signature": "Ledger.Value -> (List Data)",
+          "generic": false
+        },
+        {
+          "name": "flattenStep",
+          "signature": "Data -> (List Data) -> (List Data)",
+          "generic": false
+        },
+        {
+          "name": "geq",
+          "signature": "Ledger.Value -> Ledger.Value -> Bool",
+          "generic": false
+        },
+        {
+          "name": "geqMultiAsset",
+          "signature": "Ledger.Value -> Ledger.Value -> Bool",
+          "generic": false
+        },
+        {
+          "name": "isZero",
+          "signature": "Ledger.Value -> Bool",
+          "generic": false
+        },
+        {
+          "name": "leq",
+          "signature": "Ledger.Value -> Ledger.Value -> Bool",
+          "generic": false
+        },
+        {
+          "name": "lovelaceOf",
+          "signature": "Ledger.Value -> Int",
+          "generic": false
+        },
+        {
+          "name": "refBytes",
+          "signature": "Ledger.TxOutRef -> Bytes",
+          "generic": false
+        },
+        {
+          "name": "uniqueTokenName",
+          "signature": "Ledger.TxOutRef -> Bytes",
+          "generic": false
+        }
+      ]
+    }
+  ]
+}

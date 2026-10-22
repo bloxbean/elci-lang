@@ -1,0 +1,677 @@
+<!DOCTYPE html><html lang="en" dir="ltr" data-theme="dark" data-has-toc data-has-sidebar class="astro-g5ptsecz"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>Standard library | Elci</title><link rel="canonical" href="https://elci-lang.dev/advanced/standard-library/"/><link rel="sitemap" href="/sitemap-index.xml"/><link rel="alternate" type="text/plain" href="/llms.txt" title="Elci docs for AI agents"/><link rel="shortcut icon" href="/favicon.svg" type="image/svg+xml"/><meta name="generator" content="Astro v7.3.5"/><meta name="generator" content="Starlight v0.42.0"/><meta property="og:title" content="Standard library"/><meta property="og:type" content="article"/><meta property="og:url" content="https://elci-lang.dev/advanced/standard-library/"/><meta property="og:locale" content="en"/><meta property="og:description" content="What ships with Elci — Elm's core modules, written in Elci, and Julc's verified Java libraries as gap fillers — how to import them, and the most useful functions of each."/><meta property="og:site_name" content="Elci"/><meta name="twitter:card" content="summary_large_image"/><meta name="description" content="What ships with Elci — Elm's core modules, written in Elci, and Julc's verified Java libraries as gap fillers — how to import them, and the most useful functions of each."/><meta name="theme-color" content="#fafaf9"/><script>
+	window.StarlightThemeProvider = (() => {
+		const storedTheme =
+			typeof localStorage !== 'undefined' && localStorage.getItem('starlight-theme');
+		const theme =
+			storedTheme ||
+			(window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+		document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
+		return {
+			updatePickers(theme = storedTheme || 'auto') {
+				document.querySelectorAll('starlight-theme-select').forEach((picker) => {
+					const select = picker.querySelector('select');
+					if (select) select.value = theme;
+					/** @type {HTMLTemplateElement | null} */
+					const tmpl = document.querySelector(`#theme-icons`);
+					const newIcon = tmpl && tmpl.content.querySelector('.' + theme);
+					if (newIcon) {
+						const oldIcon = picker.querySelector('svg.label-icon');
+						if (oldIcon) {
+							oldIcon.replaceChildren(...newIcon.cloneNode(true).childNodes);
+						}
+					}
+				});
+			},
+		};
+	})();
+</script><template id="theme-icons"><svg aria-hidden="true" class="light astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M5 12a1 1 0 0 0-1-1H3a1 1 0 0 0 0 2h1a1 1 0 0 0 1-1Zm.64 5-.71.71a1 1 0 0 0 0 1.41 1 1 0 0 0 1.41 0l.71-.71A1 1 0 0 0 5.64 17ZM12 5a1 1 0 0 0 1-1V3a1 1 0 0 0-2 0v1a1 1 0 0 0 1 1Zm5.66 2.34a1 1 0 0 0 .7-.29l.71-.71a1 1 0 1 0-1.41-1.41l-.66.71a1 1 0 0 0 0 1.41 1 1 0 0 0 .66.29Zm-12-.29a1 1 0 0 0 1.41 0 1 1 0 0 0 0-1.41l-.71-.71a1.004 1.004 0 1 0-1.43 1.41l.73.71ZM21 11h-1a1 1 0 0 0 0 2h1a1 1 0 0 0 0-2Zm-2.64 6A1 1 0 0 0 17 18.36l.71.71a1 1 0 0 0 1.41 0 1 1 0 0 0 0-1.41l-.76-.66ZM12 6.5a5.5 5.5 0 1 0 5.5 5.5A5.51 5.51 0 0 0 12 6.5Zm0 9a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Zm0 3.5a1 1 0 0 0-1 1v1a1 1 0 0 0 2 0v-1a1 1 0 0 0-1-1Z"/></svg><svg aria-hidden="true" class="dark astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21.64 13a1 1 0 0 0-1.05-.14 8.049 8.049 0 0 1-3.37.73 8.15 8.15 0 0 1-8.14-8.1 8.59 8.59 0 0 1 .25-2A1 1 0 0 0 8 2.36a10.14 10.14 0 1 0 14 11.69 1 1 0 0 0-.36-1.05Zm-9.5 6.69A8.14 8.14 0 0 1 7.08 5.22v.27a10.15 10.15 0 0 0 10.14 10.14 9.784 9.784 0 0 0 2.1-.22 8.11 8.11 0 0 1-7.18 4.32v-.04Z"/></svg><svg aria-hidden="true" class="auto astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg></template><link rel="stylesheet" href="/_astro/print.ehPL0gv-.css" media="print"><link rel="stylesheet" href="/_astro/common.DQykWaaM.css"><style>@layer starlight.components{.card-grid:where(.astro-7qmvx3iy){grid-template-columns:100%;gap:1rem;display:grid}.card-grid:where(.astro-7qmvx3iy)>*{margin-top:0!important}@media (width>=50rem){.card-grid:where(.astro-7qmvx3iy){grid-template-columns:1fr 1fr;gap:1.5rem}.stagger:where(.astro-7qmvx3iy){--stagger-height:5rem;padding-bottom:var(--stagger-height)}.stagger:where(.astro-7qmvx3iy)>:nth-child(2n){transform:translateY(var(--stagger-height))}}.sl-link-card:where(.astro-zaaezwya){border:1px solid var(--sl-color-gray-5);box-shadow:var(--sl-shadow-sm);border-radius:.5rem;grid-template-columns:1fr auto;gap:.5rem;padding:1rem;display:grid;position:relative}a:where(.astro-zaaezwya){line-height:var(--sl-line-height-headings);text-decoration:none}a:where(.astro-zaaezwya):before{content:"";position:absolute;inset:0}.stack:where(.astro-zaaezwya){flex-direction:column;gap:.5rem}.title:where(.astro-zaaezwya){color:var(--sl-color-white);font-weight:600;font-size:var(--sl-text-lg)}.description:where(.astro-zaaezwya){color:var(--sl-color-gray-3);line-height:1.5}.icon:where(.astro-zaaezwya){color:var(--sl-color-gray-3)}.sl-link-card:where(.astro-zaaezwya):hover{background:var(--sl-color-gray-7,var(--sl-color-gray-6));border-color:var(--sl-color-gray-2)}.sl-link-card:where(.astro-zaaezwya):hover .icon:where(.astro-zaaezwya){color:var(--sl-color-white)}}
+@layer starlight.components{svg:where(.astro-hkc32dio){color:var(--sl-icon-color);font-size:var(--sl-icon-size,1em);width:1em;height:1em}}
+@layer starlight.components{starlight-tabs:where(.astro-scn3uvmv){display:block}.tablist-wrapper:where(.astro-scn3uvmv){overflow-x:auto}:where(.astro-scn3uvmv)[role=tablist]{border-bottom:2px solid var(--sl-color-gray-5);padding:0;list-style:none;display:flex}.tab:where(.astro-scn3uvmv){display:flex}.tab:where(.astro-scn3uvmv)>:where(.astro-scn3uvmv)[role=tab]{--sl-tab-color-border:var(--sl-color-gray-5);line-height:var(--sl-line-height-headings);box-shadow:0 2px 0 var(--sl-tab-color-border);color:var(--sl-color-gray-3);outline-offset:var(--sl-outline-offset-inside);overflow-wrap:initial;align-items:center;gap:.5rem;padding:.275rem 1.25rem;text-decoration:none;display:flex}.tab:where(.astro-scn3uvmv) :where(.astro-scn3uvmv)[role=tab][aria-selected=true]{--sl-tab-color-border:var(--sl-color-text-accent);color:var(--sl-color-white);font-weight:600}.tablist-wrapper:where(.astro-scn3uvmv)~[role=tabpanel]{margin-top:1rem}}
+@layer starlight.components{.sl-steps{--bullet-size:calc(var(--sl-line-height) * 1rem);--bullet-margin:.375rem;counter-reset:steps-counter var(--sl-steps-start,0);padding-inline-start:0;list-style:none}.sl-steps>li{counter-increment:steps-counter;padding-inline-start:calc(var(--bullet-size) + 1rem);min-height:calc(var(--bullet-size) + var(--bullet-margin));padding-bottom:1px;position:relative}.sl-steps>li+li{margin-top:0}.sl-steps>li:before{content:counter(steps-counter);top:0;width:var(--bullet-size);height:var(--bullet-size);line-height:var(--bullet-size);font-size:var(--sl-text-xs);text-align:center;color:var(--sl-color-white);background-color:var(--sl-color-gray-6);box-shadow:inset 0 0 0 1px var(--sl-color-gray-5);border-radius:99rem;font-weight:600;position:absolute;inset-inline-start:0}.sl-steps>li:after{--guide-width:1px;content:"";top:calc(var(--bullet-size) + var(--bullet-margin));bottom:var(--bullet-margin);width:var(--guide-width);background-color:var(--sl-color-hairline-light);position:absolute;inset-inline-start:calc((var(--bullet-size) - var(--guide-width)) / 2)}}@layer starlight.content{.sl-steps>li>:first-child{--lh:calc(1em * var(--sl-line-height));--shift-y:calc(.5 * (var(--bullet-size) - var(--lh)));transform:translateY(var(--shift-y));margin-bottom:var(--shift-y)}.sl-steps>li>:first-child:where(h1,h2,h3,h4,h5,h6){--lh:calc(1em * var(--sl-line-height-headings))}@supports (--prop:1lh){.sl-steps>li>:first-child{--lh:1lh}}}
+@layer starlight.components{starlight-file-tree:where(.astro-a2hqddox){--x-space:1.5rem;--y-space:.125rem;--y-pad:0;border:1px solid var(--sl-color-gray-5);background-color:var(--sl-color-gray-6);font-size:var(--sl-text-xs);font-family:var(--__sl-font-mono);padding:1rem;display:block;overflow-x:auto}starlight-file-tree:where(.astro-a2hqddox) .directory>details{padding:0;background:0 0;border:0;padding-inline-start:var(--x-space)}starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary{padding:var(--y-pad) .625rem;color:var(--sl-color-white);border:0;max-width:100%;margin-inline-start:calc(-1 * var(--x-space));font-weight:400}starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary::marker,starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary::-webkit-details-marker{color:var(--sl-color-gray-3)}starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary:hover,starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary:hover .tree-icon{cursor:pointer;color:var(--sl-color-text-accent);fill:currentColor}starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary:hover~ul{border-color:var(--sl-color-gray-4)}starlight-file-tree:where(.astro-a2hqddox) .directory>details>summary:hover .highlight .tree-icon{color:var(--sl-color-text-invert);fill:currentColor}starlight-file-tree:where(.astro-a2hqddox) ul{border-inline-start:1px solid var(--sl-color-gray-5);margin-inline-start:.5rem;padding:0;padding-inline-start:.125rem;list-style:none}starlight-file-tree:where(.astro-a2hqddox)>ul{border:0;margin:0;padding:0}starlight-file-tree:where(.astro-a2hqddox) li{margin:var(--y-space) 0;padding:var(--y-pad) 0}starlight-file-tree:where(.astro-a2hqddox) .file{color:var(--sl-color-white);margin-inline-start:calc(var(--x-space) - .125rem)}starlight-file-tree:where(.astro-a2hqddox) .tree-entry{flex-wrap:wrap;align-items:flex-start;max-width:calc(100% - 1rem);display:inline-flex}@media (width>=30em){starlight-file-tree:where(.astro-a2hqddox) .tree-entry{flex-wrap:nowrap}}starlight-file-tree:where(.astro-a2hqddox) .tree-entry>:first-child{flex-shrink:0}starlight-file-tree:where(.astro-a2hqddox) .empty{color:var(--sl-color-gray-3);padding-inline-start:.375rem}starlight-file-tree:where(.astro-a2hqddox) .comment{color:var(--sl-color-gray-3);min-width:12rem;max-width:24rem;padding-inline-start:1.625rem}starlight-file-tree:where(.astro-a2hqddox) .highlight{color:var(--sl-color-text-invert);background-color:var(--sl-color-text-accent);border-radius:.25rem;padding-inline-end:.5rem;display:inline-block}starlight-file-tree:where(.astro-a2hqddox) svg{fill:var(--sl-color-gray-3);vertical-align:middle;width:.875rem;height:.875rem;margin-inline:.25rem .375rem;display:inline}starlight-file-tree:where(.astro-a2hqddox) .highlight svg.tree-icon{fill:currentColor}}
+</style><script type="module" src="/_astro/page.Dwipeu-R.js"></script></head><body class="astro-g5ptsecz"><a class="sl-skip-link astro-qb7clj6f" href="#_top">Skip to content</a><div class="page sl-flex astro-yntsjkba"><header class="header astro-yntsjkba"><div class="header astro-by6fddyj"><div class="title-wrapper sl-flex astro-by6fddyj"><a href="/" class="site-title sl-flex astro-6rvad3va"><img class="astro-6rvad3va" alt src="/_astro/logo.DiLict2W.svg" width="64" height="64"><span class="astro-6rvad3va" translate="no">Elci</span></a></div><div class="sl-flex print:hidden astro-by6fddyj"><site-search class="astro-by6fddyj astro-b5kgnn7o" data-translations="{&quot;placeholder&quot;:&quot;Search&quot;}"><button data-open-modal disabled aria-label="Search" aria-keyshortcuts="Control+K" class="astro-b5kgnn7o"><svg aria-hidden="true" class="astro-b5kgnn7o astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21.71 20.29 18 16.61A9 9 0 1 0 16.61 18l3.68 3.68a.999.999 0 0 0 1.42 0 1 1 0 0 0 0-1.39ZM11 18a7 7 0 1 1 0-14 7 7 0 0 1 0 14Z"/></svg><span class="sl-hidden md:sl-block astro-b5kgnn7o" aria-hidden="true">Search</span><kbd class="sl-hidden md:sl-flex astro-b5kgnn7o" style="display: none;"><kbd class="astro-b5kgnn7o">Ctrl</kbd><kbd class="astro-b5kgnn7o">K</kbd></kbd></button><dialog style="padding:0" aria-label="Search" class="astro-b5kgnn7o"><div class="dialog-frame sl-flex astro-b5kgnn7o"><button data-close-modal class="sl-flex md:sl-hidden astro-b5kgnn7o">Cancel</button><div class="search-container astro-b5kgnn7o"><div id="starlight__search" class="astro-b5kgnn7o"></div></div></div></dialog></site-search><script>
+	(() => {
+		const openBtn = document.querySelector('button[data-open-modal]');
+		const shortcut = openBtn?.querySelector('kbd');
+		if (!openBtn || !(shortcut instanceof HTMLElement)) return;
+		const platformKey = shortcut.querySelector('kbd');
+		if (platformKey && /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform)) {
+			platformKey.textContent = '⌘';
+			openBtn.setAttribute('aria-keyshortcuts', 'Meta+K');
+		}
+		shortcut.style.display = '';
+	})();
+</script><script type="module" src="/_astro/Search.astro_astro_type_script_index_0_lang.DZqJ8Bdf.js"></script></div><div class="sl-hidden md:sl-flex print:hidden right-group astro-by6fddyj"><div class="sl-flex social-icons astro-by6fddyj"><a href="https://github.com/bloxbean/elci-lang" rel="me" class="sl-flex astro-n2mnl6yq"><span class="sr-only astro-n2mnl6yq">GitHub</span><svg aria-hidden="true" class="astro-n2mnl6yq astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg></a></div><starlight-theme-select><label style="--sl-select-width: 6.25em" class="astro-2z5xp7gb"><span class="sr-only astro-2z5xp7gb">Select theme</span><svg aria-hidden="true" class="icon label-icon astro-2z5xp7gb astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg><select autocomplete="off" class="astro-2z5xp7gb"><option value="dark" class="astro-2z5xp7gb">Dark</option><option value="light" class="astro-2z5xp7gb">Light</option><option value="auto" selected class="astro-2z5xp7gb">Auto</option></select><svg aria-hidden="true" class="icon caret astro-2z5xp7gb astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg></label></starlight-theme-select><script>
+	StarlightThemeProvider.updatePickers();
+</script><script type="module">var e=`starlight-theme`,t=e=>e===`auto`||e===`dark`||e===`light`?e:`auto`,n=()=>t(typeof localStorage<`u`&&localStorage.getItem(e));function r(t){typeof localStorage<`u`&&localStorage.setItem(e,t===`light`||t===`dark`?t:``)}var i=()=>matchMedia(`(prefers-color-scheme: light)`).matches?`light`:`dark`;function a(e){StarlightThemeProvider.updatePickers(e),document.documentElement.dataset.theme=e===`auto`?i():e,r(e)}matchMedia(`(prefers-color-scheme: light)`).addEventListener(`change`,()=>{n()===`auto`&&a(`auto`)});var o=class extends HTMLElement{constructor(){super(),a(n()),this.querySelector(`select`)?.addEventListener(`change`,e=>{e.currentTarget instanceof HTMLSelectElement&&a(t(e.currentTarget.value))})}};customElements.define(`starlight-theme-select`,o);</script><script type="module">var e=class extends HTMLElement{constructor(){super();let e=this.querySelector(`select`);e&&(e.addEventListener(`change`,e=>{e.currentTarget instanceof HTMLSelectElement&&(window.location.pathname=e.currentTarget.value)}),window.addEventListener(`pageshow`,t=>{if(!t.persisted)return;let n=e.querySelector(`option[selected]`)?.index;n!==e.selectedIndex&&(e.selectedIndex=n??0)}))}};customElements.define(`starlight-lang-select`,e);</script></div></div></header><nav class="sidebar print:hidden astro-yntsjkba" aria-label="Main"><button popovertarget="starlight__sidebar" class="sl-menu-button sl-flex md:sl-hidden print:hidden astro-r2osgdlg"><svg aria-hidden="true" class="open-menu astro-r2osgdlg astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M3 8h18a1 1 0 1 0 0-2H3a1 1 0 0 0 0 2Zm18 8H3a1 1 0 0 0 0 2h18a1 1 0 0 0 0-2Zm0-5H3a1 1 0 0 0 0 2h18a1 1 0 0 0 0-2Z"/></svg><svg aria-hidden="true" class="close-menu astro-r2osgdlg astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="m13.41 12 6.3-6.29a1.004 1.004 0 1 0-1.42-1.42L12 10.59l-6.29-6.3a1.004 1.004 0 0 0-1.42 1.42l6.3 6.29-6.3 6.29a1 1 0 0 0 0 1.42.998.998 0 0 0 1.42 0l6.29-6.3 6.29 6.3a.999.999 0 0 0 1.42 0 1 1 0 0 0 0-1.42L13.41 12Z"/></svg><span class="sr-only astro-r2osgdlg">Menu</span></button><script type="module">var e=class extends HTMLElement{constructor(){super(),matchMedia(`(min-width: 50em)`).addEventListener(`change`,()=>this.hidePopover()),this.addEventListener(`toggle`,({newState:e})=>this.trapFocus(e===`open`))}trapFocus(e){document.querySelectorAll(`.main-frame, .sl-skip-link`).forEach(t=>{t.toggleAttribute(`inert`,e)})}};customElements.define(`sl-sidebar-pane`,e);</script><sl-sidebar-pane popover id="starlight__sidebar" class="sidebar-pane astro-yntsjkba"><div class="sidebar-content sl-flex astro-yntsjkba"><sl-sidebar-state-persist data-hash="0u9tf68" class="astro-ipdry5cl"><script aria-hidden="true">
+		(() => {
+			try {
+				if (!matchMedia('(min-width: 50em)').matches) return;
+				/** @type {HTMLElement | null} */
+				const target = document.querySelector('sl-sidebar-state-persist');
+				const state = JSON.parse(sessionStorage.getItem('sl-sidebar-state') || '0');
+				if (!target || !state || target.dataset.hash !== state.hash) return;
+				window._starlightScrollRestore = state.scroll;
+				customElements.define(
+					'sl-sidebar-restore',
+					class SidebarRestore extends HTMLElement {
+						connectedCallback() {
+							try {
+								const idx = parseInt(this.dataset.index || '');
+								const details = this.closest('details');
+								if (details && typeof state.open[idx] === 'boolean') details.open = state.open[idx];
+							} catch {}
+						}
+					}
+				);
+			} catch {}
+		})();
+	</script><ul class="top-level astro-rmhv4bp6"><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Start here</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="0"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/start/introduction/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Why Elci</span></a></li><li class="astro-rmhv4bp6"><a href="/start/installation/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Installation</span></a></li><li class="astro-rmhv4bp6"><a href="/start/first-validator/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Your first validator</span></a></li><li class="astro-rmhv4bp6"><a href="/start/project-tour/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Anatomy of a project</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Build with AI</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="1"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/ai/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Build with AI</span></a></li><li class="astro-rmhv4bp6"><a href="/ai/starter-pack/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Elci AI starter pack</span></a></li><li class="astro-rmhv4bp6"><a href="/ai/agent-instructions/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Agent instructions</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Learn the language</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="2"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/learn/basics/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Values, functions and types</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/control-flow/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Conditionals, let and pipelines</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/records-and-tuples/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Records and tuples</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/custom-types/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Custom types and pattern matching</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/collections/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Lists, dictionaries, maps and arrays</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/modules/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Modules and imports</span></a></li><li class="astro-rmhv4bp6"><a href="/learn/coming-from-elm/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Coming from Elm</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Write contracts</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="3"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/contracts/validators/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Validators and purposes</span></a></li><li class="astro-rmhv4bp6"><a href="/contracts/reading-the-transaction/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Reading the transaction</span></a></li><li class="astro-rmhv4bp6"><a href="/contracts/datums-and-redeemers/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Datums and redeemers</span></a></li><li class="astro-rmhv4bp6"><a href="/contracts/parameters/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Parameterized validators</span></a></li><li class="astro-rmhv4bp6"><a href="/contracts/build-and-deploy/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Build and deploy</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Test your contracts</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="4"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/testing/unit-tests/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Unit tests</span></a></li><li class="astro-rmhv4bp6"><a href="/testing/scenarios/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Transaction scenarios</span></a></li><li class="astro-rmhv4bp6"><a href="/testing/properties/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Property-based tests</span></a></li><li class="astro-rmhv4bp6"><a href="/testing/java/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Testing from Java</span></a></li><li class="astro-rmhv4bp6"><a href="/testing/debugging/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Debugging and budgets</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Tutorials</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="5"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/tutorials/vesting/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Build a vesting contract</span></a></li><li class="astro-rmhv4bp6"><a href="/tutorials/treasury/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">A treasury and its badge policy</span></a></li><li class="astro-rmhv4bp6"><a href="/tutorials/one-shot-policy/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">A one-shot minting policy</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details open class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Advanced</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="6"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/advanced/java-libraries/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Java libraries</span></a></li><li class="astro-rmhv4bp6"><a href="/advanced/standard-library/" aria-current="page" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Standard library</span></a></li><li class="astro-rmhv4bp6"><a href="/advanced/bytes-and-crypto/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Bytes, hashes and bits</span></a></li><li class="astro-rmhv4bp6"><a href="/advanced/costs/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Costs and performance</span></a></li><li class="astro-rmhv4bp6"><a href="/advanced/how-it-works/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">How Elci compiles</span></a></li></ul></details></li><li class="astro-rmhv4bp6"><details class="astro-rmhv4bp6"><summary class="astro-rmhv4bp6"><span class="group-label astro-rmhv4bp6"><span class="large astro-rmhv4bp6">Reference</span></span><svg aria-hidden="true" class="caret astro-rmhv4bp6 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.25rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></summary><sl-sidebar-restore data-index="7"></sl-sidebar-restore><ul class="astro-rmhv4bp6"><li class="astro-rmhv4bp6"><a href="/reference/cli/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">CLI</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/configuration/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">elci.toml</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/core-modules/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Core modules</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/test-library/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Test library</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/language/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Language reference</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/grammar/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Grammar</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/diagnostics/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Diagnostics</span></a></li><li class="astro-rmhv4bp6"><a href="/reference/examples/" class="astro-rmhv4bp6"><span class="astro-rmhv4bp6">Example projects</span></a></li></ul></details></li></ul><script aria-hidden="true">
+		(() => {
+			const scroller = document.getElementById('starlight__sidebar');
+			if (!window._starlightScrollRestore || !scroller) return;
+			scroller.scrollTop = window._starlightScrollRestore;
+			delete window._starlightScrollRestore;
+		})();
+	</script></sl-sidebar-state-persist><div class="md:sl-hidden"><div class="mobile-preferences sl-flex astro-p4azlveh"><div class="social-icons astro-p4azlveh"><a href="https://github.com/bloxbean/elci-lang" rel="me" class="sl-flex astro-n2mnl6yq"><span class="sr-only astro-n2mnl6yq">GitHub</span><svg aria-hidden="true" class="astro-n2mnl6yq astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 21.07c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.08 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.14-.3-.54-1.52.1-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.28-1.55 3.29-1.23 3.29-1.23.64 1.66.24 2.88.12 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.61-2.8 5.63-5.48 5.92.42.36.81 1.1.81 2.22l-.01 3.29c0 .31.2.69.82.57A12 12 0 0 0 12 .3Z"/></svg></a></div><starlight-theme-select><label style="--sl-select-width: 6.25em" class="astro-2z5xp7gb"><span class="sr-only astro-2z5xp7gb">Select theme</span><svg aria-hidden="true" class="icon label-icon astro-2z5xp7gb astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M21 14h-1V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v7H3a1 1 0 0 0-1 1v2a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-2a1 1 0 0 0-1-1ZM6 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7H6V7Zm14 10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-1h16v1Z"/></svg><select autocomplete="off" class="astro-2z5xp7gb"><option value="dark" class="astro-2z5xp7gb">Dark</option><option value="light" class="astro-2z5xp7gb">Light</option><option value="auto" selected class="astro-2z5xp7gb">Auto</option></select><svg aria-hidden="true" class="icon caret astro-2z5xp7gb astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1em;"><path d="M17 9.17a1 1 0 0 0-1.41 0L12 12.71 8.46 9.17a1 1 0 1 0-1.41 1.42l4.24 4.24a1.002 1.002 0 0 0 1.42 0L17 10.59a1.002 1.002 0 0 0 0-1.42Z"/></svg></label></starlight-theme-select><script>
+	StarlightThemeProvider.updatePickers();
+</script></div></div></div></sl-sidebar-pane></nav><div class="main-frame astro-yntsjkba"><script type="module">var e=document.getElementById(`starlight__sidebar`),t=e?.querySelector(`sl-sidebar-state-persist`),n=`sl-sidebar-state`,r=()=>{let r=[],i=t?.dataset.hash||``;try{let e=sessionStorage.getItem(n),t=JSON.parse(e||`{}`);Array.isArray(t.open)&&t.hash===i&&(r=t.open)}catch{}return{hash:i,open:r,scroll:e?.scrollTop||0}},i=e=>{try{sessionStorage.setItem(n,JSON.stringify(e))}catch{}},a=()=>i(r()),o=(e,t)=>{let n=r();n.open[t]=e,i(n)};t?.addEventListener(`click`,e=>{if(!(e.target instanceof Element))return;let t=e.target.closest(`summary`)?.closest(`details`);if(!t)return;let n=t.querySelector(`sl-sidebar-restore`),r=parseInt(n?.dataset.index||``);isNaN(r)||o(!t.open,r)}),addEventListener(`visibilitychange`,()=>{document.visibilityState===`hidden`&&a()});</script><div class="lg:sl-flex astro-lrzkfocr"><aside class="right-sidebar-container print:hidden astro-lrzkfocr"><div class="right-sidebar astro-lrzkfocr"><div class="lg:sl-hidden astro-qok35upx"><mobile-starlight-toc data-min-h="2" data-max-h="3" class="astro-66cqc7ze"><nav aria-labelledby="starlight__on-this-page--mobile" class="astro-66cqc7ze"><details id="starlight__mobile-toc" class="astro-66cqc7ze"><summary id="starlight__on-this-page--mobile" class="sl-flex astro-66cqc7ze"><span class="toggle sl-flex astro-66cqc7ze">On this page<svg aria-hidden="true" class="caret astro-66cqc7ze astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1rem;"><path d="m14.83 11.29-4.24-4.24a1 1 0 1 0-1.42 1.41L12.71 12l-3.54 3.54a1 1 0 0 0 0 1.41 1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.24-4.24a1.002 1.002 0 0 0 0-1.42Z"/></svg></span><span class="display-current astro-66cqc7ze"></span></summary><div class="dropdown astro-66cqc7ze"><ul class="isMobile astro-jugkfwgx" style="--depth: 0;"><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#_top" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Overview</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#the-core-library" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">The core library</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#julcs-java-libraries" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Julc’s Java libraries</span></a><ul class="isMobile astro-jugkfwgx" style="--depth: 1;"><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#what-verified-means" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">What “verified” means</span></a></li></ul></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#an-example" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">An example</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#most-useful-functions" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Most useful functions</span></a><ul class="isMobile astro-jugkfwgx" style="--depth: 1;"><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#mathlib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">MathLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#intervallib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">IntervalLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#contextslib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">ContextsLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#outputlib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">OutputLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#valueslib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">ValuesLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#addresslib-and-cryptolib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">AddressLib and CryptoLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#bytestringlib-and-bitwiselib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">ByteStringLib and BitwiseLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#listslib-and-maplib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">ListsLib and MapLib</span></a></li></ul></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#what-is-missing" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">What is missing</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#your-own-libraries" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Your own libraries</span></a></li></ul></div></details></nav></mobile-starlight-toc><script type="module" src="/_astro/MobileTableOfContents.astro_astro_type_script_index_0_lang.BcSo_yiZ.js"></script></div><div class="right-sidebar-panel sl-hidden lg:sl-block astro-qok35upx"><div class="sl-container astro-qok35upx"><starlight-toc data-min-h="2" data-max-h="3"><nav aria-labelledby="starlight__on-this-page"><h2 id="starlight__on-this-page">On this page</h2><ul class="astro-jugkfwgx" style="--depth: 0;"><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#_top" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Overview</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#the-core-library" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">The core library</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#julcs-java-libraries" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Julc’s Java libraries</span></a><ul class="astro-jugkfwgx" style="--depth: 1;"><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#what-verified-means" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">What “verified” means</span></a></li></ul></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#an-example" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">An example</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#most-useful-functions" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Most useful functions</span></a><ul class="astro-jugkfwgx" style="--depth: 1;"><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#mathlib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">MathLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#intervallib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">IntervalLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#contextslib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">ContextsLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#outputlib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">OutputLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#valueslib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">ValuesLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#addresslib-and-cryptolib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">AddressLib and CryptoLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#bytestringlib-and-bitwiselib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">ByteStringLib and BitwiseLib</span></a></li><li style="--depth: 1;" class="astro-jugkfwgx"><a href="#listslib-and-maplib" style="--depth: 1;" class="astro-jugkfwgx"><span style="--depth: 1;" class="astro-jugkfwgx">ListsLib and MapLib</span></a></li></ul></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#what-is-missing" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">What is missing</span></a></li><li style="--depth: 0;" class="astro-jugkfwgx"><a href="#your-own-libraries" style="--depth: 0;" class="astro-jugkfwgx"><span style="--depth: 0;" class="astro-jugkfwgx">Your own libraries</span></a></li></ul></nav></starlight-toc><script type="module" src="/_astro/TableOfContents.astro_astro_type_script_index_0_lang.Csloo1VZ.js"></script></div></div></div></aside><div class="main-pane astro-lrzkfocr"><main data-pagefind-body class="astro-g5ptsecz" lang="en" dir="ltr"><div class="content-panel astro-a7po4psb"><div class="sl-container astro-a7po4psb"><h1 id="_top" class="astro-bebwqqxs">Standard library</h1></div></div><div class="content-panel astro-a7po4psb"><div class="sl-container astro-a7po4psb"><div class="sl-markdown-content"><p>Elci’s standard library has two layers. The first is Elci’s core library: Elm’s core modules, with Elm’s
+names, argument orders and edge cases, bundled with the compiler, plus <code dir="auto">Value</code>, <code dir="auto">Interval</code> and <code dir="auto">Tx</code> modules
+for the ledger’s multi-asset values, time ranges and transactions. Reach for it first. The second is Julc’s
+on-chain Java libraries, which you map in <code dir="auto">elci.toml</code>. They fill the gaps, such as floor division, signature
+verification and matching whole addresses. This page shows what each layer offers, how to import it and
+which functions you will reach for most. Elm packages cannot be installed.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="the-core-library">The core library</h2><a class="sl-anchor-link" href="#the-core-library"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “The core library”</span></a></div>
+<p>As in Elm, every module imports these for you:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Module</th><th>Imported as</th><th>What it gives you</th></tr></thead><tbody><tr><td><code dir="auto">Basics</code></td><td><code dir="auto">import Basics exposing (..)</code></td><td><code dir="auto">min</code>, <code dir="auto">max</code>, <code dir="auto">abs</code>, <code dir="auto">negate</code>, <code dir="auto">clamp</code>, <code dir="auto">compare</code>, <code dir="auto">identity</code>, <code dir="auto">always</code>, <code dir="auto">not</code>, <code dir="auto">xor</code>, <code dir="auto">modBy</code>, <code dir="auto">remainderBy</code>, and the <code dir="auto">Order</code> type</td></tr><tr><td><code dir="auto">List</code></td><td><code dir="auto">import List</code></td><td>Elm’s list functions: <code dir="auto">map</code>, <code dir="auto">foldl</code>, <code dir="auto">head</code>, <code dir="auto">range</code>, <code dir="auto">sum</code>, <code dir="auto">member</code>, <code dir="auto">sort</code>, <code dir="auto">sortBy</code>, <code dir="auto">filterMap</code> and more</td></tr><tr><td><code dir="auto">Maybe</code></td><td><code dir="auto">import Maybe exposing (Maybe(..))</code></td><td><code dir="auto">withDefault</code>, <code dir="auto">map</code>, <code dir="auto">map2</code>, <code dir="auto">map3</code>, <code dir="auto">andThen</code></td></tr><tr><td><code dir="auto">Result</code></td><td><code dir="auto">import Result exposing (Result(..))</code></td><td><code dir="auto">Ok</code>, <code dir="auto">Err</code>, <code dir="auto">map</code>, <code dir="auto">map2</code>, <code dir="auto">map3</code>, <code dir="auto">andThen</code>, <code dir="auto">withDefault</code>, <code dir="auto">toMaybe</code>, <code dir="auto">fromMaybe</code>, <code dir="auto">mapError</code></td></tr><tr><td><code dir="auto">Tuple</code></td><td><code dir="auto">import Tuple</code></td><td><code dir="auto">pair</code>, <code dir="auto">first</code>, <code dir="auto">second</code>, <code dir="auto">mapFirst</code>, <code dir="auto">mapSecond</code>, <code dir="auto">mapBoth</code></td></tr><tr><td><code dir="auto">String</code></td><td><code dir="auto">import String</code></td><td><code dir="auto">fromInt</code>, <code dir="auto">isEmpty</code>, <code dir="auto">append</code>, <code dir="auto">concat</code>, <code dir="auto">join</code></td></tr><tr><td><code dir="auto">Debug</code></td><td><code dir="auto">import Debug</code></td><td><code dir="auto">trace</code>, which emits a Plutus trace</td></tr></tbody></table>
+<p>These need an import but no configuration:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Module</th><th>Import</th><th>What it gives you</th></tr></thead><tbody><tr><td><code dir="auto">Dict</code></td><td><code dir="auto">import Dict exposing (Dict)</code></td><td>Elm’s dictionaries: comparable keys, kept sorted</td></tr><tr><td><code dir="auto">Map</code></td><td><code dir="auto">import Map</code></td><td>the ledger’s association maps, for ledger data and keys that aren’t comparable</td></tr><tr><td><code dir="auto">Array</code></td><td><code dir="auto">import Array</code></td><td>arrays with constant-time <code dir="auto">get</code> and <code dir="auto">length</code></td></tr><tr><td><code dir="auto">Value</code></td><td><code dir="auto">import Value exposing (Value)</code></td><td>the ledger’s multi-asset values: <code dir="auto">lovelaceOf</code>, <code dir="auto">quantityOf</code>, <code dir="auto">add</code>, <code dir="auto">geq</code> and more</td></tr><tr><td><code dir="auto">Interval</code></td><td><code dir="auto">import Interval</code></td><td>time ranges such as the validity range: <code dir="auto">isEntirelyAfter</code>, <code dir="auto">isEntirelyBefore</code>, <code dir="auto">contains</code>, without sentinel values</td></tr><tr><td><code dir="auto">Tx</code></td><td><code dir="auto">import Tx</code></td><td>questions about the transaction: <code dir="auto">signedBy</code>, <code dir="auto">ownInput</code>, <code dir="auto">outputsTo</code>, <code dir="auto">continuingOutputs</code>, <code dir="auto">mintedOf</code>, <code dir="auto">inlineDatum</code> and more</td></tr><tr><td><code dir="auto">Bytes</code></td><td><code dir="auto">import Bytes</code></td><td>byte-string builtins: slicing, integers, bits, hashes</td></tr><tr><td><code dir="auto">Julc.Data</code></td><td><code dir="auto">import Julc.Data as Data</code></td><td>explicit <code dir="auto">decode</code>, <code dir="auto">encode</code> and optional/<code dir="auto">Maybe</code> adapters</td></tr><tr><td><code dir="auto">Julc.Ledger</code></td><td><code dir="auto">import Julc.Ledger exposing (...)</code></td><td>ledger types such as <code dir="auto">ScriptContext</code>, <code dir="auto">PubKeyHash</code> and <code dir="auto">TxOutRef</code></td></tr></tbody></table>
+<p>The types <code dir="auto">Int</code>, <code dir="auto">Bool</code>, <code dir="auto">String</code>, <code dir="auto">Bytes</code>, <code dir="auto">Data</code>, <code dir="auto">List</code>, <code dir="auto">Maybe</code> (with <code dir="auto">Just</code> and <code dir="auto">Nothing</code>), <code dir="auto">Dict</code>,
+<code dir="auto">Map</code> and <code dir="auto">Array</code> are built in.</p>
+<p><code dir="auto">Basics</code>, <code dir="auto">List</code>, <code dir="auto">Maybe</code>, <code dir="auto">Result</code>, <code dir="auto">Tuple</code>, <code dir="auto">String</code>, <code dir="auto">Dict</code>, <code dir="auto">Map</code>, <code dir="auto">Array</code>, <code dir="auto">Value</code>, <code dir="auto">Interval</code> and <code dir="auto">Tx</code>
+are written in Elci itself, and compiled with your code; a function you don’t call is never compiled into
+your script. <code dir="auto">Dict</code>, <code dir="auto">Map</code> and <code dir="auto">Array</code> sit on top of Julc’s typed map and array libraries and of list
+operations the compiler specializes for their key and value types. <code dir="auto">Value</code> sits on the protocol’s native
+value builtins (CIP-153). <code dir="auto">Interval</code> and <code dir="auto">Tx</code> read the ledger’s types directly. Every signature is on the
+<a href="/reference/core-modules/">core modules</a> reference page, and
+<a href="/learn/collections/">lists, dictionaries, maps and arrays</a> teaches them. Bytes get their own page:
+<a href="/advanced/bytes-and-crypto/">bytes, hashes and bits</a>.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="julcs-java-libraries">Julc’s Java libraries</h2><a class="sl-anchor-link" href="#julcs-java-libraries"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Julc’s Java libraries”</span></a></div>
+<p>Julc ships its on-chain standard library as Java source, and the Elci compiler bundles it. To use a
+library, map a module name to its class, then import that module. Here is every bundled library, with
+the module names used on this site:</p>
+<div class="expressive-code"><link rel="stylesheet" href="/_astro/ec.brvln.css"><script type="module" src="/_astro/ec.0vx5m.js"></script><figure class="frame has-title not-content"><figcaption class="header"><span class="title">elci.toml</span></figcaption><pre data-language="toml"><code><div class="ec-line"><div class="code"><span style="--0:#908CAA;--1:#68657E">[</span><span style="--0:#9CCFD8;--1:#416F77">java-modules</span><span style="--0:#908CAA;--1:#68657E">]</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Address</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.AddressLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Bitwise</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.BitwiseLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.ByteString</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.ByteStringLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Contexts</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.ContextsLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Crypto</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.CryptoLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Interval</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.IntervalLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Lists</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.ListsLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.MapLib</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.MapLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Math</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.MathLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Output</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.OutputLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Values</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.ValuesLib"</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="[java-modules]&#x22;Julc.Address&#x22; = &#x22;org.julclang.stdlib.lib.AddressLib&#x22;&#x22;Julc.Bitwise&#x22; = &#x22;org.julclang.stdlib.lib.BitwiseLib&#x22;&#x22;Julc.ByteString&#x22; = &#x22;org.julclang.stdlib.lib.ByteStringLib&#x22;&#x22;Julc.Contexts&#x22; = &#x22;org.julclang.stdlib.lib.ContextsLib&#x22;&#x22;Julc.Crypto&#x22; = &#x22;org.julclang.stdlib.lib.CryptoLib&#x22;&#x22;Julc.Interval&#x22; = &#x22;org.julclang.stdlib.lib.IntervalLib&#x22;&#x22;Julc.Lists&#x22; = &#x22;org.julclang.stdlib.lib.ListsLib&#x22;&#x22;Julc.MapLib&#x22; = &#x22;org.julclang.stdlib.lib.MapLib&#x22;&#x22;Julc.Math&#x22; = &#x22;org.julclang.stdlib.lib.MathLib&#x22;&#x22;Julc.Output&#x22; = &#x22;org.julclang.stdlib.lib.OutputLib&#x22;&#x22;Julc.Values&#x22; = &#x22;org.julclang.stdlib.lib.ValuesLib&#x22;"><div></div></button></div></figure></div>
+<p>Map only what you import; an unused mapping is never loaded. The module names are yours to choose, except
+the core modules’ names: a <code dir="auto">[java-modules]</code> key can’t be <code dir="auto">Interval</code>, <code dir="auto">Tx</code> or another core module. How
+mapping, types and rejections work in general is covered in <a href="/advanced/java-libraries/">Java libraries</a>.</p>
+<div class="sl-heading-wrapper level-h3"><h3 id="what-verified-means">What “verified” means</h3><a class="sl-anchor-link" href="#what-verified-means"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “What “verified” means”</span></a></div>
+<p>The compiler repository keeps an inventory of every public export. An export is <strong>compile-verified</strong>
+when an Elci wrapper with its concrete signature type-checks, links the real Java implementation and
+produces UPLC. That proves the signature maps correctly; it does not prove each function was evaluated
+with representative inputs through Elci. Julc tests the libraries’ behavior separately.</p>
+<p>The current scan found <strong>145 compile-verified exports</strong>, <strong>41 unsupported signatures</strong>, <strong>6 exports that
+return a <code dir="auto">Value</code></strong>, which Elci rejects, and <strong>12 generic templates</strong>:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Library</th><th align="right">Verified exports</th><th>Gaps</th></tr></thead><tbody><tr><td><code dir="auto">AddressLib</code></td><td align="right">4</td><td>none</td></tr><tr><td><code dir="auto">BitwiseLib</code></td><td align="right">9</td><td><code dir="auto">writeBits</code> (uses <code dir="auto">PlutusData.ListData</code>)</td></tr><tr><td><code dir="auto">BlsLib</code></td><td align="right">0</td><td>all 19 exports use BLS point types</td></tr><tr><td><code dir="auto">ByteStringLib</code></td><td align="right">24</td><td>none</td></tr><tr><td><code dir="auto">ContextsLib</code></td><td align="right">23</td><td><code dir="auto">listIndex</code> (uses <code dir="auto">PlutusData.ListData</code>)</td></tr><tr><td><code dir="auto">CryptoLib</code></td><td align="right">9</td><td>none</td></tr><tr><td><code dir="auto">IntervalLib</code></td><td align="right">9</td><td>none</td></tr><tr><td><code dir="auto">ListsLib</code></td><td align="right">17</td><td>plus 6 generic programmatic exports</td></tr><tr><td><code dir="auto">MapLib</code></td><td align="right">10</td><td>concrete <code dir="auto">Data</code>-based signatures only</td></tr><tr><td><code dir="auto">MathLib</code></td><td align="right">8</td><td><code dir="auto">divMod</code>, <code dir="auto">quotRem</code> (return a Java <code dir="auto">Tuple2</code>)</td></tr><tr><td><code dir="auto">NativeValueLib</code></td><td align="right">0</td><td>all 7 exports use <code dir="auto">JulcValue</code></td></tr><tr><td><code dir="auto">OutputLib</code></td><td align="right">14</td><td>none</td></tr><tr><td><code dir="auto">ValuesLib</code></td><td align="right">18</td><td>11 exports use unmapped Data subtypes or <code dir="auto">AssetEntry</code>; 6 return a <code dir="auto">Value</code></td></tr><tr><td><code dir="auto">TypedMapLib</code></td><td align="right">9 generic</td><td>used by the core <code dir="auto">Map</code> module</td></tr><tr><td><code dir="auto">TypedArrayLib</code></td><td align="right">3 generic</td><td>used by the core <code dir="auto">Array</code> module</td></tr></tbody></table>
+<p>Using an unsupported export is a compile error (<code dir="auto">ELCI2105</code>) that names the Java type involved. An export
+whose result can hold a <code dir="auto">Value</code> is rejected the same way, because Java libraries don’t keep values in the
+ledger’s order; use the core <a href="/reference/core-modules/#value"><code dir="auto">Value</code></a> module instead. <code dir="auto">ContextsLib</code> and
+<code dir="auto">OutputLib</code> are exempt: they only pass along the ledger’s own values. Some
+verified exports are public implementation helpers (their names often start with <code dir="auto">_</code> or end in <code dir="auto">Step</code>).
+They are listed for completeness; do not build on them.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="an-example">An example</h2><a class="sl-anchor-link" href="#an-example"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “An example”</span></a></div>
+<p>This listing validator uses two Java libraries next to the core <code dir="auto">Tx</code>, <code dir="auto">Interval</code> and <code dir="auto">Value</code> modules. It
+requires the seller’s address to be a key address, and the payment to reach that exact address, staking
+part included. <code dir="auto">Tx.outputsTo</code> would match the key whatever the staking part, so this is a case for
+<code dir="auto">OutputLib</code>:</p>
+<div class="expressive-code"><figure class="frame has-title not-content"><figcaption class="header"><span class="title">elci.toml</span></figcaption><pre data-language="toml"><code><div class="ec-line"><div class="code"><span style="--0:#908CAA;--1:#68657E">[</span><span style="--0:#9CCFD8;--1:#416F77">java-modules</span><span style="--0:#908CAA;--1:#68657E">]</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Address</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.AddressLib"</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279">Julc.Output</span><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">"</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">=</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#F6C177;--1:#8D5E1F">"org.julclang.stdlib.lib.OutputLib"</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="[java-modules]&#x22;Julc.Address&#x22; = &#x22;org.julclang.stdlib.lib.AddressLib&#x22;&#x22;Julc.Output&#x22; = &#x22;org.julclang.stdlib.lib.OutputLib&#x22;"><div></div></button></div></figure></div>
+<div class="expressive-code"><figure class="frame has-title not-content"><figcaption class="header"><span class="title">src/Market.elm</span></figcaption><pre data-language="elm"><code><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">module</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#9CCFD8;--1:#416F77">Market</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">exposing</span><span style="--0:#908CAA;--1:#68657E"> (</span><span style="--0:#6093A8;--1:#286983">Listing</span><span style="--0:#908CAA;--1:#68657E">, </span><span style="--0:#EBBCBA;--1:#925856">spend</span><span style="--0:#908CAA;--1:#68657E">)</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">import </span><span style="--0:#9CCFD8;--1:#416F77">Interval</span></div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">import </span><span style="--0:#9CCFD8;--1:#416F77">Julc</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#9CCFD8;--1:#416F77">Address</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">as</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#9CCFD8;--1:#416F77">Address</span></div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">import </span><span style="--0:#9CCFD8;--1:#416F77">Julc</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#9CCFD8;--1:#416F77">Data</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">as</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#9CCFD8;--1:#416F77">Data</span></div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">import </span><span style="--0:#9CCFD8;--1:#416F77">Julc</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#9CCFD8;--1:#416F77">Ledger</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">exposing</span><span style="--0:#908CAA;--1:#68657E"> (</span><span style="--0:#6093A8;--1:#286983">Address</span><span style="--0:#908CAA;--1:#68657E">, </span><span style="--0:#6093A8;--1:#286983">ScriptContext</span><span style="--0:#908CAA;--1:#68657E">, </span><span style="--0:#6093A8;--1:#286983">TxOut</span><span style="--0:#908CAA;--1:#68657E">, </span><span style="--0:#6093A8;--1:#286983">TxOutRef</span><span style="--0:#908CAA;--1:#68657E">)</span></div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">import </span><span style="--0:#9CCFD8;--1:#416F77">Julc</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#9CCFD8;--1:#416F77">Output</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">as</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#9CCFD8;--1:#416F77">Output</span></div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">import </span><span style="--0:#9CCFD8;--1:#416F77">Tx</span></div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">import </span><span style="--0:#9CCFD8;--1:#416F77">Value</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#6093A8;--1:#286983">type alias Listing</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">=</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#908CAA;--1:#68657E">{ </span><span style="--0:#EBBCBA;--1:#925856">seller</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Address</span><span style="--0:#908CAA;--1:#68657E">, </span><span style="--0:#EBBCBA;--1:#925856">price</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Int</span><span style="--0:#908CAA;--1:#68657E">, </span><span style="--0:#EBBCBA;--1:#925856">deadline</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Int</span><span style="--0:#908CAA;--1:#68657E"> }</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">{-</span><span style="--0:#8D89A0;--0fs:italic;--1:#6B6774;--1fs:italic">| Anyone may buy before the deadline by paying the seller's exact address, with the</span></div></div><div class="ec-line"><div class="code"><span style="--0:#8D89A0;--0fs:italic;--1:#6B6774;--1fs:italic">listing's output reference as the payment's inline datum.</span></div></div><div class="ec-line"><div class="code"><span style="--0:#908CAA;--0fs:italic;--1:#68657E;--1fs:italic">-}</span></div></div><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">spend</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Listing</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">-></span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">()</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">-></span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">ScriptContext</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">-></span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Bool</span></div></div><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">spend</span><span style="--0:#E0DEF4;--1:#575279"> listing </span><span style="--0:#6093A8;--1:#286983">_</span><span style="--0:#E0DEF4;--1:#575279"> ctx </span><span style="--0:#6093A8;--1:#286983">=</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#6093A8;--1:#286983">case </span><span style="--0:#9CCFD8;--1:#416F77">Tx</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">ownRef ctx </span><span style="--0:#6093A8;--1:#286983">of</span></div></div><div class="ec-line"><div class="code"><span class="indent">        </span><span style="--0:#6093A8;--1:#286983">Just</span><span style="--0:#E0DEF4;--1:#575279"> ref </span><span style="--0:#6093A8;--1:#286983">-></span></div></div><div class="ec-line"><div class="code"><span class="indent">            </span><span style="--0:#9CCFD8;--1:#416F77">Address</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">isPubKeyAddress listing</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#EBBCBA;--1:#925856">seller</span></div></div><div class="ec-line"><div class="code"><span class="indent">                </span><span style="--0:#6093A8;--1:#286983">&#x26;&#x26;</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#9CCFD8;--1:#416F77">Interval</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">isEntirelyBefore listing</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#EBBCBA;--1:#925856">deadline</span><span style="--0:#E0DEF4;--1:#575279"> ctx</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#EBBCBA;--1:#925856">txInfo</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#EBBCBA;--1:#925856">validRange</span></div></div><div class="ec-line"><div class="code"><span class="indent">                </span><span style="--0:#6093A8;--1:#286983">&#x26;&#x26;</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#9CCFD8;--1:#416F77">List</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">any </span><span style="--0:#908CAA;--1:#68657E">(</span><span style="--0:#E0DEF4;--1:#575279">pays listing</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#EBBCBA;--1:#925856">price</span><span style="--0:#E0DEF4;--1:#575279"> ref</span><span style="--0:#908CAA;--1:#68657E">)</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">(</span><span style="--0:#9CCFD8;--1:#416F77">Output</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">outputsAt ctx</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#EBBCBA;--1:#925856">txInfo</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#EBBCBA;--1:#925856">outputs</span><span style="--0:#E0DEF4;--1:#575279"> listing</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#EBBCBA;--1:#925856">seller</span><span style="--0:#908CAA;--1:#68657E">)</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span class="indent">        </span><span style="--0:#6093A8;--1:#286983">Nothing</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">-></span></div></div><div class="ec-line"><div class="code"><span class="indent">            </span><span style="--0:#6093A8;--1:#286983">False</span></div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code">
+</div></div><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">pays</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">:</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Int</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">-></span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">TxOutRef</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">-></span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">TxOut</span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">-></span><span style="--0:#908CAA;--1:#68657E"> </span><span style="--0:#6093A8;--1:#286983">Bool</span></div></div><div class="ec-line"><div class="code"><span style="--0:#EBBCBA;--1:#925856">pays</span><span style="--0:#E0DEF4;--1:#575279"> price ref output </span><span style="--0:#6093A8;--1:#286983">=</span></div></div><div class="ec-line"><div class="code"><span class="indent">    </span><span style="--0:#908CAA;--1:#68657E">(</span><span style="--0:#9CCFD8;--1:#416F77">Value</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">lovelaceOf output</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#EBBCBA;--1:#925856">value</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">>=</span><span style="--0:#E0DEF4;--1:#575279"> price</span><span style="--0:#908CAA;--1:#68657E">)</span></div></div><div class="ec-line"><div class="code"><span class="indent">        </span><span style="--0:#6093A8;--1:#286983">&#x26;&#x26;</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">(</span><span style="--0:#9CCFD8;--1:#416F77">Tx</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">inlineDatum output </span><span style="--0:#6093A8;--1:#286983">==</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#6093A8;--1:#286983">Just</span><span style="--0:#E0DEF4;--1:#575279"> </span><span style="--0:#908CAA;--1:#68657E">(</span><span style="--0:#9CCFD8;--1:#416F77">Data</span><span style="--0:#6093A8;--1:#286983">.</span><span style="--0:#E0DEF4;--1:#575279">encode ref</span><span style="--0:#908CAA;--1:#68657E">))</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="module Market exposing (Listing, spend)import Intervalimport Julc.Address as Addressimport Julc.Data as Dataimport Julc.Ledger exposing (Address, ScriptContext, TxOut, TxOutRef)import Julc.Output as Outputimport Tximport Valuetype alias Listing =    { seller : Address, price : Int, deadline : Int }{-| Anyone may buy before the deadline by paying the seller&#x27;s exact address, with thelisting&#x27;s output reference as the payment&#x27;s inline datum.-}spend : Listing -> () -> ScriptContext -> Boolspend listing _ ctx =    case Tx.ownRef ctx of        Just ref ->            Address.isPubKeyAddress listing.seller                &#x26;&#x26; Interval.isEntirelyBefore listing.deadline ctx.txInfo.validRange                &#x26;&#x26; List.any (pays listing.price ref) (Output.outputsAt ctx.txInfo.outputs listing.seller)        Nothing ->            Falsepays : Int -> TxOutRef -> TxOut -> Boolpays price ref output =    (Value.lovelaceOf output.value >= price)        &#x26;&#x26; (Tx.inlineDatum output == Just (Data.encode ref))"><div></div></button></div></figure></div>
+<div class="expressive-code"><figure class="frame not-content"><figcaption class="header"></figcaption><pre data-language="text"><code><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">$ elci check</span></div></div><div class="ec-line"><div class="code"><span style="--0:#e0def4;--1:#575279">validator market (spend): checked; 1297 FLAT bytes; plutus-v3-pv11-uplc-1.1.0</span></div></div></code></pre><div class="copy"><div aria-live="polite"></div><button title="Copy to clipboard" data-copied="Copied!" data-code="$ elci checkvalidator market (spend): checked; 1297 FLAT bytes; plutus-v3-pv11-uplc-1.1.0"><div></div></button></div></figure></div>
+<p>Things to notice:</p>
+<ul>
+<li><strong>Java argument order.</strong> Library functions take the collection or subject first:
+<code dir="auto">Output.outputsAt outputs address</code>. Core functions take it last, as in Elm: <code dir="auto">Tx.outputsTo credential ctx</code>.</li>
+<li><strong>Optional results.</strong> A Java function that returns an <code dir="auto">Optional</code>, such as <code dir="auto">ContextsLib.findOwnInput</code>,
+gives a Julc optional. Convert it with <code dir="auto">Data.fromOptional</code> before you match on <code dir="auto">Just</code> and <code dir="auto">Nothing</code>.</li>
+<li><strong>Core and Java together.</strong> <code dir="auto">Tx</code>, <code dir="auto">Interval</code> and <code dir="auto">Value</code> are core modules; <code dir="auto">Address</code> and <code dir="auto">Output</code> are
+Java library calls. The payment carries the listing’s reference, so one payment can’t buy two listings
+(<a href="/contracts/reading-the-transaction/#one-payment-per-input">one payment per input</a>).</li>
+<li><strong>Size.</strong> Library code is linked into your script: this validator is 1,297 bytes. Check the size
+after adding a library.</li>
+</ul>
+<div class="sl-heading-wrapper level-h2"><h2 id="most-useful-functions">Most useful functions</h2><a class="sl-anchor-link" href="#most-useful-functions"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Most useful functions”</span></a></div>
+<p>The tables give each export’s Elci type. <code dir="auto">Ledger.X</code> means the type <code dir="auto">X</code> from <code dir="auto">Julc.Ledger</code>.</p>
+<div class="sl-heading-wrapper level-h3"><h3 id="mathlib"><code dir="auto">MathLib</code></h3><a class="sl-anchor-link" href="#mathlib"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “MathLib”</span></a></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Function</th><th>Type</th><th>Notes</th></tr></thead><tbody><tr><td><code dir="auto">sign</code></td><td><code dir="auto">Int -> Int</code></td><td><code dir="auto">-1</code>, <code dir="auto">0</code> or <code dir="auto">1</code></td></tr><tr><td><code dir="auto">expMod</code></td><td><code dir="auto">Int -> Int -> Int -> Int</code></td><td>modular exponentiation: <code dir="auto">Math.expMod 3 4 5</code> is <code dir="auto">1</code></td></tr><tr><td><code dir="auto">floorDiv</code>, <code dir="auto">floorMod</code></td><td><code dir="auto">Int -> Int -> Int</code></td><td>round towards negative infinity: <code dir="auto">Math.floorDiv -7 2</code> is <code dir="auto">-4</code> and <code dir="auto">Math.floorMod -7 2</code> is <code dir="auto">1</code></td></tr><tr><td><code dir="auto">max</code>, <code dir="auto">min</code></td><td><code dir="auto">Int -> Int -> Int</code></td><td>the prelude’s <code dir="auto">max</code> and <code dir="auto">min</code> do the same, for any comparable type</td></tr><tr><td><code dir="auto">abs</code></td><td><code dir="auto">Int -> Int</code></td><td>the prelude has <code dir="auto">abs</code></td></tr><tr><td><code dir="auto">pow</code></td><td><code dir="auto">Int -> Int -> Int</code></td><td>like the <code dir="auto">^</code> operator (<code dir="auto">2 ^ 10</code> is <code dir="auto">1024</code>), except that a negative exponent gives <code dir="auto">1</code>, where <code dir="auto">^</code> fails</td></tr></tbody></table>
+<p>Use the prelude’s <code dir="auto">max</code>, <code dir="auto">min</code>, <code dir="auto">abs</code> and <code dir="auto">^</code> rather than their <code dir="auto">MathLib</code> versions: they need no mapping.
+Elci’s own <code dir="auto">//</code> truncates towards zero, and <code dir="auto">modBy</code> and <code dir="auto">remainderBy</code> are in the prelude.</p>
+<div class="sl-heading-wrapper level-h3"><h3 id="intervallib"><code dir="auto">IntervalLib</code></h3><a class="sl-anchor-link" href="#intervallib"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “IntervalLib”</span></a></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Function</th><th>Type</th><th>Notes</th></tr></thead><tbody><tr><td><code dir="auto">contains</code></td><td><code dir="auto">Ledger.Interval -> Int -> Bool</code></td><td>bounds are inclusive</td></tr><tr><td><code dir="auto">after</code>, <code dir="auto">before</code></td><td><code dir="auto">Int -> Ledger.Interval</code></td><td>from a time onwards; up to a time</td></tr><tr><td><code dir="auto">between</code></td><td><code dir="auto">Int -> Int -> Ledger.Interval</code></td><td>both ends inclusive</td></tr><tr><td><code dir="auto">always</code>, <code dir="auto">never</code></td><td><code dir="auto">Ledger.Interval</code></td><td></td></tr><tr><td><code dir="auto">isEmpty</code></td><td><code dir="auto">Ledger.Interval -> Bool</code></td><td></td></tr><tr><td><code dir="auto">finiteLowerBound</code>, <code dir="auto">finiteUpperBound</code></td><td><code dir="auto">Ledger.Interval -> Int</code></td><td>return <code dir="auto">-1</code> for an infinite bound</td></tr></tbody></table>
+<p>The <code dir="auto">-1</code> sentinel is easy to miss: <code dir="auto">finiteUpperBound (after 100)</code> is <code dir="auto">-1</code>, so “no end” looks like “ends at
+-1”. Use the core <a href="/reference/core-modules/#interval"><code dir="auto">Interval</code></a> module instead: its checks never hold on an
+infinite bound, and its <code dir="auto">start</code> and <code dir="auto">end</code> return <code dir="auto">Nothing</code> for one. Map <code dir="auto">IntervalLib</code> under another name than
+<code dir="auto">Interval</code>, which is the core module’s.</p>
+<div class="sl-heading-wrapper level-h3"><h3 id="contextslib"><code dir="auto">ContextsLib</code></h3><a class="sl-anchor-link" href="#contextslib"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “ContextsLib”</span></a></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Function</th><th>Type</th></tr></thead><tbody><tr><td><code dir="auto">signedBy</code></td><td><code dir="auto">Ledger.TxInfo -> Bytes -> Bool</code></td></tr><tr><td><code dir="auto">findOwnInput</code></td><td><code dir="auto">Ledger.ScriptContext -> JulcOptional Ledger.TxInInfo</code></td></tr><tr><td><code dir="auto">getContinuingOutputs</code></td><td><code dir="auto">Ledger.ScriptContext -> List Ledger.TxOut</code></td></tr><tr><td><code dir="auto">ownHash</code></td><td><code dir="auto">Ledger.ScriptContext -> Bytes</code></td></tr><tr><td><code dir="auto">scriptOutputsAt</code></td><td><code dir="auto">Ledger.TxInfo -> Bytes -> List Ledger.TxOut</code></td></tr><tr><td><code dir="auto">valuePaid</code></td><td><code dir="auto">Ledger.TxInfo -> Ledger.Address -> List Ledger.Value</code></td></tr><tr><td><code dir="auto">valueSpent</code></td><td><code dir="auto">Ledger.TxInfo -> List Ledger.Value</code></td></tr><tr><td><code dir="auto">findDatum</code></td><td><code dir="auto">Ledger.TxInfo -> Data -> JulcOptional Data</code></td></tr><tr><td><code dir="auto">getSpendingDatum</code></td><td><code dir="auto">Ledger.ScriptContext -> JulcOptional Data</code></td></tr><tr><td><code dir="auto">getRedeemer</code></td><td><code dir="auto">Ledger.ScriptContext -> Data</code></td></tr></tbody></table>
+<p>The core <a href="/reference/core-modules/#tx"><code dir="auto">Tx</code></a> module covers these with typed results: <code dir="auto">Tx.signedBy</code>,
+<code dir="auto">Tx.ownInput</code>, <code dir="auto">Tx.continuingOutputs</code>, <code dir="auto">Tx.outputsTo</code>, <code dir="auto">Tx.valueSpent</code> and <code dir="auto">Tx.datumOf</code>. Prefer it.
+<code dir="auto">ContextsLib.signedBy</code> takes raw bytes, so it needs a key hash’s <code dir="auto">.hash</code>:
+<code dir="auto">Contexts.signedBy ctx.txInfo owner.hash</code>. The <code dir="auto">txInfo...</code> accessors (<code dir="auto">txInfoFee</code>, <code dir="auto">txInfoInputs</code> and so on)
+duplicate fields you can read directly, such as <code dir="auto">ctx.txInfo.fee</code>. <code dir="auto">valuePaid</code> and <code dir="auto">valueSpent</code> return the
+ledger’s values, one per output or input.</p>
+<div class="sl-heading-wrapper level-h3"><h3 id="outputlib"><code dir="auto">OutputLib</code></h3><a class="sl-anchor-link" href="#outputlib"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “OutputLib”</span></a></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Function</th><th>Type</th></tr></thead><tbody><tr><td><code dir="auto">lovelacePaidTo</code></td><td><code dir="auto">List Ledger.TxOut -> Ledger.Address -> Int</code></td></tr><tr><td><code dir="auto">paidAtLeast</code></td><td><code dir="auto">List Ledger.TxOut -> Ledger.Address -> Int -> Bool</code></td></tr><tr><td><code dir="auto">outputsAt</code></td><td><code dir="auto">List Ledger.TxOut -> Ledger.Address -> List Ledger.TxOut</code></td></tr><tr><td><code dir="auto">countOutputsAt</code></td><td><code dir="auto">List Ledger.TxOut -> Ledger.Address -> Int</code></td></tr><tr><td><code dir="auto">uniqueOutputAt</code></td><td><code dir="auto">List Ledger.TxOut -> Ledger.Address -> Ledger.TxOut</code></td></tr><tr><td><code dir="auto">outputsWithToken</code></td><td><code dir="auto">List Ledger.TxOut -> Bytes -> Bytes -> List Ledger.TxOut</code></td></tr><tr><td><code dir="auto">findOutputWithToken</code></td><td><code dir="auto">List Ledger.TxOut -> Bytes -> Bytes -> Bytes -> Ledger.TxOut</code></td></tr><tr><td><code dir="auto">findInputWithToken</code></td><td><code dir="auto">List Ledger.TxInInfo -> Bytes -> Bytes -> Bytes -> Ledger.TxInInfo</code></td></tr><tr><td><code dir="auto">valueHasToken</code></td><td><code dir="auto">Ledger.Value -> Bytes -> Bytes -> Bool</code></td></tr><tr><td><code dir="auto">getInlineDatum</code></td><td><code dir="auto">Ledger.TxOut -> Data</code></td></tr><tr><td><code dir="auto">txOutAddress</code>, <code dir="auto">txOutValue</code>, <code dir="auto">txOutDatum</code></td><td><code dir="auto">Ledger.TxOut -> ...</code></td></tr></tbody></table>
+<p><code dir="auto">OutputLib</code> matches whole addresses, staking part included, where <code dir="auto">Tx.outputsTo</code> and <code dir="auto">Tx.valuePaidTo</code> match
+the payment credential only. Use it when the staking part matters. <code dir="auto">getInlineDatum</code> fails the script for an
+output without an inline datum; <code dir="auto">Tx.inlineDatum</code> returns a <code dir="auto">Maybe</code>.</p>
+<div class="sl-heading-wrapper level-h3"><h3 id="valueslib"><code dir="auto">ValuesLib</code></h3><a class="sl-anchor-link" href="#valueslib"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “ValuesLib”</span></a></div>
+<p>Use the core <a href="/reference/core-modules/#value"><code dir="auto">Value</code></a> module for values: it reads, builds and compares
+them, and <code dir="auto">==</code> works on its results. Julc’s <code dir="auto">ValuesLib</code> builds values in its own order, so its exports that
+return a <code dir="auto">Value</code> (<code dir="auto">add</code>, <code dir="auto">subtract</code>, <code dir="auto">negate</code>, <code dir="auto">singleton</code> and two helpers) are rejected with <code dir="auto">ELCI2105</code>.
+The exports that only read a value still work, and a few have no direct equivalent in the <code dir="auto">Value</code> module:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Function</th><th>Type</th></tr></thead><tbody><tr><td><code dir="auto">containsPolicy</code></td><td><code dir="auto">Ledger.Value -> Bytes -> Bool</code></td></tr><tr><td><code dir="auto">countTokensWithQty</code></td><td><code dir="auto">Ledger.Value -> Bytes -> Int -> Int</code></td></tr><tr><td><code dir="auto">findTokenName</code></td><td><code dir="auto">Ledger.Value -> Bytes -> Int -> Bytes</code></td></tr><tr><td><code dir="auto">uniqueTokenName</code></td><td><code dir="auto">Ledger.TxOutRef -> Bytes</code></td></tr></tbody></table>
+<p><code dir="auto">Value.policies</code> and <code dir="auto">Value.tokens</code> answer the same questions with typed results.</p>
+<div class="sl-heading-wrapper level-h3"><h3 id="addresslib-and-cryptolib"><code dir="auto">AddressLib</code> and <code dir="auto">CryptoLib</code></h3><a class="sl-anchor-link" href="#addresslib-and-cryptolib"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “AddressLib and CryptoLib”</span></a></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Function</th><th>Type</th></tr></thead><tbody><tr><td><code dir="auto">Address.isPubKeyAddress</code>, <code dir="auto">Address.isScriptAddress</code></td><td><code dir="auto">Ledger.Address -> Bool</code></td></tr><tr><td><code dir="auto">Address.paymentCredential</code></td><td><code dir="auto">Ledger.Address -> Ledger.Credential</code></td></tr><tr><td><code dir="auto">Address.credentialHash</code></td><td><code dir="auto">Ledger.Address -> Bytes</code></td></tr><tr><td><code dir="auto">Crypto.verifyEd25519Signature</code></td><td><code dir="auto">Bytes -> Bytes -> Bytes -> Bool</code> (key, message, signature)</td></tr><tr><td><code dir="auto">Crypto.verifyEcdsaSecp256k1</code>, <code dir="auto">Crypto.verifySchnorrSecp256k1</code></td><td><code dir="auto">Bytes -> Bytes -> Bytes -> Bool</code></td></tr><tr><td><code dir="auto">Crypto.sha2_256</code>, <code dir="auto">sha3_256</code>, <code dir="auto">blake2b_224</code>, <code dir="auto">blake2b_256</code>, <code dir="auto">keccak_256</code>, <code dir="auto">ripemd_160</code></td><td><code dir="auto">Bytes -> Bytes</code></td></tr></tbody></table>
+<p>The hashes are also in the built-in <code dir="auto">Bytes</code> module; the signature checks are only here.</p>
+<div class="sl-heading-wrapper level-h3"><h3 id="bytestringlib-and-bitwiselib"><code dir="auto">ByteStringLib</code> and <code dir="auto">BitwiseLib</code></h3><a class="sl-anchor-link" href="#bytestringlib-and-bitwiselib"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “ByteStringLib and BitwiseLib”</span></a></div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Function</th><th>Type</th><th>Notes</th></tr></thead><tbody><tr><td><code dir="auto">ByteString.toHex</code></td><td><code dir="auto">Bytes -> Bytes</code></td><td>lowercase hex digits as UTF-8 bytes</td></tr><tr><td><code dir="auto">ByteString.intToDecimalString</code></td><td><code dir="auto">Int -> Bytes</code></td><td>non-negative integers only</td></tr><tr><td><code dir="auto">ByteString.utf8ToInteger</code></td><td><code dir="auto">Bytes -> Int</code></td><td>ASCII digits only, no sign</td></tr><tr><td><code dir="auto">ByteString.serialiseData</code></td><td><code dir="auto">Data -> Bytes</code></td><td>CBOR encoding</td></tr><tr><td><code dir="auto">ByteString.zeros</code></td><td><code dir="auto">Int -> Bytes</code></td><td></td></tr><tr><td><code dir="auto">Bitwise.andByteString</code>, <code dir="auto">orByteString</code>, <code dir="auto">xorByteString</code></td><td><code dir="auto">Bool -> Bytes -> Bytes -> Bytes</code></td><td><code dir="auto">True</code> pads the shorter operand at the end</td></tr><tr><td><code dir="auto">Bitwise.readBit</code></td><td><code dir="auto">Bytes -> Int -> Bool</code></td><td></td></tr></tbody></table>
+<p>The rest of both libraries mirrors builtins that the <code dir="auto">Bytes</code> module already provides with the byte string
+last. <a href="/advanced/bytes-and-crypto/">Bytes, hashes and bits</a> covers both.</p>
+<div class="sl-heading-wrapper level-h3"><h3 id="listslib-and-maplib"><code dir="auto">ListsLib</code> and <code dir="auto">MapLib</code></h3><a class="sl-anchor-link" href="#listslib-and-maplib"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “ListsLib and MapLib”</span></a></div>
+<p>Most <code dir="auto">ListsLib</code> and <code dir="auto">MapLib</code> exports work on <code dir="auto">List Data</code> and <code dir="auto">Map Data Data</code>, so you must encode every
+element with <code dir="auto">Julc.Data.encode</code> first. Examples are <code dir="auto">ListsLib.containsInt : List Data -> Int -> Bool</code>,
+<code dir="auto">ListsLib.hasDuplicateInts : List Data -> Bool</code> and <code dir="auto">MapLib.lookup : Map Data Data -> Data -> JulcOptional Data</code>.
+Prefer the typed core <code dir="auto">List</code>, <code dir="auto">Dict</code> and <code dir="auto">Map</code> modules. <code dir="auto">ListsLib</code>’s generic <code dir="auto">map</code>, <code dir="auto">filter</code>, <code dir="auto">any</code>, <code dir="auto">all</code>,
+<code dir="auto">find</code> and <code dir="auto">foldl</code> are covered in <a href="/advanced/java-libraries/">Java libraries</a>.</p>
+<div class="sl-heading-wrapper level-h2"><h2 id="what-is-missing">What is missing</h2><a class="sl-anchor-link" href="#what-is-missing"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “What is missing”</span></a></div>
+<ul>
+<li><strong>BLS12-381</strong> (<code dir="auto">BlsLib</code>) and <strong>native values</strong> (<code dir="auto">NativeValueLib</code>) have no usable exports yet.</li>
+<li><strong><code dir="auto">Value</code> at the boundary.</strong> A <code dir="auto">Value</code> can’t be a datum, redeemer or parameter yet. Store a
+<code dir="auto">List ( PolicyId, TokenName, Int )</code> and rebuild it with <code dir="auto">Value.fromList</code>.</li>
+<li><strong>Parts of Elm’s core</strong> are not available yet: <code dir="auto">Set</code> (use a <code dir="auto">Dict k Bool</code>), <code dir="auto">Char</code>, most of <code dir="auto">String</code>
+(<code dir="auto">length</code>, <code dir="auto">toInt</code>, <code dir="auto">split</code> and so on), and the <code dir="auto">Float</code> functions. Write small helpers yourself or use
+the Java libraries above.</li>
+</ul>
+<div class="sl-heading-wrapper level-h2"><h2 id="your-own-libraries">Your own libraries</h2><a class="sl-anchor-link" href="#your-own-libraries"><span aria-hidden="true" class="sl-anchor-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12.11 15.39-3.88 3.88a2.52 2.52 0 0 1-3.5 0 2.47 2.47 0 0 1 0-3.5l3.88-3.88a1 1 0 1 0-1.42-1.42l-3.88 3.89a4.48 4.48 0 0 0 6.33 6.33l3.89-3.88a1 1 0 0 0-1.42-1.42m8.58-12.08a4.49 4.49 0 0 0-6.33 0l-3.89 3.88a1 1 0 1 0 1.42 1.42l3.88-3.88a2.52 2.52 0 0 1 3.5 0 2.47 2.47 0 0 1 0 3.5l-3.88 3.88a1 1 0 0 0 0 1.42 1 1 0 0 0 1.42 0l3.88-3.89a4.49 4.49 0 0 0 0-6.33M8.83 15.17a1 1 0 0 0 .71.29 1 1 0 0 0 .71-.29l4.92-4.92a1 1 0 1 0-1.42-1.42l-4.92 4.92a1 1 0 0 0 0 1.42"></path></svg></span><span class="sr-only" data-pagefind-ignore="">Section titled “Your own libraries”</span></a></div>
+<p>You can write reusable libraries in Elci: ordinary modules under any source directory, listed in
+<code dir="auto">source-directories</code>. There is no package registry yet; share them as source. See
+<a href="/learn/modules/">modules and imports</a>. To reuse Java code, package it as a
+<a href="/advanced/java-libraries/">library JAR</a>.</p></div><footer class="sl-flex astro-ddtxxk7k"><div class="meta sl-flex astro-ddtxxk7k"><a href="https://github.com/bloxbean/elci-lang/edit/main/www/src/content/docs/advanced/standard-library.md" class="sl-flex print:hidden astro-qlekgd3o"><svg aria-hidden="true" class="astro-qlekgd3o astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.2em;"><path d="M22 7.24a1 1 0 0 0-.29-.71l-4.24-4.24a1 1 0 0 0-1.1-.22 1 1 0 0 0-.32.22l-2.83 2.83L2.29 16.05a1 1 0 0 0-.29.71V21a1 1 0 0 0 1 1h4.24a1 1 0 0 0 .76-.29l10.87-10.93L21.71 8c.1-.1.17-.2.22-.33a1 1 0 0 0 0-.24v-.14l.07-.05ZM6.83 20H4v-2.83l9.93-9.93 2.83 2.83L6.83 20ZM18.17 8.66l-2.83-2.83 1.42-1.41 2.82 2.82-1.41 1.42Z"/></svg>Edit page</a></div><div class="pagination-links print:hidden astro-b5raizh3" dir="ltr"><a href="/advanced/java-libraries/" rel="prev" class="astro-b5raizh3"><svg aria-hidden="true" class="astro-b5raizh3 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17 11H9.41l3.3-3.29a1.004 1.004 0 1 0-1.42-1.42l-5 5a1 1 0 0 0-.21.33 1 1 0 0 0 0 .76 1 1 0 0 0 .21.33l5 5a1.002 1.002 0 0 0 1.639-.325 1 1 0 0 0-.219-1.095L9.41 13H17a1 1 0 0 0 0-2Z"/></svg><span class="astro-b5raizh3">Previous<br class="astro-b5raizh3"><span class="link-title astro-b5raizh3">Java libraries</span></span></a><a href="/advanced/bytes-and-crypto/" rel="next" class="astro-b5raizh3"><svg aria-hidden="true" class="astro-b5raizh3 astro-hkc32dio" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="--sl-icon-size: 1.5rem;"><path d="M17.92 11.62a1.001 1.001 0 0 0-.21-.33l-5-5a1.003 1.003 0 1 0-1.42 1.42l3.3 3.29H7a1 1 0 0 0 0 2h7.59l-3.3 3.29a1.002 1.002 0 0 0 .325 1.639 1 1 0 0 0 1.095-.219l5-5a1 1 0 0 0 .21-.33 1 1 0 0 0 0-.76Z"/></svg><span class="astro-b5raizh3">Next<br class="astro-b5raizh3"><span class="link-title astro-b5raizh3">Bytes, hashes and bits</span></span></a></div></footer></div></div></main></div></div></div></div></body></html>

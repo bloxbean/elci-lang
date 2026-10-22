@@ -1,0 +1,141 @@
+{
+  "format": "path:line:column: CODE: message",
+  "details": "The first line is followed by a blank line, the source line as \"N| code\", a caret line under the reported token or expression (one pair per line for an expression over several lines), and zero or more \"Hint: ...\" lines. A long type mismatch adds \"It is:\" and \"It needs:\" lines. A run reports every error of a phase (parsing, name resolution, type checking; one per top-level declaration), in source order with a blank line between them, at most 20 then \"... and N more\", followed by a count such as \"3 errors\" when there are several. The report ends with a line such as \"For more on ELCI2005, run `elci explain ELCI2005`.\". Configuration and command-line errors are printed as \"elci: ELCI4001: message\".",
+  "report": {
+    "option": "--report=json",
+    "commands": [
+      "check",
+      "build",
+      "eval",
+      "test"
+    ],
+    "output": "JSON Lines on standard error: one JSON object per error, one per line; one error is one line",
+    "fields": [
+      "code",
+      "path",
+      "line",
+      "column",
+      "message",
+      "hints",
+      "excerpt",
+      "context"
+    ]
+  },
+  "explain": {
+    "command": "elci explain <code>",
+    "output": "the long-form entry for a code (ELCI2002, elci2002 or 2002): meaning, causes, a failing example, the fix",
+    "list": "elci explain with no code lists every code with its title"
+  },
+  "color": "--color=auto|always|never; auto colours a terminal unless NO_COLOR is set; JSON is never coloured",
+  "reference": "https://elci-lang.dev/reference/diagnostics/",
+  "codes": [
+    {
+      "code": "ELCI1001",
+      "meaning": "Invalid source character or literal"
+    },
+    {
+      "code": "ELCI1002",
+      "meaning": "Malformed or unsupported syntax"
+    },
+    {
+      "code": "ELCI2001",
+      "meaning": "Invalid pattern or expression form, including a constructor pattern with the wrong number of arguments and a record pattern on a library record"
+    },
+    {
+      "code": "ELCI2002",
+      "meaning": "Type mismatch, or a type that would have to contain itself"
+    },
+    {
+      "code": "ELCI2003",
+      "meaning": "Unsupported equality, ordering or append type; a constrained type variable (`comparable`, `appendable`) missing or misnamed, or `number`; a `Dict` decoded from Data whose keys are not comparable"
+    },
+    {
+      "code": "ELCI2004",
+      "meaning": "Missing required top-level signature"
+    },
+    {
+      "code": "ELCI2005",
+      "meaning": "Unknown value name"
+    },
+    {
+      "code": "ELCI2006",
+      "meaning": "Duplicate binder or unreachable pattern"
+    },
+    {
+      "code": "ELCI2007",
+      "meaning": "Non-exhaustive case expression"
+    },
+    {
+      "code": "ELCI2008",
+      "meaning": "Eager recursive value cycle"
+    },
+    {
+      "code": "ELCI2009",
+      "meaning": "Non-concrete handler or entrypoint"
+    },
+    {
+      "code": "ELCI2010",
+      "meaning": "Unknown or unconstrained record field"
+    },
+    {
+      "code": "ELCI2011",
+      "meaning": "Duplicate type or constructor, or a built-in constructor or type name (`Just`, `Nothing`, `True`, `False`; `Int`, `Maybe`, `List` and the other built-in types)"
+    },
+    {
+      "code": "ELCI2012",
+      "meaning": "Invalid type, alias, arity or alias cycle; `Tuple` or `Unit` written as a type name"
+    },
+    {
+      "code": "ELCI2013",
+      "meaning": "Unsupported serialized boundary type (including a `Value`, which has no strict boundary codec yet), or a value without a Data encoding (a function or an `Array`) stored in data"
+    },
+    {
+      "code": "ELCI2014",
+      "meaning": "Validator handler signature does not match its configured purpose, parameters or datum profile"
+    },
+    {
+      "code": "ELCI2101",
+      "meaning": "Unknown or missing module or imported export; a source module importing the test library"
+    },
+    {
+      "code": "ELCI2102",
+      "meaning": "Ambiguous name: two imports, possibly a default import, expose different things under it"
+    },
+    {
+      "code": "ELCI2103",
+      "meaning": "Entrypoint or handler is not exposed by its module"
+    },
+    {
+      "code": "ELCI2104",
+      "meaning": "Source module path, ownership or cycle error; reserved core module name or alias; qualified reference to an unexposed or unimported name, a name a core module lacks or an Elm function Elci does not provide"
+    },
+    {
+      "code": "ELCI2105",
+      "meaning": "Unsupported Java export signature, with provider reason; a Java export whose result can hold the ledger `Value` (except Julc's `ContextsLib` and `OutputLib`), which Java libraries do not keep canonical"
+    },
+    {
+      "code": "ELCI3001",
+      "meaning": "PIR lowering cannot represent the inferred program, such as `Julc.Data.decode` or a generic Java export at a type nothing determines"
+    },
+    {
+      "code": "ELCI3002",
+      "meaning": "Specialization or polymorphic-recursion limit"
+    },
+    {
+      "code": "ELCI3003",
+      "meaning": "Generic library type argument violates the export's constraint (for example `DATA_ENCODABLE`), or contains a `Dict` or a `Value`, which a Java library could build without the key-order or canonical-form check; a `Julc.Data` conversion of a type without a Data encoding, such as a function"
+    },
+    {
+      "code": "ELCI4001",
+      "meaning": "Invalid project configuration or CLI request (`elci.toml`, `elci init`, options, `elci explain`), including a `[java-modules]` key that names a core module, an `elci apply` parameter that doesn't fit its type (such as a `Dict` whose keys are not strictly ascending) and a source file that is not UTF-8"
+    },
+    {
+      "code": "ELCI4002",
+      "meaning": "Julc backend rejected generated PIR; reported at the Elci declaration it names, with the `JULC00xx` code"
+    },
+    {
+      "code": "ELCI4003",
+      "meaning": "The Julc backend lacks a contract revision or capability the program needs"
+    }
+  ]
+}
