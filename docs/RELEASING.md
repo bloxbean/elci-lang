@@ -1,16 +1,27 @@
 # Releasing Elci
 
-The release workflow runs when a `v*` tag is pushed. `gradle.properties` is the source of the Elci version, embedded in the CLI and ABI metadata. A tag must match it exactly: `version=0.1.0-dev` requires `v0.1.0-dev`. Tags containing a prerelease suffix produce GitHub prereleases.
+The release workflow runs when a `v*` tag is pushed. `gradle.properties` is the source of the Elci version, embedded in the CLI and ABI metadata. A tag must match it exactly: `version=0.1.0-pre1` requires `v0.1.0-pre1`. Tags containing a prerelease suffix produce GitHub prereleases.
 
-Before tagging, update and commit `version` in `gradle.properties`. Keep `julcVersion` and `julcRevision` aligned with the backend used to test the release. `julcVersion` is a Julc snapshot from the BloxBean Maven repository (`https://repo.bloxbean.org/maven/snapshots`), which Gradle resolves like any dependency; the development backend is not yet published to Maven Central. `julcRevision` records the full Julc commit SHA that snapshot was built from.
+Keep `julcVersion` and `julcRevision` aligned with the backend used to test the release. `julcVersion` is a Julc snapshot from the BloxBean Maven repository (`https://repo.bloxbean.org/maven/snapshots`), which Gradle resolves like any dependency; the development backend is not yet published to Maven Central. `julcRevision` records the full Julc commit SHA that snapshot was built from.
 
-Push the version commit, then create and push the matching tag:
+## Tagging a release
+
+Releases follow the release-ops PR-gated flow (`docs/03-workflows.md` §4). Nobody pushes `v*` tags by hand:
+
+1. Open a PR that changes `version` in `gradle.properties` to the release version, for example `0.1.0-pre1`. `.github/CODEOWNERS` requests review from the release owner.
+2. When it merges to `main` (or a `release/**` branch), `.github/workflows/tag-release.yml` runs. Its `authorize` job runs in the `release` environment, which is the approval gate once that environment has required reviewers. Its `tag` job, in `release-staging`, mints a `bloxbean-release-tagger` App token and pushes `v<version>` on the merged commit. A tag pushed with the default `GITHUB_TOKEN` would not trigger the release workflow.
+3. The tag starts `.github/workflows/release.yml`.
+4. Open a second PR that sets `version` back to the next development version, for example `0.1.0-dev`.
+
+`tag-release.yml` skips `SNAPSHOT` and `-dev` versions and tags that already exist, so a Julc pin bump in `gradle.properties` doesn't tag anything. To tag a version whose run was skipped, rejected or expired, start the workflow by hand; it tags the branch's current commit:
 
 ```sh
-version=$(sed -n 's/^version=//p' gradle.properties)
-git tag -a "v$version" -m "Elci $version"
-git push origin "v$version"
+gh workflow run tag-release.yml --repo bloxbean/elci-lang --ref main
 ```
+
+The `release-staging` environment needs the secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`, and the App must be installed on the repository (release-ops `docs/04-github-settings.md` §1).
+
+## Release builds
 
 GitHub Actions uses GraalVM **25.3.4.1**, the published patch release in the requested 25.3.4 series. Each runner executes the test suite, builds the native CLI, verifies its embedded version, compiles the vesting example, and evaluates the Elci library example.
 
@@ -51,7 +62,6 @@ The workflow needs these settings on the `release-staging` environment: deployme
 Not yet adopted from the standard:
 
 - an approval gate;
-- `CODEOWNERS` for `.github/`;
 - the snapshot cleanup workflow;
 - snapshot CLI distributions;
 - the "Development snapshot" GitHub release.
@@ -61,3 +71,9 @@ Start a run with:
 ```sh
 gh workflow run bloxbean-snapshot.yml --repo bloxbean/elci-lang --ref main
 ```
+
+## Documentation site
+
+`.github/workflows/docs-deploy.yml` builds the site in `www/` (release-ops `docs/03-workflows.md` §7). A pull request that touches the site, or the repository files it reads, only builds it. A push to `main`, or a manual run on `main`, also pushes the built site to the `gh-pages` branch. The live site changes only after GitHub's `pages-build-deployment` run for that push is approved in the `github-pages` environment.
+
+The site links pages from the root, so it is served at the root of its own domain. Set that domain as the repository variable `DOCS_DOMAIN`. The workflow builds with `ELCI_SITE_URL=https://$DOCS_DOMAIN` and writes it to the `CNAME` file. Pages must deploy from the `gh-pages` branch.
