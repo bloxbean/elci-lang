@@ -35,3 +35,29 @@ Fully static musl builds are deferred to a later release. GraalVM 25.3.4.1 does 
 Both release workflows use Ubuntu 22.04 for Linux x64/ARM64 and `gradle/actions/setup-gradle@v4`. Elci uses macOS 15 ARM64 for Apple Silicon rather than Julc’s macOS 14 runner. Both build native executables with `--no-fallback` and `-H:+ReportExceptionStackTraces` and include service-provider resources. Julc CLI has no `native-image.properties`; its options live in Gradle, as do Elci’s.
 
 Elci retains its exact GraalVM 25.3.4.1 pin, Gradle-sourced release version, frontend-specific reachability metadata, and compiler smoke tests. Julc’s scaffolding, verification, and CLI-specific reflection entries do not apply to Elci. Windows packaging remains outside this release’s platform set. These settings do not establish native BLS execution support, which is deferred for the developer preview.
+
+## Snapshots
+
+`.github/workflows/bloxbean-snapshot.yml` publishes `org.elci:elci-lang` (jar, sources, javadoc, POM and Gradle module metadata) to the BloxBean Maven repository, `https://repo.bloxbean.org/maven/snapshots`. It follows the release-ops standard (`docs/12-bloxbean-maven-repository.md`), simplified for now:
+
+- **Trigger:** manual only (`workflow_dispatch`) on `main` or `release/**`, with no approval step. It only adds a version; it never replaces or deletes one.
+- **Version:** one per commit, `<version>-<sha7>-SNAPSHOT` (for example `0.1.0-dev-1a2b3c4-SNAPSHOT`), passed with `-Pversion`. `gradle.properties` keeps its plain version, so ordinary builds and the ABI manifests they write don't change from commit to commit.
+- **Tests:** the workflow runs `./gradlew test` itself, because Elci has no push CI to require.
+- **Publication:** the artifact's version list is seeded from the bucket, so the new version is appended. The staged repository is checked with `verify-maven-staging.py`, uploaded, compared byte for byte through the public URL, and resolved by a throwaway Gradle consumer.
+- **Scripts:** `.github/scripts/bloxbean-maven.sh` and `.github/scripts/verify-maven-staging.py` are unchanged copies of the release-ops templates. Update them from there, not here.
+
+The workflow needs these settings on the `release-staging` environment: deployment branches `main` and `release/**`, the secrets `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, and the variables `R2_BUCKET` and `R2_ENDPOINT`, as for Julc (release-ops `docs/05-secrets.md` §8).
+
+Not yet adopted from the standard:
+
+- an approval gate;
+- `CODEOWNERS` for `.github/`;
+- the snapshot cleanup workflow;
+- snapshot CLI distributions;
+- the "Development snapshot" GitHub release.
+
+Start a run with:
+
+```sh
+gh workflow run bloxbean-snapshot.yml --repo bloxbean/elci-lang --ref main
+```
