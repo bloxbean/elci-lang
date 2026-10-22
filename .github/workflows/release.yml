@@ -17,7 +17,6 @@ jobs:
     outputs:
       version: ${{ steps.metadata.outputs.version }}
       julc-version: ${{ steps.metadata.outputs.julcVersion }}
-      julc-revision: ${{ steps.metadata.outputs.julcRevision }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate release metadata
@@ -44,12 +43,6 @@ jobs:
       PLATFORM: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - name: Check out pinned compiler backend
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          repository: bloxbean/julc
-          ref: ${{ needs.metadata.outputs.julc-revision }}
-          path: tmp/julc
       - name: Set up GraalVM
         uses: graalvm/setup-graalvm@f60d4ea89f14098520aea588431217bbd9551570 # v1.6.5
         with:
@@ -63,16 +56,6 @@ jobs:
         run: |
           grep -Fx 'GRAALVM_VERSION="25.3.4.1"' "$JAVA_HOME/release"
           echo "GRAALVM_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
-      - name: Publish backend dependencies locally
-        working-directory: tmp/julc
-        shell: bash
-        run: |
-          ./gradlew --no-daemon -Pversion="$JULC_VERSION" -PskipSigning=true \
-            :julc-core:publishToMavenLocal :julc-vm:publishToMavenLocal \
-            :julc-ledger-api:publishToMavenLocal :julc-compiler:publishToMavenLocal \
-            :julc-stdlib:publishToMavenLocal :julc-bls:publishToMavenLocal \
-            :julc-vm-java:publishToMavenLocal :julc-cardano-client-lib:publishToMavenLocal \
-            :julc-testkit:publishToMavenLocal :julc-testkit-jqwik:publishToMavenLocal
       - name: Test and build native CLI
         run: ./gradlew --no-daemon test nativeCompile
       - name: Smoke test native CLI

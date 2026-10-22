@@ -115,6 +115,20 @@ to library signatures and the `TypedArrayLib` templates. Rebuilding every exampl
 against the previous branch head (`854a995` on `f97f804`) again gives identical
 script bytes, results and budgets. ABI manifests differ only in `julcVersion`.
 
+On 22 October 2026 the pin moved to the first Julc `main` snapshot that contains
+revision 2, `0.1.0-pre20-ebaf028-SNAPSHOT` (commit `ebaf028c`, after Julc PR #187
+was merged). Gradle resolves it from the BloxBean Maven repository instead of a
+locally published Julc checkout. Compared with Elci `main` at `f1acb4b` on
+`0.1.0-gb-5a3378b`:
+
+- All 304 Elci tests pass on both.
+- The ten buildable examples give byte-identical `.flat`, `.plutus` and
+  `.plutus.json` files (37 files). Their ABI manifests differ only in
+  `julcVersion`.
+- `custom-library` evaluates to `42` and `elci-library` to `105`, with identical
+  budgets.
+- The stdlib inventory regenerates identically to `docs/stdlib-compatibility.tsv`.
+
 ## Arrays evidence
 
 - **`ArrayTest`:**

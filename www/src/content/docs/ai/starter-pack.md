@@ -7,7 +7,7 @@ sidebar:
 
 > **Read this entire page before generating any Elci code.** It states the Elci subset of Elm, the
 > project format, the on-chain rules and the mistakes agents make most often. Every rule, signature
-> and message here was checked with the Elci CLI (`elci 0.1.0-dev / julc 0.1.0-gb-5a3378b`).
+> and message here was checked with the Elci CLI (`elci 0.1.0-dev / julc 0.1.0-pre20-ebaf028-SNAPSHOT`).
 
 This page is optimized for AI ingestion, not for humans. For the tutorial, see
 [your first validator](/start/first-validator/). Sections are numbered so you can cite them.
@@ -55,7 +55,7 @@ A complete `elci.toml` using every validator setting:
 [project]
 source-directories = ["src", "lib"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 library-jars = ["libs/pricing.jar"]
 
 # One script with two purposes and a deployment parameter.
@@ -87,7 +87,7 @@ A function project instead has:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 
 [entrypoint]
 module = "Main"
@@ -98,7 +98,7 @@ purpose = "function"
 ### 2.1 Rules
 
 1. `[project]` requires `source-directories`, `target = "plutus-v3-pv11-uplc-1.1.0"` and
-   `julc-version = "0.1.0-gb-5a3378b"` (must equal the compiler's pinned version; `elci --version` prints it).
+   `julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"` (must equal the compiler's pinned version; `elci --version` prints it).
    Optional: `library-jars`; `expected-abi` only in function projects.
 2. A project has **either** one or more `[validators.<name>]` tables **or** one `[entrypoint]`, never both.
 3. `[validators.<name>]`: name is 1–64 chars of `a-z`, `0-9`, `-`, `_`, starting with a letter. `boundary =
@@ -901,7 +901,7 @@ parsing text. Results and test output stay text.
 | `ELCI3001` | `Cannot determine the type converted by Julc.Data.decode; add a type annotation` | annotate (`let xs : List Int`) |
 | `ELCI3002` | specialization limit (256) | remove polymorphic recursion |
 | `ELCI3003` | `No encoder for Int -> Int: functions have no Data encoding`, `Type argument T = Unit of firstOr must have a Plutus Data encoding`, `No strict decoder for org.julclang.ledger.TxOut ...`, `No encoder for List [org.julclang.ledger.Value] ...`, `Type argument a = Dict Int Int of filter contains a Dict, which a Java library cannot keep sorted; ...`, `Type argument a = Value of filter contains a Value, which a Java library does not keep in the ledger's canonical order; ...` | Data-encodable type; convert values with `Value.toList`; no `Dict` or `Value` through Java generics |
-| `ELCI4001` | `unknown validator 'x'`, `src/Main.elm is not valid UTF-8 text; save it as UTF-8`, `eval runs an [entrypoint] function; test validators with elci test`, `ABI drift from ...`, `parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats`, `Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"`, `Unknown configuration key: [project] name`, `Unknown option: --frob`, `my-project/elci.toml not found; ...`, `Source directory not found: ...`, `my-project/elci.toml:6: [validators.main]: Handler Main.spent for spend: module Main does not declare spent` | fix config or command; sort `Dict` keys |
+| `ELCI4001` | `unknown validator 'x'`, `src/Main.elm is not valid UTF-8 text; save it as UTF-8`, `eval runs an [entrypoint] function; test validators with elci test`, `ABI drift from ...`, `parameter caps has a Dict whose keys are not strictly ascending; write its keys sorted and without repeats`, `Julc version does not match this compiler; expected julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"`, `Unknown configuration key: [project] name`, `Unknown option: --frob`, `my-project/elci.toml not found; ...`, `Source directory not found: ...`, `my-project/elci.toml:6: [validators.main]: Handler Main.spent for spend: module Main does not declare spent` | fix config or command; sort `Dict` keys |
 | `ELCI4002`, `ELCI4003` | backend rejected or lacks a capability | compiler issue; report it |
 | (none) | `On-chain Java source not found: ...`, `Cannot resolve type: ?`, `Unknown type: T` (a Java library) | fix `[java-modules]` or the library |
 
@@ -1019,7 +1019,7 @@ All three were built and run with the CLI exactly as shown.
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 
 [validators.escrow]
 boundary = "julc-strict-v1"
@@ -1181,7 +1181,7 @@ Changing `Interval.isEntirelyAfter lock.deadline` to `Interval.isEntirelyAfter (
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 
 [validators.badge]
 boundary = "julc-strict-v1"

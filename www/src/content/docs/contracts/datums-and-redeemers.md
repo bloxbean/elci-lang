@@ -42,7 +42,7 @@ This escrow shows the effect. The datum is a record and the redeemer a custom ty
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 
 [validators.escrow]
 boundary = "julc-strict-v1"

@@ -67,7 +67,7 @@ Here is a vault that holds funds and mints tokens under its own policy id. Both 
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-gb-5a3378b"
+julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
 
 # One script: it holds funds and mints receipts under its own policy.
 [validators.vault]

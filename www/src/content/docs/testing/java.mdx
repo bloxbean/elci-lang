@@ -13,7 +13,7 @@ Reach for Java when a test needs something [scenarios](/testing/scenarios/) cann
 
 ## Set up a test suite
 
-Elci is a development preview and is not published to a Maven repository. Put the JARs of your Elci build on the test classpath instead: `./gradlew installDist` in the Elci repository writes them to `build/install/elci/lib`, together with the pinned Julc libraries they need. The jqwik integration, `julc-testkit-jqwik`, comes from your local Maven repository, where you published the pinned Julc modules during [installation](/start/installation/).
+Elci is a development preview and is not published to a Maven repository. Put the JARs of your Elci build on the test classpath instead: `./gradlew installDist` in the Elci repository writes them to `build/install/elci/lib`, together with the pinned Julc libraries they need. The jqwik integration, `julc-testkit-jqwik`, comes from the BloxBean Maven repository, which publishes the pinned Julc snapshot.
 
 ```groovy title="build.gradle"
 plugins {
@@ -21,8 +21,11 @@ plugins {
 }
 
 repositories {
-    mavenLocal()
     mavenCentral()
+    maven {
+        url = uri('https://repo.bloxbean.org/maven/snapshots')
+        mavenContent { snapshotsOnly() }
+    }
 }
 
 java {
@@ -34,7 +37,7 @@ def elciLib = '/path/to/elci-lang/build/install/elci/lib'
 
 dependencies {
     testImplementation fileTree(elciLib) { include '*.jar' }
-    testImplementation 'org.julclang:julc-testkit-jqwik:0.1.0-gb-5a3378b'
+    testImplementation 'org.julclang:julc-testkit-jqwik:0.1.0-pre20-ebaf028-SNAPSHOT'
     testImplementation 'net.jqwik:jqwik:1.9.2'
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
