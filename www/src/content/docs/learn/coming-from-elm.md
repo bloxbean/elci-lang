@@ -12,6 +12,8 @@ difference that matters, so you can skip the parts of the Learn section you don'
 
 - The syntax of Elm 0.19.1: modules and `exposing`, `import … as … exposing`, `type` and `type alias`,
   `case`, `let`, `if`, lambdas, records, tuples of two or three elements, `|>`, `<|`, `>>` and `<<`.
+  The [grammar](/reference/grammar/) defines it exactly and lists
+  [the Elm syntax Elci rejects](/reference/grammar/#elm-syntax-that-elci-does-not-support).
 - Immutable values and pure functions. Evaluation is strict, as in Elm: arguments and `let` values are
   evaluated before use, and only the chosen branch of `if` and `case` runs.
 - Hindley–Milner type inference, generic functions (`a -> a`), and generic type aliases and custom types.
@@ -287,6 +289,8 @@ values instead, for example `1000000000 * 1000000000 * 1000000000`.
 
 ## Tooling
 
+- The repository has a [tree-sitter grammar](https://github.com/bloxbean/elci-lang/tree/main/tree-sitter-elci)
+  for highlighting, folding and indentation in Neovim, Helix and Zed.
 - There is no Elci language server. The Elm language server doesn't know Elci's modules, so trust
   `elci check` over its diagnostics. An editor integration can run `elci check --report=json` and read
   each error's location, message and hints.

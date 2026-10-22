@@ -1,0 +1,36 @@
+name: tree-sitter
+
+on:
+  pull_request:
+    paths:
+      - 'tree-sitter-elci/**'
+      - '**/*.elm'
+      - '.github/workflows/tree-sitter.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tree-sitter-elci/**'
+      - '**/*.elm'
+      - '.github/workflows/tree-sitter.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  grammar:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: tree-sitter-elci
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm ci
+      # The generated parser is committed for editors; it must match grammar.js.
+      - name: Generated parser is current
+        run: npx tree-sitter generate --abi 14 && git diff --exit-code -- src
+      - run: npx tree-sitter test
+      # Every .elm file in the repository parses without an ERROR or MISSING node.
+      - run: script/parse-all.sh

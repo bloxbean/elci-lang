@@ -12,6 +12,7 @@ gentle introduction, start with [values, functions and types](/learn/basics/).
 
 Elci uses Elm 0.19 syntax for a functional core, with its own on-chain semantics. It is a development
 preview: the profile below is implemented and tested, and everything outside it is rejected with an error.
+The [grammar](/reference/grammar/) defines the syntax exactly.
 
 ## Feature matrix
 
@@ -160,14 +161,16 @@ Function and lambda parameters, and local destructuring, accept only **irrefutab
 
 Indentation is significant, as in Elm. Top-level declarations start in column 1. The declarations of a
 `let` align with each other, and so do the branches of a `case`. A signature must directly precede its
-definition. Tabs are rejected.
+definition. Tabs are rejected. The grammar gives the [exact layout rules](/reference/grammar/#layout).
 
 ### Lexical rules
 
-- **Names.** Values and functions start with a lowercase letter or `_`; types, constructors and module
-  segments start with an uppercase letter.
+- **Names.** Values and functions start with a lowercase letter; types, constructors and module segments
+  start with an uppercase letter. Letters, digits and `_` may follow.
 - **Reserved words.** `if`, `then`, `else`, `case`, `of`, `let`, `in`, `module`, `import`, `exposing`,
-  `as`, `type` and `port`. `alias` is only special after `type`.
+  `as`, `type` and `port`. `alias` is only special after `type`. Don't use them as names: the parser
+  doesn't yet reject every such use, as the grammar's [parser details](/reference/grammar/#parser-details-that-differ-from-elm)
+  describe.
 - **Integers.** Decimal digits only, arbitrarily large. `1.5` is rejected (`Float is unsupported`), and so
   are `0xFF` and `1_000`. elm-format 0.8.8 corrupts literals that do not fit in 64 bits, so check large
   constants after formatting.

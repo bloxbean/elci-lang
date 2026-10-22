@@ -2,7 +2,7 @@
 title: Example projects
 description: The example projects in the Elci repository, what each one demonstrates and how to check, build, test or evaluate it.
 sidebar:
-  order: 7
+  order: 8
 ---
 
 The Elci repository has small example projects under `examples/`. Each one builds with the current compiler, and those with tests pass `elci test`. This page tells you what each example demonstrates and how to run it. The escrow, marketplace and order-swap examples are complete contracts: read their sources and tests as references for your own.

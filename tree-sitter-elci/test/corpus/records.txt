@@ -1,0 +1,205 @@
+================================================================================
+Record literal, update and access
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    { origin | x = 3, y = point.y }.x
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (field_access_expr
+      (record_expr
+        (record_base_identifier
+          (lower_case_identifier))
+        (field
+          (lower_case_identifier)
+          (number_constant_expr))
+        (field
+          (lower_case_identifier)
+          (field_access_expr
+            (value_expr
+              (value_qid
+                (lower_case_identifier)))
+            (lower_case_identifier))))
+      (lower_case_identifier))))
+
+================================================================================
+Field access touches the dot; an accessor does not
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    List.map .amount orders ++ [ order.amount, (f x).amount ]
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (bin_op_expr
+      (function_call_expr
+        (value_expr
+          (value_qid
+            (module_prefix)
+            (lower_case_identifier)))
+        (field_accessor_function_expr
+          (lower_case_identifier))
+        (value_expr
+          (value_qid
+            (lower_case_identifier))))
+      (operator)
+      (list_expr
+        (field_access_expr
+          (value_expr
+            (value_qid
+              (lower_case_identifier)))
+          (lower_case_identifier))
+        (field_access_expr
+          (parenthesized_expr
+            (function_call_expr
+              (value_expr
+                (value_qid
+                  (lower_case_identifier)))
+              (value_expr
+                (value_qid
+                  (lower_case_identifier)))))
+          (lower_case_identifier))))))
+
+================================================================================
+Field of a qualified value
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    Config.settings.amount
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (field_access_expr
+      (value_expr
+        (value_qid
+          (module_prefix)
+          (lower_case_identifier)))
+      (lower_case_identifier))))
+
+================================================================================
+Qualified constructors and values
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    Maybe.withDefault 0 (Maybe.Just Basics.pi)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (function_call_expr
+      (value_expr
+        (value_qid
+          (module_prefix)
+          (lower_case_identifier)))
+      (number_constant_expr)
+      (parenthesized_expr
+        (function_call_expr
+          (value_expr
+            (upper_case_qid
+              (module_prefix)
+              (upper_case_identifier)))
+          (value_expr
+            (value_qid
+              (module_prefix)
+              (lower_case_identifier))))))))
+
+================================================================================
+Field access on a string literal
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    "text".length
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (field_access_expr
+      (string_constant_expr)
+      (lower_case_identifier))))
+
+================================================================================
+Empty record
+================================================================================
+
+module Main exposing (main)
+
+
+main : {}
+main =
+    {}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (type_annotation
+      (lower_case_identifier)
+      (type_expression
+        (record_type)))
+    (function_declaration_left
+      (lower_case_identifier))
+    (record_expr)))

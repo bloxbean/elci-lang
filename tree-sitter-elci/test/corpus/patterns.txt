@@ -1,0 +1,293 @@
+================================================================================
+Constructor, qualified and nested patterns
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    case m of
+        Just (x :: xs) -> 1
+        Maybe.Just -1 -> 2
+        A (B c) D -> 3
+        _ -> 0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (case_of_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (case_of_branch
+        (union_pattern
+          (upper_case_qid
+            (upper_case_identifier))
+          (parenthesized_pattern
+            (cons_pattern
+              (lower_pattern
+                (lower_case_identifier))
+              (operator)
+              (lower_pattern
+                (lower_case_identifier)))))
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (union_pattern
+          (upper_case_qid
+            (module_prefix)
+            (upper_case_identifier))
+          (negative_number_pattern
+            (operator)
+            (number_constant_expr)))
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (union_pattern
+          (upper_case_qid
+            (upper_case_identifier))
+          (parenthesized_pattern
+            (union_pattern
+              (upper_case_qid
+                (upper_case_identifier))
+              (lower_pattern
+                (lower_case_identifier))))
+          (union_pattern
+            (upper_case_qid
+              (upper_case_identifier))))
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (anything_pattern)
+        (arrow)
+        (number_constant_expr)))))
+
+================================================================================
+List, cons, tuple and record patterns
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    case v of
+        [] -> 0
+        [ a, b ] -> 1
+        ( a, b ) :: rest -> 2
+        { a, b } -> 3
+        () -> 4
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (case_of_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (case_of_branch
+        (list_pattern)
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (list_pattern
+          (lower_pattern
+            (lower_case_identifier))
+          (lower_pattern
+            (lower_case_identifier)))
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (cons_pattern
+          (tuple_pattern
+            (lower_pattern
+              (lower_case_identifier))
+            (lower_pattern
+              (lower_case_identifier)))
+          (operator)
+          (lower_pattern
+            (lower_case_identifier)))
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (record_pattern
+          (lower_pattern
+            (lower_case_identifier))
+          (lower_pattern
+            (lower_case_identifier)))
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (unit_pattern)
+        (arrow)
+        (number_constant_expr)))))
+
+================================================================================
+Literal patterns
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    case v of
+        "buy" -> 1
+        -1 -> 2
+        True -> 3
+        0 -> 4
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (case_of_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (case_of_branch
+        (string_constant_expr)
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (negative_number_pattern
+          (operator)
+          (number_constant_expr))
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (boolean)
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (number_constant_expr)
+        (arrow)
+        (number_constant_expr)))))
+
+================================================================================
+An as binds the pattern just before it
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    case v of
+        a :: rest as all -> 1
+        (Just a as b) :: _ -> 2
+        [ first ] as items -> 3
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (case_of_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (case_of_branch
+        (cons_pattern
+          (lower_pattern
+            (lower_case_identifier))
+          (operator)
+          (as_pattern
+            (lower_pattern
+              (lower_case_identifier))
+            (lower_pattern
+              (lower_case_identifier))))
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (cons_pattern
+          (parenthesized_pattern
+            (as_pattern
+              (union_pattern
+                (upper_case_qid
+                  (upper_case_identifier))
+                (lower_pattern
+                  (lower_case_identifier)))
+              (lower_pattern
+                (lower_case_identifier))))
+          (operator)
+          (anything_pattern))
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (as_pattern
+          (list_pattern
+            (lower_pattern
+              (lower_case_identifier)))
+          (lower_pattern
+            (lower_case_identifier)))
+        (arrow)
+        (number_constant_expr)))))
+
+================================================================================
+Pattern arguments ignore layout
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    case v of
+        Pair
+            a
+            b ->
+            a
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (case_of_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (case_of_branch
+        (union_pattern
+          (upper_case_qid
+            (upper_case_identifier))
+          (lower_pattern
+            (lower_case_identifier))
+          (lower_pattern
+            (lower_case_identifier)))
+        (arrow)
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))))))

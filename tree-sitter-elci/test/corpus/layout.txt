@@ -1,0 +1,535 @@
+================================================================================
+Let block
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    let
+        x =
+            1
+
+        ( a, b ) =
+            pair
+
+        f : Int -> Int
+        f n =
+            n
+    in
+    f x + a
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (let_in_expr
+      (value_declaration
+        (function_declaration_left
+          (lower_case_identifier))
+        (number_constant_expr))
+      (destructuring_declaration
+        (tuple_pattern
+          (lower_pattern
+            (lower_case_identifier))
+          (lower_pattern
+            (lower_case_identifier)))
+        (value_expr
+          (value_qid
+            (lower_case_identifier))))
+      (value_declaration
+        (type_annotation
+          (lower_case_identifier)
+          (type_expression
+            (type_ref
+              (upper_case_qid
+                (upper_case_identifier)))
+            (arrow)
+            (type_ref
+              (upper_case_qid
+                (upper_case_identifier)))))
+        (function_declaration_left
+          (lower_case_identifier)
+          (lower_pattern
+            (lower_case_identifier)))
+        (value_expr
+          (value_qid
+            (lower_case_identifier))))
+      (bin_op_expr
+        (function_call_expr
+          (value_expr
+            (value_qid
+              (lower_case_identifier)))
+          (value_expr
+            (value_qid
+              (lower_case_identifier))))
+        (operator)
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))))))
+
+================================================================================
+Let on one line
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    let x = 1 in x
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (let_in_expr
+      (value_declaration
+        (function_declaration_left
+          (lower_case_identifier))
+        (number_constant_expr))
+      (value_expr
+        (value_qid
+          (lower_case_identifier))))))
+
+================================================================================
+Case with aligned branches
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    case x of
+        Just y ->
+            y
+
+        Nothing ->
+            0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (case_of_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (case_of_branch
+        (union_pattern
+          (upper_case_qid
+            (upper_case_identifier))
+          (lower_pattern
+            (lower_case_identifier)))
+        (arrow)
+        (value_expr
+          (value_qid
+            (lower_case_identifier))))
+      (case_of_branch
+        (union_pattern
+          (upper_case_qid
+            (upper_case_identifier)))
+        (arrow)
+        (number_constant_expr)))))
+
+================================================================================
+Nested case ends at a smaller column
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    case a of
+        X ->
+            case b of
+                Y ->
+                    1
+
+                _ ->
+                    2
+
+        _ ->
+            3
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (case_of_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (case_of_branch
+        (union_pattern
+          (upper_case_qid
+            (upper_case_identifier)))
+        (arrow)
+        (case_of_expr
+          (value_expr
+            (value_qid
+              (lower_case_identifier)))
+          (case_of_branch
+            (union_pattern
+              (upper_case_qid
+                (upper_case_identifier)))
+            (arrow)
+            (number_constant_expr))
+          (case_of_branch
+            (anything_pattern)
+            (arrow)
+            (number_constant_expr))))
+      (case_of_branch
+        (anything_pattern)
+        (arrow)
+        (number_constant_expr)))))
+
+================================================================================
+Case in a let declaration, then the next declaration
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    let
+        a =
+            case b of
+                C -> 1
+                _ -> 2
+        d = 4
+    in
+    a + d
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (let_in_expr
+      (value_declaration
+        (function_declaration_left
+          (lower_case_identifier))
+        (case_of_expr
+          (value_expr
+            (value_qid
+              (lower_case_identifier)))
+          (case_of_branch
+            (union_pattern
+              (upper_case_qid
+                (upper_case_identifier)))
+            (arrow)
+            (number_constant_expr))
+          (case_of_branch
+            (anything_pattern)
+            (arrow)
+            (number_constant_expr))))
+      (value_declaration
+        (function_declaration_left
+          (lower_case_identifier))
+        (number_constant_expr))
+      (bin_op_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (operator)
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))))))
+
+================================================================================
+Case ends at a closing bracket, a comma and else
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    ( (case x of A -> 1), { a = case x of A -> 1, b = 2 }, if a then case x of A -> 1 else 2 )
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (tuple_expr
+      (parenthesized_expr
+        (case_of_expr
+          (value_expr
+            (value_qid
+              (lower_case_identifier)))
+          (case_of_branch
+            (union_pattern
+              (upper_case_qid
+                (upper_case_identifier)))
+            (arrow)
+            (number_constant_expr))))
+      (record_expr
+        (field
+          (lower_case_identifier)
+          (case_of_expr
+            (value_expr
+              (value_qid
+                (lower_case_identifier)))
+            (case_of_branch
+              (union_pattern
+                (upper_case_qid
+                  (upper_case_identifier)))
+              (arrow)
+              (number_constant_expr))))
+        (field
+          (lower_case_identifier)
+          (number_constant_expr)))
+      (if_else_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (case_of_expr
+          (value_expr
+            (value_qid
+              (lower_case_identifier)))
+          (case_of_branch
+            (union_pattern
+              (upper_case_qid
+                (upper_case_identifier)))
+            (arrow)
+            (number_constant_expr)))
+        (number_constant_expr)))))
+
+================================================================================
+First branch on the line of `of`
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    case x of 1 -> 2
+              _ -> 3
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (case_of_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (case_of_branch
+        (number_constant_expr)
+        (arrow)
+        (number_constant_expr))
+      (case_of_branch
+        (anything_pattern)
+        (arrow)
+        (number_constant_expr)))))
+
+================================================================================
+Operators after a case at a smaller column
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    case x of
+        A ->
+            1
+    + 2
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (bin_op_expr
+      (case_of_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (case_of_branch
+          (union_pattern
+            (upper_case_qid
+              (upper_case_identifier)))
+          (arrow)
+          (number_constant_expr)))
+      (operator)
+      (number_constant_expr))))
+
+================================================================================
+Comments do not affect layout
+================================================================================
+
+module Main exposing (main)
+
+
+{-| Doc comment {- with a nested comment -}.
+-}
+main =
+    let
+        x = 1
+    -- a comment left of the block
+        y = 2
+    in
+    x
+-- a comment in column 1
+        + y
+
+
+other =
+    0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (block_comment)
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (let_in_expr
+      (value_declaration
+        (function_declaration_left
+          (lower_case_identifier))
+        (number_constant_expr))
+      (line_comment)
+      (value_declaration
+        (function_declaration_left
+          (lower_case_identifier))
+        (number_constant_expr))
+      (bin_op_expr
+        (value_expr
+          (value_qid
+            (lower_case_identifier)))
+        (line_comment)
+        (operator)
+        (value_expr
+          (value_qid
+            (lower_case_identifier))))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (number_constant_expr)))
+
+================================================================================
+No layout inside brackets
+================================================================================
+
+module Main exposing (main)
+
+
+main =
+    [ 1
+, 2
+    ]
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (list_expr
+      (number_constant_expr)
+      (number_constant_expr))))
+
+================================================================================
+Declarations in column 1 end the previous one
+================================================================================
+
+module Main exposing (a, b)
+
+
+a =
+    f
+        x
+
+
+b =
+    2
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))
+      (exposed_value
+        (lower_case_identifier))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (function_call_expr
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))
+      (value_expr
+        (value_qid
+          (lower_case_identifier)))))
+  (value_declaration
+    (function_declaration_left
+      (lower_case_identifier))
+    (number_constant_expr)))

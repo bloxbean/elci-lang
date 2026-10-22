@@ -1,0 +1,93 @@
+================================================================================
+Module header exposing everything
+================================================================================
+
+module Main exposing (..)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (double_dot))))
+
+================================================================================
+Qualified module name and explicit exposing list
+================================================================================
+
+module Example.Threshold exposing (validate, Shape(..), Pair)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))
+      (exposed_type
+        (upper_case_identifier)
+        (exposed_union_constructors
+          (double_dot)))
+      (exposed_type
+        (upper_case_identifier)))))
+
+================================================================================
+Imports with aliases and exposing lists
+================================================================================
+
+module Main exposing (main)
+
+import Julc.Ledger exposing (ScriptContext)
+import Julc.Data as Data
+import Utils as U exposing (Choice(..), clamp)
+import Dict
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier))))
+  (import_clause
+    (module_name)
+    (exposing_list
+      (exposed_type
+        (upper_case_identifier))))
+  (import_clause
+    (module_name)
+    (as_clause
+      (module_name)))
+  (import_clause
+    (module_name)
+    (as_clause
+      (module_name))
+    (exposing_list
+      (exposed_type
+        (upper_case_identifier)
+        (exposed_union_constructors
+          (double_dot)))
+      (exposed_value
+        (lower_case_identifier))))
+  (import_clause
+    (module_name)))
+
+================================================================================
+Doc comment before the header
+================================================================================
+
+{-| Module documentation. -}
+module Main exposing (main)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (block_comment)
+  (module_declaration
+    (module_name)
+    (exposing_list
+      (exposed_value
+        (lower_case_identifier)))))

@@ -58,6 +58,9 @@ blueprint generation is not implemented yet.
 - [Testing](docs/TESTING.md): `elci test`, expectations, transaction scenarios, property tests and JUnit.
 - [Standard library guide](docs/STDLIB.md): the core modules, verified Java exports, limitations and writing Elci libraries.
 - [Language guide](docs/LANGUAGE.md): syntax, semantics, types, libraries and limits.
+- [Grammar](docs/GRAMMAR.md): the formal grammar in EBNF, with the exact layout rules.
+- [tree-sitter grammar](tree-sitter-elci/README.md): highlighting, folding and indentation for Neovim,
+  Helix and Zed.
 - [Compiler architecture](docs/ARCHITECTURE.md): frontend/backend API and invariants.
 - [Testing and review](docs/VALIDATION.md): reproducible checks and evidence.
 - [Diagnostic catalogue](docs/DIAGNOSTICS.md): stable compiler error categories, every-error reports and
