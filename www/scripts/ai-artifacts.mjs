@@ -194,13 +194,25 @@ async function diagnostics(link) {
     format: 'path:line:column: CODE: message',
     details:
       'The first line is followed by a blank line, the source line as "N| code", a caret line under the ' +
-      'reported token, and zero or more "Hint: ..." lines. The compiler stops at the first error.',
+      'reported token or expression (one pair per line for an expression over several lines), and zero or ' +
+      'more "Hint: ..." lines. A long type mismatch adds "It is:" and "It needs:" lines. A run reports every ' +
+      'error of a phase (parsing, name resolution, type checking; one per top-level declaration), in source ' +
+      'order with a blank line between them, at most 20 then "... and N more", followed by a count such as ' +
+      '"3 errors" when there are several. The report ends with a line such as ' +
+      '"For more on ELCI2005, run `elci explain ELCI2005`.". Configuration and command-line errors are ' +
+      'printed as "elci: ELCI4001: message".',
     report: {
       option: '--report=json',
       commands: ['check', 'build', 'eval', 'test'],
-      output: 'one JSON object on standard error',
+      output: 'JSON Lines on standard error: one JSON object per error, one per line; one error is one line',
       fields: ['code', 'path', 'line', 'column', 'message', 'hints', 'excerpt', 'context'],
     },
+    explain: {
+      command: 'elci explain <code>',
+      output: 'the long-form entry for a code (ELCI2002, elci2002 or 2002): meaning, causes, a failing example, the fix',
+      list: 'elci explain with no code lists every code with its title',
+    },
+    color: '--color=auto|always|never; auto colours a terminal unless NO_COLOR is set; JSON is never coloured',
     reference: link('/reference/diagnostics/'),
     codes: [...text.matchAll(/^\|\s*`(ELCI\d{4})`\s*\|\s*(.+?)\s*\|$/gm)].map((m) => ({ code: m[1], meaning: m[2] })),
   };

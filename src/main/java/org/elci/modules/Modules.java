@@ -152,8 +152,11 @@ public final class Modules {
             } catch (java.io.IOException e) {
                 throw new java.io.UncheckedIOException(e);
             }
+        // Every module is parsed, and all their syntax errors are reported together (ADR-012).
+        var parseErrors = new ArrayList<Diagnostic>();
         allSources.forEach(
                 (name, source) -> {
+                  try {
                     var module = new Parser(source, name).parse();
                     if (!module.name().equals(name))
                         throw new Diagnostic(
@@ -218,7 +221,12 @@ public final class Modules {
                                         module.unions());
                     }
                     available.put(name, module);
+                  } catch (Diagnostic e) {
+                    parseErrors.add(e);
+                  }
                 });
+        var found = Diagnostic.of(parseErrors);
+        if (found != null) throw found;
     }
 
     public Ast.Module resolve(String root) {
@@ -393,9 +401,11 @@ public final class Modules {
 
     /** {@code d}, with a "did you mean" hint when it rejects a name this resolution left unresolved. */
     public Diagnostic withSuggestions(Diagnostic d) {
-        var hint = Set.of("ELCI2005", "ELCI2001").contains(d.code()) && d.getMessage().startsWith("Unknown")
-                ? nameHints.get(d.token()) : null;
-        return hint == null ? d : d.withHints(hint.get());
+        return d.map(one -> {
+            var hint = Set.of("ELCI2005", "ELCI2001").contains(one.code()) && one.getMessage().startsWith("Unknown")
+                    ? nameHints.get(one.token()) : null;
+            return hint == null ? one : one.withHints(hint.get());
+        });
     }
 
     /**
@@ -459,6 +469,7 @@ public final class Modules {
             rootModule.aliases().keySet().forEach(rootNames::add);
             rootModule.unions().forEach(u -> u.variants().forEach(v -> rootNames.add(v.name())));
         }
+        var resolveErrors = new ArrayList<Diagnostic>();
         var definitions = new ArrayList<Decl>();
         var imports = new ArrayList<Import>();
         var aliases = new LinkedHashMap<String, Alias>();
@@ -480,205 +491,223 @@ public final class Modules {
                 scope.type(u.name(), prefix + u.name(), Rank.OWN, null);
                 for (var v : u.variants()) scope.name(v.name(), prefix + v.name(), Rank.OWN, null);
             }
+            boolean importsFailed = false;
             for (var imp : module.imports()) {
-                // Default imports rank lowest; an explicit exposing (..) ranks below a named exposure.
-                boolean fallback = defaults.contains(imp);
-                Rank named = fallback ? Rank.DEFAULT : Rank.NAMED;
-                Rank open = fallback ? Rank.DEFAULT : Rank.OPEN;
-                if (INTRINSICS.containsKey(imp.module())) {
-                    String intrinsicPrefix = INTRINSICS.get(imp.module()).getKey();
-                    var functions = INTRINSICS.get(imp.module()).getValue();
-                    for (String function : functions)
-                        scope.name(imp.alias() + "." + function, intrinsicPrefix + function, named, imp.module() + "." + function);
-                    // Their types can be named qualified too, like `Map.Map`: `Data.Data`, `Bytes.Bytes`.
-                    if (imp.module().equals(DATA_MODULE)) scope.type(imp.alias() + ".Data", "Data", named, null);
-                    if (imp.module().equals(BYTES_MODULE)) scope.type(imp.alias() + ".Bytes", "Bytes", named, null);
-                    for (String exposed : imp.exposing()) {
-                        if (exposed.equals(".."))
-                            for (String function : functions)
-                                scope.name(function, intrinsicPrefix + function, open, imp.alias() + "." + function);
-                        else if (functions.contains(exposed))
-                            scope.name(exposed, intrinsicPrefix + exposed, named, imp.alias() + "." + exposed);
-                        else
-                            throw new Diagnostic("ELCI2104", imp.token(), imp.module() + " does not expose '" + exposed
-                                    + "'; it provides " + String.join(", ", functions), Suggestions.hint(exposed, functions));
-                    }
-                    continue;
-                }
-                if (imp.module().equals("Julc.Ledger")) {
-                    imports.add(imp);
-                    types.put(imp.alias() + ".", "org.julclang.ledger.");
-                    var exposedConstructors = new HashSet<String>();
-                    for (String exposed : imp.exposing()) {
-                        if (exposed.equals("..")) types.put("$ledgerAll", "true");
-                        else {
-                            String type = exposed.endsWith("(..)") ? exposed.substring(0, exposed.length() - 4) : exposed;
-                            if (!type.equals(exposed)) exposedConstructors.add(type);
-                            scope.type(type, type.equals("ScriptContext") ? "ScriptContext" : "org.julclang.ledger." + type,
-                                    named, imp.alias() + "." + type);
+                // An import that fails is recorded; the module's declarations are then not
+                // resolved, since the names it would bring are missing (ADR-012).
+                try {
+                    // Default imports rank lowest; an explicit exposing (..) ranks below a named exposure.
+                    boolean fallback = defaults.contains(imp);
+                    Rank named = fallback ? Rank.DEFAULT : Rank.NAMED;
+                    Rank open = fallback ? Rank.DEFAULT : Rank.OPEN;
+                    if (INTRINSICS.containsKey(imp.module())) {
+                        String intrinsicPrefix = INTRINSICS.get(imp.module()).getKey();
+                        var functions = INTRINSICS.get(imp.module()).getValue();
+                        for (String function : functions)
+                            scope.name(imp.alias() + "." + function, intrinsicPrefix + function, named, imp.module() + "." + function);
+                        // Their types can be named qualified too, like `Map.Map`: `Data.Data`, `Bytes.Bytes`.
+                        if (imp.module().equals(DATA_MODULE)) scope.type(imp.alias() + ".Data", "Data", named, null);
+                        if (imp.module().equals(BYTES_MODULE)) scope.type(imp.alias() + ".Bytes", "Bytes", named, null);
+                        for (String exposed : imp.exposing()) {
+                            if (exposed.equals(".."))
+                                for (String function : functions)
+                                    scope.name(function, intrinsicPrefix + function, open, imp.alias() + "." + function);
+                            else if (functions.contains(exposed))
+                                scope.name(exposed, intrinsicPrefix + exposed, named, imp.alias() + "." + exposed);
+                            else
+                                throw new Diagnostic("ELCI2104", imp.token(), imp.module() + " does not expose '" + exposed
+                                        + "'; it provides " + String.join(", ", functions), Suggestions.hint(exposed, functions));
                         }
+                        continue;
                     }
-                    var seen = new HashSet<String>();
-                    for (var type : catalogue.values()) {
-                        String id = type.identity();
-                        if (!id.startsWith("org.julclang.ledger.") || id.substring(20).contains(".")) continue;
-                        String local = id.substring(20);
-                        constructors(scope, imp.module(), imp.alias(), seen, local, type, exposedConstructors.remove(local),
-                                imp.token());
-                    }
-                    if (!exposedConstructors.isEmpty()) {
-                        String unknown = exposedConstructors.iterator().next();
-                        throw new Diagnostic("ELCI2101", imp.token(), "Unknown ledger type " + unknown,
-                                Suggestions.hint(unknown, catalogue.keySet().stream().filter(id -> id.startsWith("org.julclang.ledger."))
-                                        .map(id -> id.substring(20)).toList()));
-                    }
-                    continue;
-                }
-                if (javaModules.containsKey(imp.module())) {
-                    // Library aliases are private to the importing module; exposing is resolved
-                    // below.
-                    String alias = module.name() + "$" + imp.alias();
-                    imports.add(new Import(imp.module(), alias, List.of(), imp.token()));
-                    names.put(imp.alias() + ".", alias + ".");
-                    types.put(imp.alias() + ".", alias + ".");
-                    if (imp.exposing().contains(".."))
-                        throw new Diagnostic(
-                                "ELCI2104",
-                                imp.token(),
-                                "Java modules cannot be imported with exposing (..); list the exported"
-                                        + " names you use");
-                    var libraryTypes = libraryTypes(javaModules.get(imp.module()));
-                    var exposedConstructors = new HashSet<String>();
-                    for (String n : imp.exposing()) {
-                        if (Character.isUpperCase(n.charAt(0))) {
-                            String type = n.endsWith("(..)") ? n.substring(0, n.length() - 4) : n;
-                            if (!type.equals(n)) {
-                                if (!libraryTypes.containsKey(type))
-                                    throw new Diagnostic("ELCI2101", imp.token(), "No library type '" + type + "' in " + imp.module());
-                                exposedConstructors.add(type);
+                    if (imp.module().equals("Julc.Ledger")) {
+                        imports.add(imp);
+                        types.put(imp.alias() + ".", "org.julclang.ledger.");
+                        var exposedConstructors = new HashSet<String>();
+                        for (String exposed : imp.exposing()) {
+                            if (exposed.equals("..")) types.put("$ledgerAll", "true");
+                            else {
+                                String type = exposed.endsWith("(..)") ? exposed.substring(0, exposed.length() - 4) : exposed;
+                                if (!type.equals(exposed)) exposedConstructors.add(type);
+                                scope.type(type, type.equals("ScriptContext") ? "ScriptContext" : "org.julclang.ledger." + type,
+                                        named, imp.alias() + "." + type);
                             }
-                            scope.type(type, alias + "." + type, Rank.NAMED, imp.alias() + "." + type);
-                        } else scope.name(n, alias + "." + n, Rank.NAMED, imp.alias() + "." + n);
+                        }
+                        var seen = new HashSet<String>();
+                        for (var type : catalogue.values()) {
+                            String id = type.identity();
+                            if (!id.startsWith("org.julclang.ledger.") || id.substring(20).contains(".")) continue;
+                            String local = id.substring(20);
+                            constructors(scope, imp.module(), imp.alias(), seen, local, type, exposedConstructors.remove(local),
+                                    imp.token());
+                        }
+                        if (!exposedConstructors.isEmpty()) {
+                            String unknown = exposedConstructors.iterator().next();
+                            throw new Diagnostic("ELCI2101", imp.token(), "Unknown ledger type " + unknown,
+                                    Suggestions.hint(unknown, catalogue.keySet().stream().filter(id -> id.startsWith("org.julclang.ledger."))
+                                            .map(id -> id.substring(20)).toList()));
+                        }
+                        continue;
                     }
-                    var seen = new HashSet<String>();
-                    libraryTypes.forEach((local, type) -> constructors(scope, imp.module(), imp.alias(), seen, local, type,
-                            exposedConstructors.contains(local), imp.token()));
-                    continue;
-                }
-                var dependency = available.get(imp.module());
-                String dp =
-                        root != null && dependency.name().equals(root)
-                                ? ""
-                                : dependency.name() + ".";
-                var exported = new LinkedHashMap<String, String>();
-                for (var d : dependency.declarations())
-                    if (exposes(dependency, d.name())) exported.put(d.name(), dp + d.name());
-                for (var a : dependency.aliases().values())
-                    if (exposes(dependency, a.name()) && a.target().name().startsWith("Record:"))
-                        exported.put(a.name(), dp + a.name());
-                for (var u : dependency.unions())
-                    if (dependency.exposing().contains(u.name() + "(..)")
-                            || dependency.exposing().contains(".."))
-                        for (var v : u.variants()) exported.put(v.name(), dp + v.name());
-                if (dependency.name().equals("Basics"))
-                    for (String n : BASICS_FUNCTIONS) exported.put(n, BASICS_PREFIX + n);
-                exported.forEach((n, s) -> scope.name(imp.alias() + "." + n, s, named, dependency.name() + "." + n));
-                for (String n : BUILTIN_CONSTRUCTORS.getOrDefault(dependency.name(), List.of()))
-                    scope.name(imp.alias() + "." + n, n, named, dependency.name() + "." + n);
-                for (String n : imp.exposing()) {
-                    if (n.equals(".."))
-                        exported.forEach((k, v) -> scope.name(k, v, open, imp.alias() + "." + k));
-                    else if (n.equals(BUILTIN_TYPES.get(dependency.name()) + "(..)")
-                            && BUILTIN_CONSTRUCTORS.containsKey(dependency.name())) {
-                        // `import Maybe exposing (Maybe(..))`: the constructors are built in.
-                    } else if (n.endsWith("(..)")) {
-                        String typeName = n.substring(0, n.length() - 4);
-                        var union =
-                                dependency.unions().stream()
-                                        .filter(u -> u.name().equals(typeName))
-                                        .findFirst()
-                                        .orElseThrow(
-                                                () ->
-                                                        new Diagnostic(
-                                                                "ELCI2104",
-                                                                imp.token(),
-                                                                "Unknown exposed type " + n,
-                                                                Suggestions.hint(typeName, dependency.unions().stream()
-                                                                        .map(u -> u.name()).toList())));
-                        if (!dependency.exposing().contains(n)
-                                && !dependency.exposing().contains(".."))
+                    if (javaModules.containsKey(imp.module())) {
+                        // Library aliases are private to the importing module; exposing is resolved
+                        // below.
+                        String alias = module.name() + "$" + imp.alias();
+                        imports.add(new Import(imp.module(), alias, List.of(), imp.token()));
+                        names.put(imp.alias() + ".", alias + ".");
+                        types.put(imp.alias() + ".", alias + ".");
+                        if (imp.exposing().contains(".."))
                             throw new Diagnostic(
-                                    "ELCI2104", imp.token(), "Constructors are private: " + n);
-                        for (var variant : union.variants())
-                            scope.name(variant.name(), dp + variant.name(), named, imp.alias() + "." + variant.name());
-                    } else if (exported.containsKey(n)) scope.name(n, exported.get(n), named, imp.alias() + "." + n);
-                    else if (BUILTIN_TYPES.getOrDefault(dependency.name(), "").equals(n)) {
-                        // `import Map exposing (Map)`, as with Elm's Dict: the type is always in scope.
-                        if (!builtinTarget(n).equals(n)) scope.type(n, builtinTarget(n), named, imp.alias() + "." + n);
-                    } else if (!dependency.aliases().containsKey(n)
-                            && dependency.unions().stream().noneMatch(u -> u.name().equals(n)))
-                        throw new Diagnostic(
-                                "ELCI2104",
-                                imp.token(),
-                                dependency.name() + " does not expose '" + n + "'",
-                                Suggestions.hint(n, exposedNames(dependency)));
+                                    "ELCI2104",
+                                    imp.token(),
+                                    "Java modules cannot be imported with exposing (..); list the exported"
+                                            + " names you use");
+                        var libraryTypes = libraryTypes(javaModules.get(imp.module()));
+                        var exposedConstructors = new HashSet<String>();
+                        for (String n : imp.exposing()) {
+                            if (Character.isUpperCase(n.charAt(0))) {
+                                String type = n.endsWith("(..)") ? n.substring(0, n.length() - 4) : n;
+                                if (!type.equals(n)) {
+                                    if (!libraryTypes.containsKey(type))
+                                        throw new Diagnostic("ELCI2101", imp.token(), "No library type '" + type + "' in " + imp.module());
+                                    exposedConstructors.add(type);
+                                }
+                                scope.type(type, alias + "." + type, Rank.NAMED, imp.alias() + "." + type);
+                            } else scope.name(n, alias + "." + n, Rank.NAMED, imp.alias() + "." + n);
+                        }
+                        var seen = new HashSet<String>();
+                        libraryTypes.forEach((local, type) -> constructors(scope, imp.module(), imp.alias(), seen, local, type,
+                                exposedConstructors.contains(local), imp.token()));
+                        continue;
+                    }
+                    var dependency = available.get(imp.module());
+                    String dp =
+                            root != null && dependency.name().equals(root)
+                                    ? ""
+                                    : dependency.name() + ".";
+                    var exported = new LinkedHashMap<String, String>();
+                    for (var d : dependency.declarations())
+                        if (exposes(dependency, d.name())) exported.put(d.name(), dp + d.name());
+                    for (var a : dependency.aliases().values())
+                        if (exposes(dependency, a.name()) && a.target().name().startsWith("Record:"))
+                            exported.put(a.name(), dp + a.name());
+                    for (var u : dependency.unions())
+                        if (dependency.exposing().contains(u.name() + "(..)")
+                                || dependency.exposing().contains(".."))
+                            for (var v : u.variants()) exported.put(v.name(), dp + v.name());
+                    if (dependency.name().equals("Basics"))
+                        for (String n : BASICS_FUNCTIONS) exported.put(n, BASICS_PREFIX + n);
+                    exported.forEach((n, s) -> scope.name(imp.alias() + "." + n, s, named, dependency.name() + "." + n));
+                    for (String n : BUILTIN_CONSTRUCTORS.getOrDefault(dependency.name(), List.of()))
+                        scope.name(imp.alias() + "." + n, n, named, dependency.name() + "." + n);
+                    for (String n : imp.exposing()) {
+                        if (n.equals(".."))
+                            exported.forEach((k, v) -> scope.name(k, v, open, imp.alias() + "." + k));
+                        else if (n.equals(BUILTIN_TYPES.get(dependency.name()) + "(..)")
+                                && BUILTIN_CONSTRUCTORS.containsKey(dependency.name())) {
+                            // `import Maybe exposing (Maybe(..))`: the constructors are built in.
+                        } else if (n.endsWith("(..)")) {
+                            String typeName = n.substring(0, n.length() - 4);
+                            var union =
+                                    dependency.unions().stream()
+                                            .filter(u -> u.name().equals(typeName))
+                                            .findFirst()
+                                            .orElseThrow(
+                                                    () ->
+                                                            new Diagnostic(
+                                                                    "ELCI2104",
+                                                                    imp.token(),
+                                                                    "Unknown exposed type " + n,
+                                                                    Suggestions.hint(typeName, dependency.unions().stream()
+                                                                            .map(u -> u.name()).toList())));
+                            if (!dependency.exposing().contains(n)
+                                    && !dependency.exposing().contains(".."))
+                                throw new Diagnostic(
+                                        "ELCI2104", imp.token(), "Constructors are private: " + n);
+                            for (var variant : union.variants())
+                                scope.name(variant.name(), dp + variant.name(), named, imp.alias() + "." + variant.name());
+                        } else if (exported.containsKey(n)) scope.name(n, exported.get(n), named, imp.alias() + "." + n);
+                        else if (BUILTIN_TYPES.getOrDefault(dependency.name(), "").equals(n)) {
+                            // `import Map exposing (Map)`, as with Elm's Dict: the type is always in scope.
+                            if (!builtinTarget(n).equals(n)) scope.type(n, builtinTarget(n), named, imp.alias() + "." + n);
+                        } else if (!dependency.aliases().containsKey(n)
+                                && dependency.unions().stream().noneMatch(u -> u.name().equals(n)))
+                            throw new Diagnostic(
+                                    "ELCI2104",
+                                    imp.token(),
+                                    dependency.name() + " does not expose '" + n + "'",
+                                    Suggestions.hint(n, exposedNames(dependency)));
+                    }
+                    if (BUILTIN_TYPES.containsKey(dependency.name()))
+                        scope.type(imp.alias() + "." + BUILTIN_TYPES.get(dependency.name()),
+                                builtinTarget(BUILTIN_TYPES.get(dependency.name())), named, null);
+                    for (String n : dependency.aliases().keySet())
+                        if (exposes(dependency, n)) {
+                            scope.type(imp.alias() + "." + n, dp + n, named, dependency.name() + "." + n);
+                            if (imp.exposing().contains(n)) scope.type(n, dp + n, named, imp.alias() + "." + n);
+                            else if (imp.exposing().contains("..")) scope.type(n, dp + n, open, imp.alias() + "." + n);
+                        }
+                    // Cross-module custom-type constructors and type names remain nominal.
+                    for (var u : dependency.unions())
+                        if (exposes(dependency, u.name())
+                                || dependency.exposing().contains(u.name() + "(..)")) {
+                            scope.type(imp.alias() + "." + u.name(), dp + u.name(), named, dependency.name() + "." + u.name());
+                            if (imp.exposing().contains(u.name()) || imp.exposing().contains(u.name() + "(..)"))
+                                scope.type(u.name(), dp + u.name(), named, imp.alias() + "." + u.name());
+                            else if (imp.exposing().contains(".."))
+                                scope.type(u.name(), dp + u.name(), open, imp.alias() + "." + u.name());
+                        }
+                } catch (Diagnostic e) {
+                    resolveErrors.add(e);
+                    importsFailed = true;
                 }
-                if (BUILTIN_TYPES.containsKey(dependency.name()))
-                    scope.type(imp.alias() + "." + BUILTIN_TYPES.get(dependency.name()),
-                            builtinTarget(BUILTIN_TYPES.get(dependency.name())), named, null);
-                for (String n : dependency.aliases().keySet())
-                    if (exposes(dependency, n)) {
-                        scope.type(imp.alias() + "." + n, dp + n, named, dependency.name() + "." + n);
-                        if (imp.exposing().contains(n)) scope.type(n, dp + n, named, imp.alias() + "." + n);
-                        else if (imp.exposing().contains("..")) scope.type(n, dp + n, open, imp.alias() + "." + n);
-                    }
-                // Cross-module custom-type constructors and type names remain nominal.
-                for (var u : dependency.unions())
-                    if (exposes(dependency, u.name())
-                            || dependency.exposing().contains(u.name() + "(..)")) {
-                        scope.type(imp.alias() + "." + u.name(), dp + u.name(), named, dependency.name() + "." + u.name());
-                        if (imp.exposing().contains(u.name()) || imp.exposing().contains(u.name() + "(..)"))
-                            scope.type(u.name(), dp + u.name(), named, imp.alias() + "." + u.name());
-                        else if (imp.exposing().contains(".."))
-                            scope.type(u.name(), dp + u.name(), open, imp.alias() + "." + u.name());
-                    }
             }
+            if (importsFailed) continue;
+            // Each declaration, alias and custom type is resolved on its own: an error is recorded,
+            // and the rest are still resolved (ADR-012).
             for (var d : module.declarations())
-                definitions.add(
-                        new Decl(
-                                prefix + d.name(),
-                                d.parameters(),
-                                type(d.annotation(), types, d.token()),
-                                expr(d.body(), names, new HashSet<>(d.parameters()), types,
-                                        isRoot ? Set.of() : rootNames),
-                                d.token()));
-            module.aliases()
-                    .forEach(
-                            (n, a) ->
-                                    aliases.put(
-                                            prefix + n,
-                                            new Alias(
-                                                    prefix + n,
-                                                    a.parameters(),
-                                                    type(a.target(), types, a.token()),
-                                                    a.constructorFields(),
-                                                    a.token())));
+                try {
+                    definitions.add(
+                            new Decl(
+                                    prefix + d.name(),
+                                    d.parameters(),
+                                    type(d.annotation(), types, d.token()),
+                                    expr(d.body(), names, new HashSet<>(d.parameters()), types,
+                                            isRoot ? Set.of() : rootNames),
+                                    d.token()));
+                } catch (Diagnostic e) {
+                    resolveErrors.add(e);
+                }
+            for (var entry : module.aliases().entrySet())
+                try {
+                    var a = entry.getValue();
+                    aliases.put(prefix + entry.getKey(), new Alias(prefix + entry.getKey(), a.parameters(),
+                            type(a.target(), types, a.token()), a.constructorFields(), a.token()));
+                } catch (Diagnostic e) {
+                    resolveErrors.add(e);
+                }
             for (var u : module.unions())
-                unions.add(
-                        new Union(
-                                prefix + u.name(),
-                                u.parameters(),
-                                u.variants().stream()
-                                        .map(
-                                                v ->
-                                                        new Variant(
-                                                                prefix + v.name(),
-                                                                v.fields().stream()
-                                                                        .map(t -> type(t, types, u.token()))
-                                                                        .toList()))
-                                        .toList(),
-                                u.token()));
+                try {
+                    unions.add(
+                            new Union(
+                                    prefix + u.name(),
+                                    u.parameters(),
+                                    u.variants().stream()
+                                            .map(
+                                                    v ->
+                                                            new Variant(
+                                                                    prefix + v.name(),
+                                                                    v.fields().stream()
+                                                                            .map(t -> type(t, types, u.token()))
+                                                                            .toList()))
+                                            .toList(),
+                                    u.token()));
+                } catch (Diagnostic e) {
+                    resolveErrors.add(e);
+                }
         }
+        var found = Diagnostic.of(resolveErrors);
+        if (found != null) throw found;
         if (root == null)
             return new Ast.Module(
                     String.join("+", roots), List.of(), imports, definitions, aliases, unions);

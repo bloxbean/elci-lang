@@ -150,7 +150,7 @@ It must equal the version that `elci --version` prints. `elci init` writes the r
 differ, for example after you upgrade Elci, every command stops with:
 
 ```text
-elci: Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"
+elci: ELCI4001: Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"
 ```
 
 Update `julc-version` in `elci.toml`, then rebuild and re-run your tests. A new Julc version can change
@@ -169,8 +169,9 @@ the generated scripts and their hashes.
 
 - **Diagnostics:** the Elm language server doesn't know Elci's modules (`Julc.Ledger`, `Map`, `Array`,
   `Bytes`, your Java library imports), so its errors aren't reliable for Elci code. Use `elci check`, which
-  reports errors as `file:line:column: ELCIxxxx: message`, followed by the source line and any hints.
-  With `--report=json` it prints the error as one JSON object instead, for editor integrations.
+  reports every error as `file:line:column: ELCIxxxx: message`, followed by the source line and any hints.
+  With `--report=json` it prints each error as one JSON object on its own line instead, for editor
+  integrations. `elci explain <code>` explains a code.
 
 :::caution
 elm-format silently changes integer literals larger than about 9.2 × 10¹⁸, because it stores them as 64-bit

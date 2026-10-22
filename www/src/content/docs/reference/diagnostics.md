@@ -1,19 +1,19 @@
 ---
 title: Diagnostics
-description: How to read an Elci error, the JSON report for tools, and every ELCI error code with real messages and fixes for the errors you will meet most often.
+description: How to read an Elci error, how a run reports several errors, elci explain, the JSON report for tools, and every ELCI error code with real messages and fixes.
 sidebar:
   order: 6
 ---
 
-Elci reports each error with a stable code and a source location, shows the source line it is about and
-suggests a fix. This page explains how to read a diagnostic and how tools can read one. It then lists
-every code, and shows the most common errors with a small program that triggers each one, the exact
-output and the fix.
+Elci reports each error with a stable code and a source location, shows the source code it is about and
+suggests a fix. This page explains how to read a diagnostic, how a run reports several errors, and how
+tools can read them. It then lists every code, and shows the most common errors with a small program that
+triggers each one, the exact output and the fix.
 
 ## Reading a diagnostic
 
 A compile error starts with one line, `path:line:column: code: message`. A blank line follows, then the
-source line with a caret under the reported token, then any hints:
+source line with carets under what the error is about, then any hints:
 
 ```text
 src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
@@ -21,6 +21,8 @@ src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
 6|     lenght [ 1, 2 ]
        ^^^^^^
 Hint: did you mean `List.length`?
+
+For more on ELCI2005, run `elci explain ELCI2005`.
 ```
 
 - The **first line** has the same form for every error, so editors and scripts can parse it. The
@@ -30,11 +32,13 @@ Hint: did you mean `List.length`?
 - The **code** names the class of error and never changes between releases. The **message** says what is
   wrong in terms of your code: which argument, branch, list element, operator side, annotation or field
   has the wrong type, or which patterns a `case` doesn't cover.
-- The **excerpt** shows the line with its number. The caret underlines the reported token, such as a
-  qualified name or a string literal with its quotes. For an error at the end of the file, it points just
-  past the last code. An error in a bundled module has no excerpt.
+- The **excerpt** shows the line with its number, and underlines what the error is about. For an error at
+  the end of the file, it points just past the last code. An error in a bundled module has no excerpt.
 - Each **hint** suggests a likely fix: a close name, a conversion such as `String.fromInt`, or an import
   to add. An error has zero or more hints.
+- The **last line** names the codes of the run and the command that explains them; see
+  [`elci explain`](#elci-explain). The examples in the rest of this page leave it out and show only the
+  diagnostic. Some show only its first line, without the excerpt and hints.
 
 Types in messages are written as in source, in backticks: `Result a Int`, `Order`. When two types of one
 name meet in a message, both are qualified, as in `Main.Value` and `Julc.Ledger.Value`.
@@ -50,22 +54,259 @@ my-project/src/Main.elm:6:1: ELCI2013: Functions cannot be serialized as datum o
 In my-project/elci.toml:6: [validators.main]
 ```
 
-The compiler stops at the first error: fix it and run the command again. Every error makes the command
-exit with status 1. Codes starting with `ELCI1` come from the lexer and parser, `ELCI20` from type
-checking, `ELCI21` from modules and imports, `ELCI3` from code generation and `ELCI4` from configuration
-and the backend.
+Every error makes the command exit with status 1. Codes starting with `ELCI1` come from the lexer and
+parser, `ELCI20` from type checking, `ELCI21` from modules and imports, `ELCI3` from code generation and
+`ELCI4` from configuration and the backend.
 
-Some examples below show only the first line of a diagnostic, without its excerpt and hints.
+### What is underlined
+
+The carets underline the reported token, such as a name, a qualified name or a string literal with its
+quotes. When the error is about a whole expression, they underline all of it. This is the case for an
+argument, a list element, the body of a `case` branch and a field access such as `.price`:
+
+```elm
+main : String
+main =
+    String.fromInt (String.append "4" "2")
+```
+
+```text
+src/Main.elm:6:20: ELCI2002: The 1st argument to `String.fromInt` is `String`, but `String.fromInt` needs `Int`
+
+6|     String.fromInt (String.append "4" "2")
+                      ^^^^^^^^^^^^^^^^^^^^^^^
+```
+
+An expression over several lines is underlined on each of its lines, up to five:
+
+```elm
+main : String
+main =
+    String.fromInt
+        (String.append
+            "4"
+            "2"
+        )
+```
+
+```text
+src/Main.elm:7:9: ELCI2002: The 1st argument to `String.fromInt` is `String`, but `String.fromInt` needs `Int`
+
+ 7|         (String.append
+            ^^^^^^^^^^^^^^
+ 8|             "4"
+                ^^^
+ 9|             "2"
+                ^^^
+10|         )
+            ^
+```
+
+The line and column of the first line are where the underline starts. A longer expression shows its
+first five lines, then a line with `…`.
+
+Some expressions are reported at a token inside them: an operation such as `"x" ++ "y"` at its operator,
+and a call without parentheses such as `String.fromInt 3` at its last argument. The caret then marks that
+token alone, as an underline from there would cover only part of the expression.
+
+### Long types
+
+When the two types of a mismatch are long, `It is:` and `It needs:` lines follow the excerpt. They show
+the types one above the other, with the first difference marked:
+
+```elm
+type alias Order =
+    { owner : String, amount : Int, deadline : Int }
+
+
+amountOf : Order -> Int
+amountOf order =
+    order.amount
+
+
+main : Int
+main =
+    amountOf { owner = "alice", amount = "10", deadline = 5 }
+```
+
+```text
+src/Main.elm:15:14: ELCI2002: The 1st argument to `amountOf` is `{ amount : String, deadline : Int, owner : String }`, but `amountOf` needs `{ amount : Int, deadline : Int, owner : String }`
+
+15|     amountOf { owner = "alice", amount = "10", deadline = 5 }
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+It is:     { amount : String, deadline : Int, owner : String }
+It needs:  { amount : Int, deadline : Int, owner : String }
+                      ^^^
+```
+
+The message still names both types, so the first line reads the same as for short types. The lines are
+added when the two types together are 60 characters or longer.
+
+### Colour
+
+On a terminal, the path and code, the carets and `Hint:` are in colour. Output to a file or a pipe is
+plain, and so is any output when the `NO_COLOR` environment variable is set. `--color` overrides this on
+any command:
+
+| Option | Colour |
+| --- | --- |
+| `--color=auto` | On a terminal, unless `NO_COLOR` is set. The default. |
+| `--color=always` | Always, also in a pipe. |
+| `--color=never` | Never. |
+
+The text is the same, character for character, with and without colour. The [JSON report](#json-reports-for-tools)
+is never coloured.
+
+## Several errors in one run
+
+A run reports every error it finds, not just the first. Compilation has three phases: lexing and parsing,
+name resolution, and type checking. Each phase reports all of its errors. A later phase runs only when the
+earlier ones found none, as in Elm, so one mistake isn't reported again as a different error later.
+
+```elm
+fee : Int
+fee =
+    "2"
+
+
+total : Int -> Int
+total amount =
+    amount + lenght [ 1 ]
+
+
+label : Int -> String
+label amount =
+    String.fromInt "amount"
+
+
+main : Int
+main =
+    total fee
+```
+
+```text
+src/Main.elm:4:1: ELCI2002: The annotation of `fee` says it is `Int`, but its definition is `String`
+
+4| fee : Int
+   ^^^
+
+src/Main.elm:11:14: ELCI2005: Unknown name 'lenght'
+
+11|     amount + lenght [ 1 ]
+                 ^^^^^^
+Hint: did you mean `List.length`?
+
+src/Main.elm:16:20: ELCI2002: The 1st argument to `String.fromInt` is `String`, but `String.fromInt` needs `Int`
+
+16|     String.fromInt "amount"
+                       ^^^^^^^^
+
+3 errors
+
+For more on ELCI2002 and ELCI2005, run `elci explain <code>`.
+```
+
+- **Order.** Errors are shown in source order: by module, then by line and column. A blank line separates
+  them.
+- **Count.** When there is more than one error, a line such as `3 errors` follows them.
+- **Limit.** A run shows at most 20 errors, then a line such as `... and 3 more`. The count still gives
+  the total.
+- **One per declaration.** Each top-level declaration reports its first error. A declaration whose
+  definition fails still has the type its annotation gives it, so its callers are checked against the
+  annotation and don't report errors of their own. Above, `main` passes `fee` to `total`, which needs an
+  `Int`. The annotation says `fee` is one, so `main` is not reported.
+- **Once each.** A mistake that fails several checks alike, such as each comparison inside `List.sort`,
+  is reported once.
+- **Phases.** A module with a syntax error is not type-checked. Nor is a program with an import or
+  qualified-name error (`ELCI21xx`), such as `Lsit.length`. Fix those, and the next run reports the type
+  errors. An unknown unqualified name (`ELCI2005`), as above, is found while type checking and is
+  reported with the type errors.
+- **One at a time.** Code generation (`ELCI3xxx`), configuration and command-line errors (`ELCI4xxx`)
+  still stop the run at the first error.
+
+## `elci explain`
+
+A failed run's text report ends with a line that names its codes and how to read more about them:
+
+```text
+For more on ELCI2005, run `elci explain ELCI2005`.
+For more on ELCI2002 and ELCI2005, run `elci explain <code>`.
+```
+
+`elci explain` prints the entry for a code: what it means and its common causes, a failing example with
+its exact output, the fix, and where to read more. `ELCI2005`, `elci2005` and `2005` all name the same
+code:
+
+```text
+$ elci explain 2005
+ELCI2005: Unknown name
+
+A value name is used that nothing in scope defines.
+
+Common causes:
+
+- A misspelling. The hint suggests up to three close names, local ones first.
+- A name from another module that is not imported, or that its import doesn't expose. The hint
+  says how to reach it, such as writing `Helper.double`.
+- A name a Java library module doesn't export.
+
+A qualified name such as `List.lenght` is ELCI2104.
+
+Example
+
+    main : Int
+    main =
+        lenght [ 1, 2 ]
+
+`elci check` reports:
+
+    src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
+
+    6|     lenght [ 1, 2 ]
+           ^^^^^^
+    Hint: did you mean `List.length`?
+
+Fix
+
+Correct the spelling, or import the module that defines the name:
+
+    main : Int
+    main =
+        List.length [ 1, 2 ]
+
+See also
+
+- The Diagnostics reference, section ELCI2005.
+- ELCI2104, for qualified names.
+```
+
+`elci explain` without a code lists every code with its title. The entries are part of the compiler and
+match its version. Each entry's example is tested to give exactly the output it shows, and its fix to
+compile. An unknown code is an `ELCI4001` error.
 
 ## JSON reports for tools
 
-`elci check`, `elci build`, `elci eval` and `elci test` take `--report=json`. An error is then printed on
-standard error as one JSON object, on one line, as Elm's `--report=json` does:
+`elci check`, `elci build`, `elci eval` and `elci test` take `--report=json`. Each error is then printed on
+standard error as one JSON object on its own line ([JSON Lines](https://jsonlines.org/)). A run with one
+error prints one line:
 
 ```text
 $ elci check --report=json
 {"code":"ELCI2005","path":"src/Main.elm","line":6,"column":5,"message":"Unknown name 'lenght'","hints":["did you mean `List.length`?"],"excerpt":"6|     lenght [ 1, 2 ]\n       ^^^^^^","context":null}
 ```
+
+A run with several errors prints one line for each, in the same order and up to the same limit as the text
+report. Read the output line by line, and parse each line as JSON:
+
+```text
+$ elci check --report=json
+{"code":"ELCI2002","path":"src/Main.elm","line":4,"column":1,"message":"The annotation of `fee` says it is `Int`, but its definition is `String`","hints":[],"excerpt":"4| fee : Int\n   ^^^","context":null}
+{"code":"ELCI2005","path":"src/Main.elm","line":11,"column":14,"message":"Unknown name 'lenght'","hints":["did you mean `List.length`?"],"excerpt":"11|     amount + lenght [ 1 ]\n                 ^^^^^^","context":null}
+{"code":"ELCI2002","path":"src/Main.elm","line":16,"column":20,"message":"The 1st argument to `String.fromInt` is `String`, but `String.fromInt` needs `Int`","hints":[],"excerpt":"16|     String.fromInt \"amount\"\n                       ^^^^^^^^","context":null}
+```
+
+The JSON report has no count line, no `... and N more` line and no `elci explain` line.
 
 | Field | Type | Contents |
 | --- | --- | --- |
@@ -74,10 +315,11 @@ $ elci check --report=json
 | `line`, `column` | number or null | The position, counting from 1 |
 | `message` | string | The message, without the path and code |
 | `hints` | array of strings | The hints, without `Hint:`; empty when there are none |
-| `excerpt` | string or null | The source line and the caret line, separated by `\n`; null when there is no source to show |
+| `excerpt` | string or null | The source lines and their caret lines, separated by `\n`; null when there is no source to show |
 | `context` | string or null | For a failure in a named validator, its `elci.toml` line and table; otherwise null |
 
-A failure in a validator names its table in `context`:
+The `It is:` and `It needs:` lines of a long mismatch are not part of the JSON; the message names both
+types. A failure in a validator names its table in `context`:
 
 ```text
 {"code":"ELCI2013","path":"my-project/src/Main.elm","line":6,"column":1,"message":"Functions cannot be serialized as datum or redeemer","hints":[],"excerpt":"6| mint : (Int -> Int) -> ScriptContext -> Bool\n   ^^^^","context":"my-project/elci.toml:6: [validators.main]"}
@@ -632,7 +874,7 @@ main =
 src/Main.elm:10:10: ELCI2010: Missing field 'price'; available fields: [amount]
 
 10|     order.price
-             ^
+             ^^^^^^
 ```
 
 **Fix:** use one of the listed fields. A field name close to one of them, such as `order.amont`, also
@@ -646,7 +888,7 @@ constructors `Just`, `Nothing`, `True` or `False`, or a type named `Int`, `Bool`
 `Data`, `List`, `Maybe`, `Map`, `Array` or `Float`:
 
 ```text
-src/Main.elm:9:6: ELCI2011: Duplicate constructor Buy
+src/Main.elm:9:6: ELCI2011: Duplicate constructor Buy: the type Action has one too
 src/Main.elm:4:6: ELCI2011: Nothing is a constructor of the built-in Maybe type; choose another name
 src/Main.elm:4:6: ELCI2011: Bytes is a built-in type; choose another name
 ```
@@ -706,13 +948,19 @@ my-project/src/Main.elm:6:1: ELCI2013: Functions cannot be serialized as datum o
 In my-project/elci.toml:6: [validators.main]
 ```
 
-A `Value`, and ledger types that contain one such as `TxOut`, are rejected the same way:
+A `Value` is rejected the same way:
 
 ```text
-my-project/src/Main.elm:7:1: ELCI2013: org.julclang.ledger.Value has no approved strict Data boundary (BOUNDARY); for example records containing the map-encoded Value cannot be checked
+my-project/src/Main.elm:7:1: ELCI2013: A Value cannot be part of a datum, redeemer or parameter yet: the ledger's strict boundary cannot check its form. Store a List ( PolicyId, TokenName, Int ) and rebuild it with Value.fromList
+
+7| mint : Value -> ScriptContext -> Bool
+   ^^^^
 
 In my-project/elci.toml:6: [validators.main]
 ```
+
+So is a ledger type that contains one, such as `TxOut`:
+`ELCI2013: TxOut has no approved strict Data boundary (BOUNDARY); for example records containing a ledger Value (such as TxOut) cannot be checked`.
 
 **Fix:** use your own record or custom type, or a ledger type with an approved boundary such as `TxOutRef`
 or `PubKeyHash`. For an amount of tokens, store a `List ( PolicyId, TokenName, Int )` and rebuild the value
@@ -778,8 +1026,14 @@ and the `ScriptContext`.
 ```text
 my-project/src/Main.elm:11:1: ELCI2103: Handler Main.mint must be exposed by its module
 
+11| mint : () -> ScriptContext -> Bool
+    ^^^^
+
 In my-project/elci.toml:6: [validators.main]
 ```
+
+An `[entrypoint]` function that its module doesn't expose gets
+`ELCI2103: Entrypoint Main.main must be exposed by its module`.
 
 **Fix:** add the handler, or the `[entrypoint]` function, to the module's `exposing` list.
 
@@ -1031,6 +1285,29 @@ src/Main.elm:8:5: ELCI3003: Type argument T = Unit of firstOr must have a Plutus
 src/Main.elm:12:13: ELCI3003: No strict decoder for org.julclang.ledger.TxOut: The library provider cannot supply decode_strict record TxOut: [JULC0051] Library request decode_strict record TxOut is not supported: org.julclang.ledger.TxOut does not approve DECODE_STRICT
 ```
 
+Encoding a function names the reason:
+
+```elm
+import Julc.Data as Data
+
+
+double : Int -> Int
+double x =
+    x * 2
+
+
+main : Int
+main =
+    List.length [ Data.encode double ]
+```
+
+```text
+src/Main.elm:13:19: ELCI3003: No encoder for Int -> Int: functions have no Data encoding
+
+13|     List.length [ Data.encode double ]
+                      ^^^^^^^^^^^
+```
+
 **Fix:** use a Data-encodable type. Functions, `()` and `Array` have no encoding, and `TxOut` can't be
 decoded. A `Value` converts on its own, but a type that contains one can't be decoded yet, and a list or
 tuple of values can't be encoded: convert them with `Value.toList` and back with `Value.fromList`.
@@ -1064,8 +1341,31 @@ elci: ELCI4001: src/Main.elm is not valid UTF-8 text; save it as UTF-8
 ```
 
 The message says what to change. A source file must be UTF-8 text. A `Dict` parameter must list its keys in ascending order, each once; see
-[parameterized validators](/contracts/parameters/#what-apply-checks). The [CLI](/reference/cli/) and
-[`elci.toml`](/reference/configuration/) references list the others. Some configuration errors have no code yet; they are listed below.
+[parameterized validators](/contracts/parameters/#what-apply-checks).
+
+Mistakes in `elci.toml`, in the arguments of `elci init` and on the command line have this code too:
+
+```text
+elci: ELCI4001: Unknown configuration key: [project] name
+elci: ELCI4001: Unsupported purpose: lend; expected spend, mint, withdraw, certify, vote, propose or function
+elci: ELCI4001: Unknown option: --frob
+elci: ELCI4001: the [entrypoint] function main is not defined in module Main
+elci: ELCI4001: my-project/elci.toml not found; a project needs an elci.toml, which elci init creates
+elci: ELCI4001: Source directory not found: my-project/lib
+elci: ELCI4001: library-jars file my-project/libs/pricing.jar not found
+elci: ELCI4001: No source file for module Nope; add Nope.elm under a source directory
+```
+
+A problem with one validator's table names the table after the code:
+
+```text
+elci: ELCI4001: my-project/elci.toml:6: [validators.main]: Handler Main.spent for spend: module Main does not declare spent
+elci: ELCI4001: my-project/elci.toml:6: [validators.main]: Handler Vault.spend for spend: no source module Vault
+elci: ELCI4001: my-project/elci.toml:6: [validators.main]: [java-modules] may not map Value, a module name of Elci's core library
+```
+
+The [CLI](/reference/cli/) and [`elci.toml`](/reference/configuration/) references list the others. A
+few errors have no code yet; they are listed [below](#errors-without-a-code).
 
 ### `ELCI4002` and `ELCI4003`: backend
 
@@ -1077,15 +1377,11 @@ program that triggers them.
 
 ## Errors without a code
 
-A few errors are still reported without a code or location. Each is printed after `elci:`:
+Three errors from reading a Java library are still reported without a code or location. Each is printed
+after `elci:`, and in the JSON report its `code` is null:
 
 | Message | Cause |
 | --- | --- |
 | `On-chain Java source not found: org.julclang.stdlib.lib.NopeLib` | An imported `[java-modules]` class that does not exist. |
 | `Cannot resolve type: ?. Supported types: ...` | A Java library that uses a wildcard type such as `JulcList<?>`. |
 | `Unknown type: T. Did you mean: Vote?` | A Java library that declares a parameterized record such as `Box<T>`. |
-| `my-project/elci.toml` | The directory has no `elci.toml`. |
-| `my-project/libs/pricing.jar` | A `library-jars` file does not exist. |
-
-Configuration mistakes that have no code, such as an unknown key, are listed on the
-[`elci.toml`](/reference/configuration/) page.

@@ -211,8 +211,8 @@ class ElmQualityDiagnosticsTest {
         Files.writeString(main, "module Main exposing (main)\n\n\nmain : Int\nmain =\n    Jsut 1\n");
         var text = NamedValidatorCliTest.run("check", project.toString());
         assertEquals(1, text.status());
-        assertEquals(main + ":6:5: ELCI2005: Unknown name 'Jsut'\n\n6|     Jsut 1\n       ^^^^\nHint: did you mean `Just`?\n",
-                text.err());
+        assertEquals(main + ":6:5: ELCI2005: Unknown name 'Jsut'\n\n6|     Jsut 1\n       ^^^^\nHint: did you mean `Just`?\n"
+                + "\nFor more on ELCI2005, run `elci explain ELCI2005`.\n", text.err());
         var json = NamedValidatorCliTest.run("check", project.toString(), "--report=json");
         assertEquals(1, json.status());
         assertEquals("{\"code\":\"ELCI2005\",\"path\":" + Diagnostic.quote(main.toString()) + ",\"line\":6,\"column\":5,"
@@ -383,7 +383,8 @@ class ElmQualityDiagnosticsTest {
         var text = NamedValidatorCliTest.run("check", project.toString());
         assertTrue(text.err().startsWith(source + ":6:1: ELCI2002: The annotation of `spend` says it returns `Bool`, but its body is `Int`"),
                 text.err());
-        assertTrue(text.err().endsWith("\n\nIn " + project.resolve("elci.toml") + ":6: [validators.v]\n"), text.err());
+        assertTrue(text.err().endsWith("\n\nIn " + project.resolve("elci.toml") + ":6: [validators.v]\n"
+                + "\nFor more on ELCI2002, run `elci explain ELCI2002`.\n"), text.err());
         var json = NamedValidatorCliTest.run("check", project.toString(), "--report=json");
         assertTrue(json.err().endsWith(",\"context\":" + Diagnostic.quote(project.resolve("elci.toml") + ":6: [validators.v]") + "}\n"),
                 json.err());

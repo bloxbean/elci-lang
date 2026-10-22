@@ -1,6 +1,6 @@
 ---
 title: CLI
-description: Every elci command and option — init, check, build, eval, test and apply — with outputs, exit codes and error formats.
+description: Every elci command and option — init, check, build, eval, test, apply and explain — with outputs, exit codes and error formats.
 sidebar:
   order: 1
 ---
@@ -19,8 +19,10 @@ Usage: elci <check|build> [project-directory] [--validator <name>]...
        elci test [project-directory] [--match <substring>] [--seed <n>] [--fuzz <runs>]
        elci apply [project-directory] --validator <name> --param <name>=<plutus-data-json|@file> [--output <file>]
        elci init <project-directory> [--validator <name>] [--purpose spend|mint|withdraw|certify|vote|propose|function]
+       elci explain [code]
        elci --version
-check, build, eval and test take --report=json to print a compile failure as one JSON object
+check, build, eval and test take --report=json to print each compile error as a JSON object on its own line,
+and --color=auto|always|never for coloured errors (auto: on a terminal, unless NO_COLOR is set)
 A build writes build/validators/<name>/validator.flat, validator.plutus, validator.plutus.json (Julc format) and abi.json (Elci schema)
 for each [validators.<name>] group; an [entrypoint] function project writes build/validator.flat, validator.plutus and abi.json.
 ```
@@ -38,7 +40,7 @@ The second version is the Julc build the compiler is pinned to. A project's `jul
 
 ## Common behavior
 
-**Project directory.** Every command except `init` takes an optional project directory: the directory
+**Project directory.** Every command except `init` and `explain` takes an optional project directory: the directory
 that holds `elci.toml`. It defaults to the current directory. Giving two directories is an error.
 
 **Two kinds of project.** A project configures either `[validators.<name>]` tables or one `[entrypoint]`
@@ -56,7 +58,8 @@ Compile, configuration and command-line errors go to standard error.
 | `1` | Any error: invalid arguments or configuration, a compile error, an `eval` that failed at run time, a failing test, or no tests found. |
 
 **Error format.** A compile error starts with a line that names the source location and the code. The
-source line follows, with a caret under the reported token, and then any hints:
+source line follows, with carets under the reported code, and then any hints. The report ends with the
+command that explains the code:
 
 ```text
 my-project/src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
@@ -64,11 +67,13 @@ my-project/src/Main.elm:6:5: ELCI2005: Unknown name 'lenght'
 6|     lenght [ 1, 2 ]
        ^^^^^^
 Hint: did you mean `List.length`?
+
+For more on ELCI2005, run `elci explain ELCI2005`.
 ```
 
 The first line always has the form `path:line:column: code: message`. A problem inside a bundled module
 such as `List` is reported where your code uses it, or otherwise as `<bundled>/List.elm`, without an
-excerpt. For a validator, the `elci.toml` table comes first, on its own line:
+excerpt. For a validator, the `elci.toml` table follows the diagnostic, on its own line:
 
 ```text
 my-project/src/Main.elm:6:1: ELCI2014: Handler Main.spend does not have the spend signature datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (0 parameters); its type is () -> ScriptContext -> Bool; it has `Bool` where the configuration needs `ScriptContext -> Bool`
@@ -77,19 +82,31 @@ my-project/src/Main.elm:6:1: ELCI2014: Handler Main.spend does not have the spen
    ^^^^^
 
 In my-project/elci.toml:6: [validators.main]
+
+For more on ELCI2014, run `elci explain ELCI2014`.
 ```
 
-Configuration and command-line errors start with `elci:`. Many carry the code `ELCI4001`:
+Configuration and command-line errors start with `elci:` and carry the code `ELCI4001`, apart from the
+few listed under [errors without a code](/reference/diagnostics/#errors-without-a-code):
 
 ```text
 elci: ELCI4001: unknown validator 'treasury'; configured: main
 ```
 
-A command stops at the first error. The [diagnostics](/reference/diagnostics/) page explains how to read
-one and lists every code.
+**Several errors.** A run reports every compile error it finds, in source order and separated by blank
+lines, followed by a count such as `3 errors`. It shows at most 20, then a line such as `... and 3 more`.
+Each top-level declaration reports its first error, and type errors are reported only when there are no
+syntax, import or qualified-name errors. Code generation, configuration and command-line errors stop the run at the first.
+The [diagnostics](/reference/diagnostics/#several-errors-in-one-run) page explains how to read them and
+lists every code.
 
-**JSON reports.** `check`, `build`, `eval` and `test` take `--report=json`. With it, an error is printed on
-standard error as one JSON object on one line, instead of the text above. Here it is formatted with `jq`:
+**Colour.** On a terminal, compile errors are in colour, unless the `NO_COLOR` environment variable is
+set. Every command takes `--color=auto`, `--color=always` or `--color=never` to choose; `auto` is the
+default. Any other value is an `ELCI4001` error. JSON reports are never coloured.
+
+**JSON reports.** `check`, `build`, `eval` and `test` take `--report=json`. With it, each error is printed on
+standard error as one JSON object on its own line (JSON Lines), instead of the text above. A run with one
+error prints one line; a run with several prints one line for each. Here one is formatted with `jq`:
 
 ```text
 $ elci check my-project --report=json 2>&1 | jq
@@ -113,18 +130,19 @@ $ elci check my-project --report=json 2>&1 | jq
 | `path`, `line`, `column` | The location, or null for an error without one |
 | `message` | The message, without the path and code |
 | `hints` | The hints, as an array of strings; empty when there are none |
-| `excerpt` | The source line and caret line, separated by a newline, or null |
+| `excerpt` | The source lines and their caret lines, separated by newlines, or null |
 | `context` | The `elci.toml` line and table of a failing validator, such as `my-project/elci.toml:6: [validators.main]`, or null |
 
-A configuration or command-line error keeps the same fields, with null location fields:
+The JSON report has no count line and no `elci explain` line. A configuration or command-line error keeps
+the same fields, with null location fields:
 
 ```text
 {"code":"ELCI4001","path":null,"line":null,"column":null,"message":"unknown validator 'treasury'; configured: main","hints":[],"excerpt":null,"context":null}
 ```
 
 The exit status doesn't change. Results stay text on standard output: the `check` and `build` lines, the
-value, budget or `evaluation failed:` line of `eval`, and test results, including failing tests. `init` and
-`apply` reject the option:
+value, budget or `evaluation failed:` line of `eval`, and test results, including failing tests. `init`,
+`apply` and `explain` reject the option:
 
 ```text
 $ elci apply --report=json
@@ -156,7 +174,9 @@ deployment parameter, and the two tests check that the owner passes and anyone e
 `--purpose function` project gets `elci.toml`, `src/Main.elm` (returning `42`), `README.md` and
 `.gitignore`, and no tests.
 
-Errors: `Project directory is not empty: ...`, `Unsupported purpose: ...` and `Invalid validator name ...`.
+Errors are `ELCI4001`, such as `ELCI4001: Project directory is not empty: ...`,
+`ELCI4001: Unsupported purpose: lend; expected spend, mint, withdraw, certify, vote, propose or function` and
+`ELCI4001: Invalid validator name '9bad'; use lowercase letters, digits, '-' or '_', starting with a letter`.
 
 ## `elci check`
 
@@ -169,7 +189,7 @@ elci check [project-directory] [--validator <name>]... [--report=json]
 | Option | Meaning |
 | --- | --- |
 | `--validator <name>` | Check only this validator. Repeat it to select several. Validator projects only. |
-| `--report=json` | Print an error as one JSON object on standard error (see [JSON reports](#common-behavior)). |
+| `--report=json` | Print each error as one JSON object on its own line on standard error (see [JSON reports](#common-behavior)). |
 
 For a validator project, it prints one line per validator, sorted by name, with the purposes it
 handles and its size in FLAT bytes:
@@ -234,7 +254,7 @@ elci eval [project-directory] [--builtins] [--report=json]
 | Option | Meaning |
 | --- | --- |
 | `--builtins` | Also print the builtin calls of the run, one per line, with arguments and result. The log keeps the last 20 calls. |
-| `--report=json` | Print a compile or configuration error as one JSON object. A failed evaluation still prints `evaluation failed:` as text. |
+| `--report=json` | Print each compile error, or a configuration error, as one JSON object on its own line. A failed evaluation still prints `evaluation failed:` as text. |
 
 The first line is the value, written in Elci syntax. The second is the CPU and memory consumed. Each
 `Debug.trace` message follows on its own line:
@@ -296,7 +316,7 @@ elci test [project-directory] [--match <substring>] [--seed <n>] [--fuzz <runs>]
 | `--match <substring>` | all tests | Run tests whose full name (`Module.test`) contains the substring, ignoring case. |
 | `--seed <n>` | random | Seed for property tests. The seed used is printed, so any run can be repeated. |
 | `--fuzz <runs>` | `100` | Number of runs for each property test. Must be positive. |
-| `--report=json` | text | Print a compile or configuration error, such as one in a test module, as one JSON object. Test results stay text. |
+| `--report=json` | text | Print each compile error, such as one in a test module, or a configuration error as one JSON object on its own line. Test results stay text. |
 
 ```text
 $ elci test --match deadline --seed 42
@@ -369,3 +389,35 @@ elci: ELCI4001: parameter owner is not a well-formed org.julclang.ledger.PubKeyH
 Other errors name the problem: `missing --param owner=<plutus-data-json>`, `parameter owner is given more
 than once`, `validator main has no parameter 'nope'; declared: owner`, and
 `validator main declares no parameters`. See [parameterized validators](/contracts/parameters/).
+
+## `elci explain`
+
+Prints the long-form entry for a diagnostic code.
+
+```text
+elci explain [code]
+```
+
+The code may be written `ELCI2002`, `elci2002` or `2002`. An entry says what the code means and its
+common causes, shows a failing example with its exact output, and gives the fix and the pages to read.
+Code blocks are indented by four spaces. Without a code, `explain` lists every code with its title:
+
+```text
+$ elci explain
+Run elci explain <code> for one of these:
+
+  ELCI1001: Invalid character or literal
+  ELCI1002: Malformed or unsupported syntax
+  ELCI2001: Invalid expression or pattern
+  ELCI2002: Type mismatch
+```
+
+The list goes on with every other code. An unknown code, or more than one, is an error:
+
+```text
+$ elci explain ELCI9999
+elci: ELCI4001: ELCI9999 is not an Elci error code; run elci explain to list them
+```
+
+The entries are part of the compiler, so they match its version. The
+[diagnostics](/reference/diagnostics/#elci-explain) page shows a whole entry.

@@ -201,24 +201,24 @@ purpose = "function"
 
 | Mistake | Message |
 | --- | --- |
-| Wrong `julc-version` | `Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"` |
-| Wrong `target` | `Unsupported target; expected plutus-v3-pv11-uplc-1.1.0` |
-| Misspelled key | `Unknown configuration key: [project] name` |
-| Unknown table | `elci.toml:6: unknown configuration section: dependencies` |
-| Missing `boundary` | `Missing configuration key: [validators.main] boundary` |
-| Bad validator name | `elci.toml:6: invalid validator name 'Main'; use lowercase letters, digits, '-' or '_', starting with a letter (at most 64 characters)` |
-| No handler | `elci.toml:6: [validators.main] configures no handler; add one of mint, spend, withdraw, certify, vote, propose` |
-| Handler without module | `elci.toml:9: [validators.main] spend = "spend" must name an exposed function as "Module.function"` |
-| `spend-datum` without `spend` | `elci.toml:6: [validators.main] spend-datum requires a spend handler` |
+| Wrong `julc-version` | `ELCI4001: Julc version does not match this compiler; expected julc-version = "0.1.0-gb-5a3378b"` |
+| Wrong `target` | `ELCI4001: Unsupported target; expected plutus-v3-pv11-uplc-1.1.0` |
+| Misspelled key | `ELCI4001: Unknown configuration key: [project] name` |
+| Unknown table | `ELCI4001: elci.toml:6: unknown configuration section: dependencies` |
+| Missing `boundary` | `ELCI4001: Missing configuration key: [validators.main] boundary` |
+| Bad validator name | `ELCI4001: elci.toml:6: invalid validator name 'Main'; use lowercase letters, digits, '-' or '_', starting with a letter (at most 64 characters)` |
+| No handler | `ELCI4001: elci.toml:6: [validators.main] configures no handler; add one of mint, spend, withdraw, certify, vote, propose` |
+| Handler without module | `ELCI4001: elci.toml:9: [validators.main] spend = "spend" must name an exposed function as "Module.function"` |
+| `spend-datum` without `spend` | `ELCI4001: elci.toml:6: [validators.main] spend-datum requires a spend handler` |
 | Both project kinds | `ELCI4001: elci.toml mixes [entrypoint] with [validators.*]; use one form` |
 | Neither project kind | `ELCI4001: elci.toml must configure at least one [validators.<name>], or an [entrypoint] function` |
 | `expected-abi` in `[project]` of a validator project | `ELCI4001: [project] expected-abi applies to [entrypoint] projects; set expected-abi in each [validators.<name>] table` |
-| Unquoted value | `Expected a quoted string without escapes: julc-strict-v1` |
-| Comment after a value | `Expected a quoted string without escapes: "0.1.0-gb-5a3378b" # pinned` |
-| Multi-line array | `elci.toml:3: expected key = value` |
-| Missing source directory | `Source directory not found: my-project/lib` |
-| Remapping a core library | `ELCI4001: [java-modules] may not remap Julc.TypedMap, which the Elci core library uses for org.julclang.stdlib.lib.TypedMapLib` |
-| Mapping a core module name | `ELCI4001: [java-modules] may not map Value, a module name of Elci's core library` |
+| Unquoted value | `ELCI4001: Expected a quoted string without escapes: julc-strict-v1` |
+| Comment after a value | `ELCI4001: Expected a quoted string without escapes: "0.1.0-gb-5a3378b" # pinned` |
+| Multi-line array | `ELCI4001: elci.toml:3: expected key = value` |
+| Missing source directory | `ELCI4001: Source directory not found: my-project/lib` |
+| Remapping a core library | `ELCI4001: my-project/elci.toml:6: [validators.main]: [java-modules] may not remap Julc.TypedMap, which the Elci core library uses for org.julclang.stdlib.lib.TypedMapLib` |
+| Mapping a core module name | `ELCI4001: my-project/elci.toml:6: [validators.main]: [java-modules] may not map Value, a module name of Elci's core library` |
 | ABI changed | `ELCI4001: my-project/elci.toml:9: [validators.main]: ABI drift from abi/main.json; compare constructor tags, field order, handler roles and parameters` |
 
 Each message is printed after `elci: ` and the command exits with status 1.

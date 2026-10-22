@@ -146,9 +146,14 @@ Hint: write `Helper.double`, or expose `double` in its import
   whose type differs, or each pattern a `case` is missing.
 - Apply the hint when it fits: a close name (`did you mean`), a conversion such as `String.fromInt`,
   `Bytes.fromString`, `.hash` or `Maybe.withDefault`, or an import to add.
-- The compiler stops at the first error. Rerun `elci check` after each fix.
-- To parse errors, add `--report=json` to `check`, `build`, `eval` or `test`. An error is then one JSON
-  object on stderr with `code`, `path`, `line`, `column`, `message`, `hints`, `excerpt` and `context`.
+- A run reports every error it finds, in source order, up to 20, with a count such as `3 errors`. Each
+  top-level declaration reports its first error, and type errors appear only once syntax, import and
+  qualified-name errors are fixed. Fix what is reported, then rerun `elci check`.
+- `elci explain <code>` explains a code, such as `elci explain ELCI2002`, with a failing example and its
+  fix. The last line of a failed run names the codes to look up.
+- To parse errors, add `--report=json` to `check`, `build`, `eval` or `test`. Each error is then one JSON
+  object on its own line on stderr (JSON Lines), with `code`, `path`, `line`, `column`, `message`, `hints`,
+  `excerpt` and `context`.
 
 Look the code up in the starter pack's error table: `ELCI2002` type mismatch, `ELCI2003` equality,
 ordering or append on a type without it, `ELCI2004` missing signature, `ELCI2005` unknown name, `ELCI2007`

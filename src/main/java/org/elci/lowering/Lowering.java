@@ -1935,9 +1935,24 @@ public final class Lowering {
         try {
             return library(new LibraryRequest.Codec(representation, direction), token);
         } catch (Diagnostic e) {
+            // Say why in Elci's terms when a function or array is the cause; Julc's reason otherwise.
+            String unencodable = unencodable(prune(type));
             throw new Diagnostic("ELCI3003", token, "No " + (direction == LibraryRequest.Codec.Direction.ENCODE
-                    ? "encoder" : "strict decoder") + " for " + prune(type) + ": " + e.getMessage());
+                    ? "encoder" : "strict decoder") + " for " + (unencodable != null ? Types.show(prune(type)) + ": " + unencodable
+                    : prune(type) + ": " + e.getMessage()));
         }
+    }
+
+    /** Why a type, or a type argument in it, has no Data encoding; null when nothing says so. */
+    private String unencodable(Ty type) {
+        if (!(prune(type) instanceof Con c)) return null;
+        if (c.name().equals("->")) return "functions have no Data encoding";
+        if (c.name().equals("Array")) return "arrays have no Data encoding; convert with Array.toList and Array.fromList";
+        for (Ty argument : c.args()) {
+            String inner = unencodable(argument);
+            if (inner != null) return inner;
+        }
+        return null;
     }
 
     /** Whether {@code type} is or contains the ledger context, through Elci records and unions. */

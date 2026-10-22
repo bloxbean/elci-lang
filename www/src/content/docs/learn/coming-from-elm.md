@@ -267,15 +267,17 @@ As in Elm:
 - A `case` that doesn't cover every value lists the missing patterns, such as `Nothing` and
   `Just (Err _)`.
 - A misspelt name gets a suggestion, such as ``did you mean `List.length`?``.
+- A run reports every error it finds, one per top-level declaration, in source order. Type errors are
+  reported once there are no syntax, import or qualified-name errors.
 
 What differs:
 
 - The first line is `path:line:column: ELCIxxxx: message`, not a `-- TYPE MISMATCH --` banner. Editors and
   scripts parse this line, and each code keeps its meaning between releases.
-- Elci reports one error per run. Fix it and run `elci check` again.
-- `--report=json` prints the error as one JSON object, but its fields are Elci's own: `code`, `path`,
-  `line`, `column`, `message`, `hints`, `excerpt` and `context`. See
+- `--report=json` prints each error as one JSON object on its own line, and its fields are Elci's own:
+  `code`, `path`, `line`, `column`, `message`, `hints`, `excerpt` and `context`. See
   [diagnostics](/reference/diagnostics/#json-reports-for-tools).
+- `elci explain ELCI2002` prints a longer explanation of a code, with an example and its fix.
 
 ## An elm-format pitfall
 
@@ -287,7 +289,7 @@ values instead, for example `1000000000 * 1000000000 * 1000000000`.
 
 - There is no Elci language server. The Elm language server doesn't know Elci's modules, so trust
   `elci check` over its diagnostics. An editor integration can run `elci check --report=json` and read
-  the error's location, message and hints.
+  each error's location, message and hints.
 - `elci eval` runs a function project and shows the result and its cost, which is the closest thing to
   `elm repl`. [Values, functions and types](/learn/basics/) shows how to set one up.
 - `elci test` replaces elm-test, and adds transaction scenarios and property tests. See

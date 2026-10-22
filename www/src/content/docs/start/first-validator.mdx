@@ -267,16 +267,20 @@ Now change the validator so that spending needs two signatures: the owner's and 
    ```
 
    ```text
-   elci: .../my-contract/elci.toml:9: [validators.main]
    .../my-contract/src/Main.elm:8:1: ELCI2014: Handler Main.spend does not have the spend signature owner -> datum -> redeemer -> ScriptContext -> Bool that [validators.main] needs (1 parameter); its type is PubKeyHash -> PubKeyHash -> () -> () -> ScriptContext -> Bool; it has `()` where the configuration needs `ScriptContext`
 
    8| spend : PubKeyHash -> PubKeyHash -> () -> () -> ScriptContext -> Bool
       ^^^^^
+
+   In .../my-contract/elci.toml:9: [validators.main]
+
+   For more on ELCI2014, run `elci explain ELCI2014`.
    ```
 
    The table still declares one parameter, so the handler must take one parameter, then the datum, the
    redeemer and the context. `spend` now takes two parameters, so its arguments no longer line up.
-   `ELCI2014` always means that a handler and its `elci.toml` table disagree.
+   `ELCI2014` always means that a handler and its `elci.toml` table disagree; `elci explain ELCI2014`
+   says more.
 
 3. **Declare the new parameter.** Parameters are listed in the order the handler receives them:
 

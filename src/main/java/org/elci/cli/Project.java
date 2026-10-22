@@ -50,7 +50,19 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
     public boolean named(){return entrypoint==null;}
     private Entrypoint legacy(){if(entrypoint==null)throw new IllegalArgumentException("ELCI4001: this project configures named validators, not an [entrypoint]");return entrypoint;}
 
+    /** Read a project's {@code elci.toml}. Every problem with it is ELCI4001. */
     public static Project read(Path root) throws IOException {
+        if(!Files.isRegularFile(root.resolve("elci.toml")))throw new IllegalArgumentException("ELCI4001: "+root.resolve("elci.toml")+" not found; a project needs an elci.toml, which elci init creates");
+        try{return parse(root);}catch(IllegalArgumentException e){throw configuration(e);}
+    }
+
+    /** {@code e} with the code ELCI4001, unless its message already starts with a code. */
+    static IllegalArgumentException configuration(IllegalArgumentException e) {
+        String message=e.getMessage()==null?"":e.getMessage();
+        return message.matches("(?s)ELCI\\d{4}: .*")?e:new IllegalArgumentException("ELCI4001: "+message,e);
+    }
+
+    private static Project parse(Path root) throws IOException {
         var sections=new LinkedHashMap<String,Map<String,String>>();var headers=new HashMap<String,Integer>();var lines=new HashMap<String,Integer>();
         String section="";int line=0;
         for(String raw:source(root.resolve("elci.toml")).lines().toList()) {
@@ -148,6 +160,7 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
         return Arrays.stream(value.substring(1,value.length()-1).split(",")).map(String::strip).filter(s->!s.isEmpty()).map(Project::quoted).toList();
     }
     public Map<String,String> librarySources() throws IOException {
+        for(String jar:libraryJars)if(!Files.isRegularFile(root.resolve(jar)))throw new IllegalArgumentException("ELCI4001: library-jars file "+root.resolve(jar)+" not found");
         return org.julclang.compiler.LibrarySources.readJars(libraryJars.stream().map(root::resolve).toList());
     }
     public Map<String,String> sources() throws IOException {
@@ -161,11 +174,11 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
         var result=new LinkedHashMap<String,String>();
         for(String directory:directories) {
             Path base=root.resolve(directory);
-            if(!Files.isDirectory(base)){if(required)throw new IllegalArgumentException("Source directory not found: "+base);continue;}
+            if(!Files.isDirectory(base)){if(required)throw new IllegalArgumentException("ELCI4001: Source directory not found: "+base);continue;}
             try(var files=Files.walk(base)) {
                 for(Path path:files.filter(p->p.toString().endsWith(".elm")).sorted().toList()) {
                     String module=base.relativize(path).toString().replace(java.io.File.separatorChar,'.');module=module.substring(0,module.length()-4);
-                    if(result.putIfAbsent(module,source(path))!=null)throw new IllegalArgumentException("Duplicate module ownership: "+module);
+                    if(result.putIfAbsent(module,source(path))!=null)throw new IllegalArgumentException("ELCI4001: Duplicate module ownership: "+module+" is in two source directories");
                 }
             }
         }
@@ -177,7 +190,9 @@ public record Project(Path root,List<String> sourceDirectories,Entrypoint entryp
     public Path source(String module) {
         var directories=new ArrayList<>(sourceDirectories);directories.addAll(testDirectories);
         var found=directories.stream().map(d->root.resolve(d).resolve(module.replace('.','/')+".elm")).filter(Files::isRegularFile).toList();
-        if(found.size()!=1)throw new IllegalArgumentException("Expected exactly one source for "+module+", found "+found.size());return found.getFirst();
+        if(found.isEmpty())throw new IllegalArgumentException("ELCI4001: No source file for module "+module+"; add "+module.replace('.','/')+".elm under a source directory");
+        if(found.size()>1)throw new IllegalArgumentException("ELCI4001: Module "+module+" has "+found.size()+" source files; keep one");
+        return found.getFirst();
     }
     private static String required(Map<String,String> values,String key,String section){String v=values.get(key);if(v==null)throw new IllegalArgumentException("Missing configuration key: ["+section+"] "+key);return v;}
     private static void keys(Map<String,String> values,Set<String> allowed,String section){for(String key:values.keySet())if(!allowed.contains(key))throw new IllegalArgumentException("Unknown configuration key: ["+section+"] "+key);}

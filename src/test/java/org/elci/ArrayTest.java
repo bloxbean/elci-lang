@@ -173,7 +173,7 @@ class ArrayTest {
                     case Data.encode (Array.fromList [ 1 ]) of
                         _ -> 0
                 """);
-        assertTrue(encoded.contains("No encoder for Array") && encoded.contains("has no Data codec"), encoded);
+        assertTrue(encoded.contains("No encoder for Array Int: arrays have no Data encoding"), encoded);
         var equal = rejection("""
                 main : Int
                 main =
