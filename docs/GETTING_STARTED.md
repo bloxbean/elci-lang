@@ -306,7 +306,7 @@ formatter corpus is pinned to `elm-format 0.8.8`:
 ```sh
 npm exec --yes --package elm-format@0.8.8 -- \
   elm-format examples src/main/resources/elci/core \
-  src/test/resources/syntax/valid src/test/resources/syntax/unsupported --validate
+  src/test/resources/syntax/valid/core-completion.elm src/test/resources/syntax/unsupported --validate
 ```
 
 The [diagnostic catalogue](DIAGNOSTICS.md) lists the stable error categories. The

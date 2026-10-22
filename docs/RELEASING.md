@@ -53,7 +53,7 @@ Elci retains its exact GraalVM 25.3.4.1 pin, Gradle-sourced release version, fro
 
 - **Trigger:** manual only (`workflow_dispatch`) on `main` or `release/**`, with no approval step. It only adds a version; it never replaces or deletes one.
 - **Version:** one per commit, `<version>-<sha7>-SNAPSHOT` (for example `0.1.0-dev-1a2b3c4-SNAPSHOT`), passed with `-Pversion`. `gradle.properties` keeps its plain version, so ordinary builds and the ABI manifests they write don't change from commit to commit.
-- **Tests:** the workflow runs `./gradlew test` itself, because Elci has no push CI to require.
+- **Tests:** the workflow runs `./gradlew test` itself rather than requiring a green `build.yml` run for the commit.
 - **Publication:** the artifact's version list is seeded from the bucket, so the new version is appended. The staged repository is checked with `verify-maven-staging.py`, uploaded, compared byte for byte through the public URL, and resolved by a throwaway Gradle consumer.
 - **Scripts:** `.github/scripts/bloxbean-maven.sh` and `.github/scripts/verify-maven-staging.py` are unchanged copies of the release-ops templates. Update them from there, not here.
 
