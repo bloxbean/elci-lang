@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'application'
+    id 'maven-publish'
 }
 group = 'org.elci'
 repositories {
@@ -13,7 +14,12 @@ repositories {
         mavenContent { snapshotsOnly() }
     }
 }
-java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(25) }
+    // The BloxBean Maven repository publishes jar, sources and javadoc (release-ops verify-maven-staging.py).
+    withSourcesJar()
+    withJavadocJar()
+}
 dependencies {
     implementation "org.julclang:julc-compiler:${julcVersion}"
     implementation "org.julclang:julc-stdlib:${julcVersion}"
@@ -42,6 +48,9 @@ tasks.register('generateBuildMetadata') {
 }
 sourceSets.main.resources.srcDir(buildMetadataDir)
 processResources.dependsOn generateBuildMetadata
+sourcesJar.dependsOn generateBuildMetadata
+// Most of the compiler has no javadoc; the javadoc jar exists for the Maven repository's complete-set check.
+javadoc { options.addBooleanOption('Xdoclint:none', true) }
 test { useJUnitPlatform(); testLogging { events 'failed', 'skipped' } }
 tasks.register('nativeCompile', Exec) {
     dependsOn installDist
@@ -60,4 +69,36 @@ tasks.register('nativeCompile', Exec) {
 
 tasks.register('writeRuntimeClasspath') {
     doLast { file('build/runtime-classpath.txt').text = sourceSets.main.runtimeClasspath.asPath }
+}
+
+// The compiler as a library, for Java tests that run Elci validators (docs/TESTING.md). Snapshots go to the
+// BloxBean Maven repository through .github/workflows/bloxbean-snapshot.yml, which sets the version.
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+            pom {
+                name = 'Elci'
+                description = 'An Elm-syntax functional language for Cardano, powered by Julc'
+                url = 'https://github.com/bloxbean/elci-lang'
+                scm {
+                    url = 'https://github.com/bloxbean/elci-lang'
+                    connection = 'scm:git:https://github.com/bloxbean/elci-lang.git'
+                }
+            }
+        }
+    }
+}
+
+// The `stagingRepository` hook (release-ops docs/12-bloxbean-maven-repository.md): publishes the publications
+// to a local directory, which CI uploads. CI passes an absolute path:
+// `./gradlew publishAllPublicationsToStagingRepository -PstagingRepository=$PWD/...`.
+def stagingRepository = providers.gradleProperty('stagingRepository')
+if (stagingRepository.isPresent()) {
+    publishing.repositories {
+        maven {
+            name = 'staging'
+            url = uri(stagingRepository.get())
+        }
+    }
 }
