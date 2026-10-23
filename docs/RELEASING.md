@@ -23,7 +23,7 @@ The `release-staging` environment needs the secrets `RELEASE_APP_ID` and `RELEAS
 
 ## Release builds
 
-GitHub Actions uses GraalVM **25.3.4.1**, the published patch release in the requested 25.3.4 series. Each runner executes the test suite, builds the native CLI, verifies its embedded version, compiles the vesting example, and evaluates the Elci library example.
+GitHub Actions uses GraalVM **25.3.4.1**, the published patch release in the requested 25.3.4 series. Each runner executes the test suite, builds the native CLI and runs `.github/scripts/cli-smoke.sh` on it: the embedded version, `init`, `check`, `build`, `eval`, `apply` and `test` on the examples. The snapshot distributions run the same script.
 
 Release archives contain the `elci` executable and documentation:
 
@@ -33,7 +33,7 @@ Release archives contain the `elci` executable and documentation:
 
 Native compilation uses `--no-fallback` and `-H:+ReportExceptionStackTraces`, matching Julc CLI. It produces an executable. GraalVM 25.3.4.1 reports `--no-fallback` as deprecated with no effect; the flag is retained for consistency with Julc CLI, not as a static-linking setting.
 
-Linux binaries are built on Ubuntu 22.04 and require a compatible glibc-based system; they are not static binaries. macOS binaries are unsigned and not notarized. Intel macOS and Windows binaries are not produced by this workflow.
+Linux binaries are built on Ubuntu 22.04 and require a compatible glibc-based system; they are not static binaries. macOS binaries are unsigned and not notarized. Intel macOS and Windows binaries are not produced by this workflow; Windows x64 is built only as a snapshot distribution for now (below).
 
 After all three builds pass, a separate job uses `gh release` to upload the archives and `SHA256SUMS`, then publish the release. Only that job has repository write permission. Failed uploads leave a draft that the job can retry. It refuses to overwrite an already published release; use a new version/tag for replacement binaries.
 
@@ -61,15 +61,36 @@ The workflow needs these settings on the `release-staging` environment: deployme
 
 Not yet adopted from the standard:
 
-- an approval gate;
+- an approval gate for the Maven snapshot;
 - the snapshot cleanup workflow;
-- snapshot CLI distributions;
 - the "Development snapshot" GitHub release.
 
 Start a run with:
 
 ```sh
 gh workflow run bloxbean-snapshot.yml --repo bloxbean/elci-lang --ref main
+```
+
+### Snapshot distributions
+
+`.github/workflows/bloxbean-snapshot-dist.yml` publishes the CLI of a commit to `https://repo.bloxbean.org/dist/snapshots/elci/<version>/`, following the release-ops standard (`docs/12-bloxbean-maven-repository.md`, Snapshot distributions). The version is the Maven snapshot's, `<version>-<sha7>-SNAPSHOT`. Each version directory holds:
+
+- `elci-<version>.zip`: the JVM distribution (`distZip`), with `bin/elci` and `bin/elci.bat`, for any OS with Java 25;
+- `elci-<version>-linux-x64.tar.gz`, `elci-<version>-linux-arm64.tar.gz` and `elci-<version>-macos-arm64.tar.gz`: the native CLI, laid out as the release archives;
+- `elci-<version>-windows-x64.zip`: the native CLI for Windows, `elci.exe`;
+- `SHA256SUMS` and `manifest.json`.
+
+`https://repo.bloxbean.org/dist/snapshots/elci/latest.json` names the most recently published version. The bucket expires snapshot distributions after 30 days.
+
+- **Trigger:** manual only (`workflow_dispatch`) on `main` or `release/**`.
+- **Gates:** the commit must have a green `build.yml` push run (`require-green-ci.sh`), so the tests are not repeated. `.github/workflows/dist-build.yml` then builds the five files and smoke-tests each one with `cli-smoke.sh`, the JVM zip on Linux and each native CLI on its own platform. A release owner approves in the `release` environment before anything is uploaded; that environment needs required reviewers, or the gate passes without one.
+- **Publication:** in `release-staging`, the job checks that exactly the five expected files arrived, then `bloxbean-dist.sh` writes `SHA256SUMS` and `manifest.json`, uploads the files with the manifest last, updates `latest.json` and checks the public URLs. A published version is never overwritten.
+- **Scripts:** `.github/scripts/bloxbean-dist.sh` and `.github/scripts/require-green-ci.sh` are unchanged copies of the release-ops templates.
+
+A pull request that changes `dist-build.yml`, `cli-smoke.sh` or the native-image metadata runs `dist-build.yml` as a check, without publishing. Start a publication with:
+
+```sh
+gh workflow run bloxbean-snapshot-dist.yml --repo bloxbean/elci-lang --ref main
 ```
 
 ## Documentation site

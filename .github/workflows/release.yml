@@ -60,28 +60,9 @@ jobs:
         run: ./gradlew --no-daemon test nativeCompile
       - name: Smoke test native CLI
         shell: bash
-        run: |
-          test "$(build/native/elci --version)" = "elci $RELEASE_VERSION / julc $JULC_VERSION"
-          build/native/elci init build/init-smoke --purpose mint
-          build/native/elci check build/init-smoke
-          build/native/elci check examples/vesting
-          build/native/elci build examples/vesting
-          test -s examples/vesting/build/validators/vesting/validator.plutus.json
-          build/native/elci eval examples/elci-library | tee build/native-eval.txt
-          grep -F 'value=105' build/native-eval.txt
-          build/native/elci build examples/treasury
-          test -s examples/treasury/build/validators/treasury/validator.plutus.json
-          test -s examples/treasury/build/validators/badge/abi.json
-          build/native/elci check examples/treasury --validator badge
-          build/native/elci apply examples/treasury --validator badge \
-            --param 'admin={"bytes": "01000000000000000000000000000000000000000000000000000000"}'
-          test -s examples/treasury/build/validators/badge/applied.plutus.json
-          build/native/elci init build/init-named --validator rewards --purpose withdraw
-          build/native/elci build build/init-named
-          test -s build/init-named/build/validators/rewards/validator.plutus.json
-          build/native/elci test build/init-named
-          build/native/elci test examples/treasury
-          build/native/elci test examples/vesting
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: bash .github/scripts/cli-smoke.sh build/native/elci
       - name: Package CLI
         shell: bash
         run: |

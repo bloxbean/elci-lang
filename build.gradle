@@ -60,10 +60,18 @@ tasks.register('nativeCompile', Exec) {
             throw new GradleException('GRAALVM_HOME must point to a GraalVM installation containing native-image')
         }
         file('build/native').mkdirs()
-        // Executable mode is the native-image default (equivalent to sharedLibrary = false).
-        commandLine "${graalHome.get()}/bin/native-image", '--no-fallback', '-H:+ReportExceptionStackTraces',
-            '-cp', fileTree('build/install/elci/lib').files.collect { it.absolutePath }.join(File.pathSeparator),
-            application.mainClass.get(), file('build/native/elci').absolutePath
+        // The arguments go in an argument file: on Windows native-image is a .cmd script, and cmd.exe limits a
+        // command line to 8191 characters, less than the class path. Forward slashes need no quoting in the file.
+        def path = { File f -> f.absolutePath.replace('\\', '/') }
+        def arguments = file('build/native/native-image.args')
+        // Executable mode is the native-image default (equivalent to sharedLibrary = false). On Windows the image
+        // is build/native/elci.exe.
+        arguments.text = ['--no-fallback', '-H:+ReportExceptionStackTraces',
+            '-cp', fileTree('build/install/elci/lib').files.collect(path).join(File.pathSeparator),
+            application.mainClass.get(), path(file('build/native/elci'))].join('\n') + '\n'
+        def windows = System.getProperty('os.name').toLowerCase().contains('windows')
+        commandLine new File(graalHome.get(), windows ? 'bin/native-image.cmd' : 'bin/native-image').absolutePath,
+            "@${path(arguments)}"
     }
 }
 
