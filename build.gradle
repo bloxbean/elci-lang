@@ -7,7 +7,7 @@ group = 'org.elci'
 repositories {
     mavenLocal()
     mavenCentral()
-    // BloxBean Maven repository: development snapshots of BloxBean projects, including the pinned Julc
+    // BloxBean Maven repository: development snapshots of BloxBean projects, for pinning a Julc snapshot
     // (release-ops docs/12-bloxbean-maven-repository.md). snapshotsOnly() keeps releases on Maven Central.
     maven {
         url = uri('https://repo.bloxbean.org/maven/snapshots')

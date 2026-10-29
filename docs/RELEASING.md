@@ -2,7 +2,7 @@
 
 The release workflow runs when a `v*` tag is pushed. `gradle.properties` is the source of the Elci version, embedded in the CLI and ABI metadata. A tag must match it exactly: `version=0.1.0-pre1` requires `v0.1.0-pre1`. Tags containing a prerelease suffix produce GitHub prereleases.
 
-Keep `julcVersion` and `julcRevision` aligned with the backend used to test the release. `julcVersion` is a Julc snapshot from the BloxBean Maven repository (`https://repo.bloxbean.org/maven/snapshots`), which Gradle resolves like any dependency; the development backend is not yet published to Maven Central. `julcRevision` records the full Julc commit SHA that snapshot was built from.
+Keep `julcVersion` and `julcRevision` aligned with the backend used to test the release. `julcVersion` is a Julc release from Maven Central or a Julc snapshot from the BloxBean Maven repository (`https://repo.bloxbean.org/maven/snapshots`); Gradle resolves either like any dependency. `julcRevision` records the full Julc commit SHA that version was built from.
 
 ## Tagging a release
 

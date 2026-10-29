@@ -32,7 +32,7 @@ text and exit with status 0.
 
 ```text
 $ elci --version
-elci 0.1.0-dev / julc 0.1.0-pre20-ebaf028-SNAPSHOT
+elci 0.1.0-dev / julc 0.1.0-pre20
 ```
 
 The second version is the Julc build the compiler is pinned to. A project's `julc-version` in

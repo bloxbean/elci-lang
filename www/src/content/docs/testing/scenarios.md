@@ -46,7 +46,7 @@ The marketplace has two validators. `market` holds listings and earns staking re
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+julc-version = "0.1.0-pre20"
 
 # The market script: holds listings and earns staking rewards.
 [validators.market]
