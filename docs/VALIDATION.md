@@ -129,6 +129,23 @@ locally published Julc checkout. Compared with Elci `main` at `f1acb4b` on
   budgets.
 - The stdlib inventory regenerates identically to `docs/stdlib-compatibility.tsv`.
 
+On 29 October 2026 the pin moved to the Julc release `0.1.0-pre20` (tag
+`v0.1.0-pre20`, commit `b5ff39a8`), which Gradle resolves from Maven Central. It
+adds Julc PRs #261 (prepared evaluation in the Java VM), #262 (the UPLC text
+parser rejects non-canonical value literals) and #263 (cardano-client-lib
+0.8.0-pre7) to `ebaf028c`. Compared with `0.1.0-pre20-ebaf028-SNAPSHOT`:
+
+- All 304 Elci tests pass on both.
+- The ten buildable examples, and `custom-library` with its JAR, give
+  byte-identical `.flat`, `.plutus` and `.plutus.json` files. Their ABI manifests
+  differ only in `julcVersion`.
+- `build`, `eval` and `test --seed 42` print the same output for every example,
+  apart from the version: `custom-library` evaluates to `42`, `elci-library` to
+  `105`, `functional` to `12` and `core-completion` to `15`, with identical budgets.
+- The stdlib inventory regenerates identically to `docs/stdlib-compatibility.tsv`,
+  elm-format 0.8.8 accepts the sources, and `.github/scripts/cli-smoke.sh` passes on
+  the JVM distribution.
+
 ## Arrays evidence
 
 - **`ArrayTest`:**

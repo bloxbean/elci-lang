@@ -11,9 +11,8 @@ On this page you build the `elci` command-line compiler from source and put it o
 Java 25. GraalVM is only needed if you also want the native executable.
 
 :::note[Development preview]
-Elci depends on a development snapshot of [Julc](https://github.com/bloxbean/julc) that is not on Maven
-Central. Gradle downloads that exact version from the BloxBean Maven repository
-(`https://repo.bloxbean.org/maven/snapshots`), so you don't need to build Julc yourself.
+Elci depends on a preview release of [Julc](https://github.com/bloxbean/julc). Gradle downloads that exact
+version from Maven Central, so you don't need to build Julc yourself.
 :::
 
 ## Prerequisites
@@ -47,7 +46,7 @@ below are for macOS and Linux shells.
    git clone https://github.com/bloxbean/elci-lang.git
    ```
 
-3. **Check the pinned Julc version.** Elci's `gradle.properties` names the Julc snapshot it was built
+3. **Check the pinned Julc version.** Elci's `gradle.properties` names the Julc version it was built
    and tested with, and the Julc commit it was built from:
 
    ```sh
@@ -55,11 +54,11 @@ below are for macOS and Linux shells.
    ```
 
    ```text
-   julcVersion=0.1.0-pre20-ebaf028-SNAPSHOT
-   julcRevision=ebaf028c982479906a1f9449b9fef68fa7836301
+   julcVersion=0.1.0-pre20
+   julcRevision=b5ff39a84150ff9d53ba431a7f45d31a5a366d1f
    ```
 
-   The first build downloads that version from the BloxBean Maven repository.
+   The first build downloads that version from Maven Central.
 
 4. **Build the Elci CLI.**
 
@@ -102,7 +101,7 @@ below are for macOS and Linux shells.
    ```
 
    ```text
-   elci 0.1.0-dev / julc 0.1.0-pre20-ebaf028-SNAPSHOT
+   elci 0.1.0-dev / julc 0.1.0-pre20
    ```
 
    The first part is the Elci version and the second is the Julc version the compiler is pinned to.
@@ -120,14 +119,14 @@ against `SHA256SUMS`, and put the `elci` executable on your `PATH` without insta
 Every project's `elci.toml` records the Julc version it expects:
 
 ```toml
-julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+julc-version = "0.1.0-pre20"
 ```
 
 It must equal the version that `elci --version` prints. `elci init` writes the right value for you. If they
 differ, for example after you upgrade Elci, every command stops with:
 
 ```text
-elci: ELCI4001: Julc version does not match this compiler; expected julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+elci: ELCI4001: Julc version does not match this compiler; expected julc-version = "0.1.0-pre20"
 ```
 
 Update `julc-version` in `elci.toml`, then rebuild and re-run your tests. A new Julc version can change
@@ -158,8 +157,8 @@ numbers. See [Coming from Elm](/learn/coming-from-elm/).
 ## Troubleshooting
 
 - **Could not resolve `org.julclang:...` while building Elci.** Gradle could not download the pinned Julc
-  snapshot. Check that `https://repo.bloxbean.org/maven/snapshots` is reachable from your machine (a proxy or
-  firewall can block it), and that `julcVersion` in `gradle.properties` is unchanged.
+  version. Check that Maven Central is reachable from your machine (a proxy or firewall can block it), and
+  that `julcVersion` in `gradle.properties` is unchanged.
 - **Gradle reports a Java toolchain problem.** Elci and Julc need Java 25. Check `java -version` and
   `JAVA_HOME`.
 - **`GRAALVM_HOME must point to a GraalVM installation containing native-image`.** `nativeCompile` needs

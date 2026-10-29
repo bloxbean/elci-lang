@@ -5,13 +5,13 @@
 Use Java 25 and the checked-in Gradle wrapper. Building a native executable also
 requires GraalVM Native Image and the platform C toolchain.
 
-This development build depends on the Julc snapshot named by `julcVersion` in
-`gradle.properties`, currently **`0.1.0-pre20-ebaf028-SNAPSHOT`**: Julc `main` at
-commit `ebaf028c` (`julcRevision`), which contains the generic-backend revision 2
-(Julc PR #187). Gradle resolves it from the BloxBean Maven repository,
+This development build depends on the Julc release named by `julcVersion` in
+`gradle.properties`, currently **`0.1.0-pre20`**: the Julc `v0.1.0-pre20` tag at
+commit `b5ff39a8` (`julcRevision`), which contains the generic-backend revision 2
+(Julc PR #187). Gradle resolves it from Maven Central. To pin a Julc snapshot
+instead, Gradle resolves it from the BloxBean Maven repository,
 `https://repo.bloxbean.org/maven/snapshots`, which publishes one version per Julc
-commit. Maven Central's existing Julc release does not contain this experimental
-frontend boundary.
+commit.
 
 Set these paths for your development machine:
 
@@ -87,7 +87,7 @@ Elm source:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+julc-version = "0.1.0-pre20"
 
 [validators.threshold]
 boundary = "julc-strict-v1"
@@ -127,7 +127,7 @@ and the ledger purpose selects the handler to run:
 [project]
 source-directories = ["src"]
 target = "plutus-v3-pv11-uplc-1.1.0"
-julc-version = "0.1.0-pre20-ebaf028-SNAPSHOT"
+julc-version = "0.1.0-pre20"
 
 # One script: spends payouts and withdraws the address's staking rewards.
 [validators.treasury]
@@ -323,8 +323,9 @@ each error as one JSON object on its own line (JSON Lines).
 
 ## 6. Troubleshooting
 
-**Dependency not found:** check that `https://repo.bloxbean.org/maven/snapshots` is
-reachable and that `julcVersion` in Elci's `gradle.properties` is a published snapshot. A project's `julc-version` must equal the
+**Dependency not found:** check that Maven Central (or, for a snapshot pin,
+`https://repo.bloxbean.org/maven/snapshots`) is reachable and that `julcVersion` in
+Elci's `gradle.properties` is a published version. A project's `julc-version` must equal the
 compiler's pinned `julcVersion` (`elci --version` prints it). Both projects require Java 25.
 
 **No supported Java export:** only bundled `@OnchainLibrary` sources with mapped
